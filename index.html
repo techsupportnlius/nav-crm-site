@@ -7517,6 +7517,11 @@ function graphMessageToMail(m, folder) {
     time: when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
     unread: m.isRead === false,
     domain: (from.address || toList[0] || '').split('@')[1] || '',
+    // Raw timestamp, kept alongside the display-formatted date/time above,
+    // so re-sorting after merging a background refresh with an already
+    // "Load older mail"-extended list can order correctly down to the
+    // minute — the formatted date string alone can't do that.
+    _ts: when.getTime(),
   };
 }
 
@@ -7547,12 +7552,12 @@ async function graphFetch(url) {
 // it's reaching further back than the fast default window.
 async function loadRealMailFolder(folderKey, opts = {}) {
   const graphFolder = REAL_MAIL_GRAPH_FOLDER[folderKey];
+  const dateField = folderKey === 'sent' ? 'sentDateTime' : 'receivedDateTime';
   let url;
   if(opts.loadOlder) {
     if(!realMailNextLink[folderKey]) return false;
     url = realMailNextLink[folderKey];
   } else {
-    const dateField = folderKey === 'sent' ? 'sentDateTime' : 'receivedDateTime';
     const since = new Date(Date.now() - 30*24*60*60*1000).toISOString();
     const filter = folderKey === 'drafts' ? '' : `&$filter=${dateField} ge ${since}`;
     url = `https://graph.microsoft.com/v1.0/me/mailFolders/${graphFolder}/messages`
@@ -7563,9 +7568,20 @@ async function loadRealMailFolder(folderKey, opts = {}) {
   const data = await graphFetch(url);
   if(!data) return false;
   const mapped = (data.value || []).map(m => graphMessageToMail(m, folderKey));
-  realMail[folderKey] = opts.loadOlder ? [...realMail[folderKey], ...mapped] : mapped;
+  // IMPORTANT: the background refresh (every 60s, and the manual "Refresh
+  // now") calls this same non-loadOlder path to pick up new mail. It used
+  // to fully REPLACE realMail[folderKey] with just that fresh window,
+  // which silently threw away anything the person had pulled in further
+  // back with "Load older mail" — a minute later their older messages
+  // would just vanish. Fixed by always merging (never wholesale
+  // replacing): the fresh window's copy of a message wins on conflict
+  // (its read/unread state is the most current), and anything only
+  // present in the older, already-loaded pages is kept rather than
+  // dropped, then the combined list is re-sorted so order stays correct.
+  const merged = opts.loadOlder ? [...realMail[folderKey], ...mapped] : [...mapped, ...realMail[folderKey]];
   const seen = new Set();
-  realMail[folderKey] = realMail[folderKey].filter(e => { if(seen.has(e.id)) return false; seen.add(e.id); return true; });
+  realMail[folderKey] = merged.filter(e => { if(seen.has(e.id)) return false; seen.add(e.id); return true; });
+  realMail[folderKey].sort((a, b) => (b._ts || 0) - (a._ts || 0));
   realMailNextLink[folderKey] = data['@odata.nextLink'] || null;
   return true;
 }
