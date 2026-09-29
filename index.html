@@ -8186,9 +8186,28 @@ let mailboxConnected = false;
 async function connectMailbox() {
   if(!realUser) { showToast('Sign in first.'); return; }
   if(authProvider !== 'microsoft') { showToast('Mailbox connection needs a Microsoft 365 sign-in — it isn\'t available for Google accounts yet.'); return; }
-  const account = msalInstance.getAllAccounts()[0];
+  // Safeguard: on a shared computer, the browser can already have a
+  // DIFFERENT person's Microsoft account cached from an earlier session
+  // (e.g. a coworker signed into Outlook/Teams on this machine before).
+  // Two protections against silently connecting the wrong mailbox:
+  //   1. Always force the account-picker (prompt:'select_account') instead
+  //      of silently reusing whatever account MSAL already has cached —
+  //      getAllAccounts()[0] on a shared machine is not reliable.
+  //   2. After they pick an account, verify its email actually matches
+  //      the email of whoever is signed into the CRM right now. If it
+  //      doesn't, refuse the connection and tell them exactly why,
+  //      rather than quietly wiring up someone else's mailbox.
   try {
-    await msalInstance.acquireTokenPopup({ scopes: GRAPH_MAIL_SCOPES, account });
+    const result = await msalInstance.acquireTokenPopup({
+      scopes: GRAPH_MAIL_SCOPES,
+      prompt: 'select_account',
+    });
+    const grantedEmail = (result.account && (result.account.username || result.account.idTokenClaims?.preferred_username || '')).toLowerCase();
+    const expectedEmail = (realUser.email || '').toLowerCase();
+    if(grantedEmail && expectedEmail && grantedEmail !== expectedEmail) {
+      showToast(`That was ${result.account.username} — you're signed into the CRM as ${realUser.email}. Please click "Connect Mailbox" again and pick ${realUser.email} in the account picker.`);
+      return;
+    }
     mailboxConnected = true;
     updateMailboxButton();
     showToast('Mailbox connected — real sending and your Office 365 inbox are now live in the CRM.');
@@ -8207,7 +8226,12 @@ async function connectMailbox() {
 // rather than popping an interactive login mid-send).
 async function getGraphToken() {
   if(authProvider !== 'microsoft') return null;
-  const account = msalInstance.getAllAccounts()[0];
+  // Match by email instead of blindly taking getAllAccounts()[0] — on a
+  // shared computer, MSAL's local cache can hold more than one person's
+  // account, and [0] is not necessarily "whoever is signed into the CRM
+  // right now."
+  const expectedEmail = (realUser?.email || '').toLowerCase();
+  const account = msalInstance.getAllAccounts().find(a => (a.username || '').toLowerCase() === expectedEmail) || null;
   if(!account) return null;
   try {
     const res = await msalInstance.acquireTokenSilent({ scopes: GRAPH_MAIL_SCOPES, account });
@@ -8299,7 +8323,14 @@ async function apiFetch(path, opts = {}) {
   if(authProvider === 'google') {
     token = await getGoogleTokenSilently();
   } else {
-    const account = msalInstance.getAllAccounts()[0];
+    // Same shared-computer safeguard as getGraphToken() above: match the
+    // cached account by the email of whoever the CRM currently shows as
+    // signed in, rather than trusting getAllAccounts()[0] — otherwise a
+    // second cached Microsoft account on this browser could silently
+    // authenticate API calls as the WRONG person.
+    const expectedEmail = (realUser?.email || '').toLowerCase();
+    const accounts = msalInstance.getAllAccounts();
+    const account = accounts.find(a => (a.username || '').toLowerCase() === expectedEmail) || accounts[0];
     const tokenResponse = await msalInstance.acquireTokenSilent({ scopes: [API_SCOPE], account });
     token = tokenResponse.accessToken;
   }
