@@ -8205,7 +8205,14 @@ async function connectMailbox() {
     const grantedEmail = (result.account && (result.account.username || result.account.idTokenClaims?.preferred_username || '')).toLowerCase();
     const expectedEmail = (realUser.email || '').toLowerCase();
     if(grantedEmail && expectedEmail && grantedEmail !== expectedEmail) {
-      showToast(`That was ${result.account.username} — you're signed into the CRM as ${realUser.email}. Please click "Connect Mailbox" again and pick ${realUser.email} in the account picker.`);
+      // Don't just refuse and leave the wrong account sitting in this
+      // browser's cache for next time — actively drop it right now, so
+      // the mismatch can't quietly resurface on a later click. This is a
+      // local-only cleanup (no popup, no contacting Microsoft), so it's
+      // safe to do silently in the background.
+      try { await msalInstance.clearCache({ account: result.account }); }
+      catch(clearErr) { console.warn('Could not clear the mismatched account from local cache:', clearErr); }
+      showToast(`That was ${result.account.username} — you're signed into the CRM as ${realUser.email}. That connection has been dropped. Please click "Connect Mailbox" again and pick ${realUser.email} in the account picker.`);
       return;
     }
     mailboxConnected = true;
