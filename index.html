@@ -901,22 +901,30 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <div class="view-title">In-House Carriers</div>
       <div class="view-subtitle">Carrier &amp; lane activity — pulled from Turvo</div>
     </div>
-    <div class="view-header-right" id="carrierLanesAdminBtns" style="display:none;">
-      <button class="btn btn-ghost btn-sm" id="carrierLanesSyncBtn" onclick="syncCarrierLanesNow()">Sync Now</button>
+    <div class="view-header-right" id="carrierLanesAdminBtns" style="display:none;gap:8px;align-items:center;">
+      <button class="btn btn-ghost btn-sm" id="carrierLanesSyncBtn" onclick="openTurvoSyncModal()">Sync Now</button>
     </div>
   </div>
   <div style="padding:0 20px 8px;color:var(--text-faint);font-size:12px;" id="carrierLanesSyncNote">Loading…</div>
+  <div style="padding:0 20px 14px;display:flex;gap:10px;flex-wrap:wrap;">
+    <input class="modal-input" style="width:200px;margin:0;" id="clFilterPickup" placeholder="Filter by pickup location…" oninput="renderCarrierLanesTable()">
+    <input class="modal-input" style="width:200px;margin:0;" id="clFilterDrop" placeholder="Filter by drop location…" oninput="renderCarrierLanesTable()">
+    <input class="modal-input" style="width:220px;margin:0;" id="clFilterCarrier" placeholder="Filter by carrier or MC #…" oninput="renderCarrierLanesTable()">
+    <button class="btn btn-ghost btn-sm" onclick="clearCarrierLanesFilters()">Clear filters</button>
+  </div>
   <div class="um-table-wrap">
     <table>
       <thead>
         <tr>
+          <th>MC #</th>
           <th>Carrier</th>
-          <th>Lane</th>
+          <th>Pickup</th>
+          <th>Drop</th>
           <th>Shipments</th>
-          <th>Last Shipment</th>
+          <th>Time Frame</th>
         </tr>
       </thead>
-      <tbody id="carrierLanesTbody"><tr><td colspan="4" class="empty">Loading carrier lane data…</td></tr></tbody>
+      <tbody id="carrierLanesTbody"><tr><td colspan="6" class="empty">Loading carrier lane data…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -1179,6 +1187,36 @@ thead th.cb-th{width:36px;padding:0 10px;}
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- TURVO SYNC (WITH TIME FRAME) MODAL -->
+<div class="modal-overlay" id="turvoSyncModal">
+  <div class="modal" style="width:440px;">
+    <h3>Sync Carrier Data</h3>
+    <p style="margin-bottom:16px;">
+      Pick a date range to pull from Turvo — useful for grabbing older
+      history, not just what's changed recently. Turvo limits how wide a
+      single request can be, so a wide range is automatically pulled in
+      safe chunks behind the scenes; this can take a while for a long
+      history. Leave both dates blank to just sync what's changed since
+      the last successful sync (the normal, quick option).
+    </p>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:8px;">
+      <label style="font-size:12.5px;color:var(--text-faint);">
+        From date
+        <input class="modal-input" type="date" id="turvoSyncFrom" style="margin-top:4px;">
+      </label>
+      <label style="font-size:12.5px;color:var(--text-faint);">
+        To date (defaults to today)
+        <input class="modal-input" type="date" id="turvoSyncTo" style="margin-top:4px;">
+      </label>
+    </div>
+    <div id="turvoSyncStatus" style="font-size:12.5px;color:var(--text-faint);min-height:18px;margin-bottom:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeTurvoSyncModal()" id="turvoSyncCancelBtn">Cancel</button>
+      <button class="btn btn-primary" onclick="runTurvoSyncModal()" id="turvoSyncRunBtn">Sync</button>
+    </div>
   </div>
 </div>
 
@@ -8386,13 +8424,18 @@ async function apiFetch(path, opts = {}) {
 }
 
 // ── Carrier Lanes report (Turvo integration) ────────────────────────
-// Reads the carrier/lane/shipment-count data our nightly Turvo sync has
-// already stored in our own database (never calls Turvo directly from
-// the browser). Admin also gets a "Sync Now" button to pull fresh data
-// on demand instead of waiting for the nightly run.
+// Reads the carrier/lane/shipment-count data our Turvo sync has already
+// stored in our own database (never calls Turvo directly from the
+// browser). Admin also gets a "Sync Now" button that can target a
+// specific date range, not just "what's new since last time."
+let carrierLanesData = []; // last-fetched rows, filtered client-side (see renderCarrierLanesTable)
 function fmtSyncDate(iso) {
   if(!iso) return '—';
   return new Date(iso).toLocaleString('en-US', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'});
+}
+function fmtSyncDateShort(iso) {
+  if(!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
 }
 async function renderCarrierLanesReport() {
   document.getElementById('carrierLanesAdminBtns').style.display = (currentRole==='Admin') ? '' : 'none';
@@ -8402,7 +8445,7 @@ async function renderCarrierLanesReport() {
     const res = await apiFetch('/api/carrier-lanes');
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    const lanes = data.lanes || [];
+    carrierLanesData = data.lanes || [];
     const lastSync = data.lastSync;
 
     if(!lastSync) {
@@ -8414,41 +8457,108 @@ async function renderCarrierLanesReport() {
     } else {
       note.textContent = 'Last synced ' + fmtSyncDate(lastSync.finished_at) + ' · ' + (lastSync.shipments_scanned ?? 0) + ' shipment(s) scanned.';
     }
-
-    if(!lanes.length) {
-      tbody.innerHTML = '<tr><td colspan="4" class="empty">No carrier lane data yet.</td></tr>';
-      return;
-    }
-    tbody.innerHTML = lanes.map(l => `
-      <tr>
-        <td>${l.carrierName}</td>
-        <td>${l.laneStart} &rarr; ${l.laneEnd}</td>
-        <td>${l.shipmentCount}</td>
-        <td>${l.lastShipmentDate ? fmtSyncDate(l.lastShipmentDate) : '—'}</td>
-      </tr>
-    `).join('');
+    renderCarrierLanesTable();
   } catch(err) {
     console.error('renderCarrierLanesReport failed', err);
     note.textContent = '';
-    tbody.innerHTML = '<tr><td colspan="4" class="empty">Could not load carrier lane data. Try again shortly.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Could not load carrier lane data. Try again shortly.</td></tr>';
   }
 }
-async function syncCarrierLanesNow() {
-  const btn = document.getElementById('carrierLanesSyncBtn');
-  const note = document.getElementById('carrierLanesSyncNote');
-  btn.disabled = true;
-  btn.textContent = 'Syncing…';
-  note.textContent = 'Sync in progress — this can take a few minutes for a large date range.';
+// Filters the already-fetched carrierLanesData in the browser (instant,
+// no extra API calls) using whatever's typed into the three filter boxes
+// above the table. Pickup/Drop/Carrier match anywhere in the text,
+// case-insensitive; the Carrier box matches either the carrier's name or
+// its MC number.
+function renderCarrierLanesTable() {
+  const tbody = document.getElementById('carrierLanesTbody');
+  const pickupQ = (document.getElementById('clFilterPickup')?.value || '').trim().toLowerCase();
+  const dropQ = (document.getElementById('clFilterDrop')?.value || '').trim().toLowerCase();
+  const carrierQ = (document.getElementById('clFilterCarrier')?.value || '').trim().toLowerCase();
+
+  const filtered = carrierLanesData.filter(l => {
+    if (pickupQ && !(l.laneStart || '').toLowerCase().includes(pickupQ)) return false;
+    if (dropQ && !(l.laneEnd || '').toLowerCase().includes(dropQ)) return false;
+    if (carrierQ) {
+      const hay = ((l.carrierName || '') + ' ' + (l.mcNumber || '')).toLowerCase();
+      if (!hay.includes(carrierQ)) return false;
+    }
+    return true;
+  });
+
+  if(!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">' + (carrierLanesData.length ? 'No carriers match those filters.' : 'No carrier lane data yet.') + '</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map(l => {
+    const timeFrame = l.firstShipmentDate && l.lastShipmentDate
+      ? (fmtSyncDateShort(l.firstShipmentDate) + ' – ' + fmtSyncDateShort(l.lastShipmentDate))
+      : '—';
+    return `
+      <tr>
+        <td>${l.mcNumber || '—'}</td>
+        <td>${l.carrierName}</td>
+        <td>${l.laneStart}</td>
+        <td>${l.laneEnd}</td>
+        <td>${l.shipmentCount}</td>
+        <td>${timeFrame}</td>
+      </tr>
+    `;
+  }).join('');
+}
+function clearCarrierLanesFilters() {
+  document.getElementById('clFilterPickup').value = '';
+  document.getElementById('clFilterDrop').value = '';
+  document.getElementById('clFilterCarrier').value = '';
+  renderCarrierLanesTable();
+}
+
+// ── Sync Now, with an optional date range (Admin only) ──────────────
+// Leaving both dates blank does the normal quick "what changed since
+// last time" sync. Filling them in pulls that specific window instead —
+// useful for grabbing older history. Turvo won't allow one request to
+// span too much time, so a wide range is pulled in chunks automatically
+// on the backend; this modal just fires the request and waits.
+function openTurvoSyncModal() {
+  document.getElementById('turvoSyncStatus').textContent = '';
+  document.getElementById('turvoSyncFrom').value = '';
+  document.getElementById('turvoSyncTo').value = '';
+  document.getElementById('turvoSyncModal').classList.add('open');
+}
+function closeTurvoSyncModal() {
+  document.getElementById('turvoSyncModal').classList.remove('open');
+}
+async function runTurvoSyncModal() {
+  const fromVal = document.getElementById('turvoSyncFrom').value;
+  const toVal = document.getElementById('turvoSyncTo').value;
+  const status = document.getElementById('turvoSyncStatus');
+  if (toVal && !fromVal) {
+    status.innerHTML = '<span style="color:var(--red);">Pick a "from" date too, or clear the "to" date.</span>';
+    return;
+  }
+  const runBtn = document.getElementById('turvoSyncRunBtn');
+  const cancelBtn = document.getElementById('turvoSyncCancelBtn');
+  runBtn.disabled = true;
+  cancelBtn.disabled = true;
+  runBtn.textContent = 'Syncing…';
+  status.textContent = fromVal
+    ? 'Pulling that date range in chunks — this can take a while for a wide range. You can leave this open; it\'ll update when done.'
+    : 'Sync in progress…';
   try {
-    const res = await apiFetch('/api/turvo/sync', { method: 'POST' });
+    const res = await apiFetch('/api/turvo/sync', {
+      method: 'POST',
+      body: JSON.stringify(fromVal ? { from: fromVal, to: toVal || undefined } : {}),
+    });
     const data = await res.json();
-    if(!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    status.innerHTML = `<span style="color:var(--green);">Done — ${data.shipmentsScanned} shipment(s) synced.</span>`;
     await renderCarrierLanesReport();
-  } catch(err) {
-    note.innerHTML = 'Sync failed: <span style="color:var(--red);">' + err.message + '</span>';
+    setTimeout(closeTurvoSyncModal, 1200);
+  } catch (err) {
+    status.innerHTML = 'Sync failed: <span style="color:var(--red);">' + err.message + '</span>';
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Sync Now';
+    runBtn.disabled = false;
+    cancelBtn.disabled = false;
+    runBtn.textContent = 'Sync';
   }
 }
 
