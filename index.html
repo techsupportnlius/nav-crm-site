@@ -775,7 +775,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <div><div class="view-title">Prospect Companies</div><div class="view-subtitle" id="prospectSubtitle">Prospects and pending compliance approvals</div></div>
     <div class="view-header-right">
       <button class="btn btn-ghost" onclick="openAddContactModal(null,'prospect')">+ Add Contact</button>
-      <button class="btn btn-ghost" onclick="exportProspects()">Export</button>
+      <button class="btn btn-ghost" id="btnExportProspects" onclick="exportProspects()">Export</button>
       <button class="btn btn-ghost" onclick="openCsvImport()">Import CSV</button>
       <button class="btn btn-primary" onclick="openAddCo()">+ Add Prospect</button>
     </div>
@@ -2419,6 +2419,12 @@ function updateSidebarForRole() {
   const isTL       = currentRole === 'Team Leader';
   const isLocHead  = currentRole === 'Location Head';
   const isSalesRep = currentRole === 'Sales Rep';
+  const isOpsMgr   = currentRole === 'Operations Manager';
+  // These four roles can view Prospect Companies / Active Customers but
+  // should not be able to bulk-export that list to a file — Export stays
+  // Admin-only (Customer/Carrier Compliance don't have Export buttons on
+  // these screens to begin with).
+  const exportBlocked = isSalesRep || isTL || isOpsMgr || isLocHead;
 
   const show = (id, visible) => { const el=document.getElementById(id); if(el) el.style.display=visible?'':'none'; };
 
@@ -2438,6 +2444,14 @@ function updateSidebarForRole() {
 
   // Company Check topbar button: hide from compliance roles (they don't prospect)
   show('tbCompanyCheck', !isCarrCC && !isCC);
+  // Export on Prospect Companies: Sales Rep, Team Leader, Operations
+  // Manager and Location Head cannot bulk-export this list.
+  show('btnExportProspects', !exportBlocked);
+  // Active Customers' Export button is built dynamically in
+  // updateCoHeader() (its markup differs per role), so re-run it here
+  // too whenever the role changes, instead of duplicating the show/hide
+  // logic for a button that doesn't have a fixed id across every branch.
+  if(typeof updateCoHeader === 'function') updateCoHeader();
 
   // If currently on a view this role can't access, redirect to dashboard
   const activeView = document.querySelector('.view.active')?.id;
@@ -2458,8 +2472,12 @@ function updateCoHeader() {
   const carrierTab = document.getElementById('coCarrierTab');
   const roleNote = document.getElementById('coRoleNote');
   if(!btns) return;
+  // Export on Active Customers: same restriction as Prospect Companies —
+  // Sales Rep, Team Leader, Operations Manager and Location Head don't
+  // get a bulk-export button here; Admin still does.
+  const exportBtn = currentRole==='Admin' ? '<button class="btn btn-ghost" onclick="exportCustomers()">Export</button>' : '';
   if(currentRole==='Sales Rep') {
-    btns.innerHTML=`<button class="btn btn-ghost" onclick="openAddContactModal(null,'active')">+ Add Contact</button><button class="btn btn-ghost" onclick="exportCustomers()">Export</button><button class="btn btn-check" onclick="openCheck()">🔍 Company Check</button><button class="btn btn-primary" onclick="openAddCo()">+ Add Company</button>`;
+    btns.innerHTML=`<button class="btn btn-ghost" onclick="openAddContactModal(null,'active')">+ Add Contact</button>${exportBtn}<button class="btn btn-check" onclick="openCheck()">🔍 Company Check</button><button class="btn btn-primary" onclick="openAddCo()">+ Add Company</button>`;
     carrierTab.style.display='none';
     if(coTab==='carriers') { coTab='customers'; document.querySelector('.stab').classList.add('active'); }
     roleNote.style.display='block';
@@ -2470,7 +2488,7 @@ function updateCoHeader() {
     roleNote.style.display='block';
     roleNote.textContent= currentRole==='Customer Compliance'?'Compliance view':'Compliance view — carriers only';
   } else {
-    btns.innerHTML=`<button class="btn btn-ghost" onclick="openAddContactModal(null,'active')">+ Add Contact</button><button class="btn btn-ghost" onclick="exportCustomers()">Export</button><button class="btn btn-ghost" onclick="openCsvImport()">Import CSV</button><button class="btn btn-primary" onclick="openAddCo()">+ Add Company</button>`;
+    btns.innerHTML=`<button class="btn btn-ghost" onclick="openAddContactModal(null,'active')">+ Add Contact</button>${exportBtn}<button class="btn btn-ghost" onclick="openCsvImport()">Import CSV</button><button class="btn btn-primary" onclick="openAddCo()">+ Add Company</button>`;
     carrierTab.style.display='';
     roleNote.style.display='none';
   }
