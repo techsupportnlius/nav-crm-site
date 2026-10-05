@@ -1510,9 +1510,16 @@ thead th.cb-th{width:36px;padding:0 10px;}
   <div class="modal" style="max-width:640px;max-height:92vh;overflow-y:auto;">
     <h3 style="margin-bottom:4px;">Import Companies from CSV</h3>
     <p style="font-size:12px;color:var(--text-faint);margin-bottom:10px;">
-      Expected columns: <span style="font-family:var(--mono);color:var(--text-muted);">name, domain, location, owner, remarks</span> — only <span style="font-family:var(--mono);">name</span> and <span style="font-family:var(--mono);">domain</span> are required.
+      Expected columns: <span style="font-family:var(--mono);color:var(--text-muted);">name, domain, location, owner, remarks</span> — only <span style="font-family:var(--mono);">name</span> and <span style="font-family:var(--mono);">domain</span> are required. <span style="font-family:var(--mono);">owner</span> can be the person's work email or full name.
     </p>
     <button class="btn btn-ghost btn-sm" style="margin-bottom:14px;" onclick="downloadSampleCsv()">⬇ Download Sample CSV</button>
+    <div id="csvTargetRow" style="display:none;margin-bottom:14px;">
+      <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:5px;">Import these companies as</label>
+      <select id="csvTarget" class="modal-input" style="margin:0;" onchange="csvTargetChanged()">
+        <option value="Prospect">Prospects — go to Prospect Companies</option>
+        <option value="Active">Active Customers — go straight to Active Customers</option>
+      </select>
+    </div>
     <input type="file" id="csvFileInput" accept=".csv,text/csv" style="display:none;" onchange="handleCsvFile(this)">
     <div id="csvDropZone" style="border:1px dashed var(--border);border-radius:6px;padding:26px;text-align:center;cursor:pointer;margin-bottom:14px;"
          onclick="document.getElementById('csvFileInput').click()">
@@ -6275,7 +6282,24 @@ function openCsvImport() {
   const btn = document.getElementById('csvImportBtn');
   btn.disabled = true; btn.style.opacity='0.4';
   document.getElementById('csvFileInput').value='';
+  // Only Admin and Customer Compliance may import straight into Active
+  // Customers; everyone else's imports always land under Prospects.
+  const canPickTarget = ['Admin','Customer Compliance'].includes(currentRole);
+  document.getElementById('csvTargetRow').style.display = canPickTarget ? 'block' : 'none';
+  // Opened from the Active Customers page → default to Active; otherwise Prospects.
+  document.getElementById('csvTarget').value = (canPickTarget && typeof currentViewName!=='undefined' && currentViewName==='companies') ? 'Active' : 'Prospect';
   document.getElementById('csvImportModal').classList.add('open');
+}
+function csvTarget() {
+  const canPick = ['Admin','Customer Compliance'].includes(currentRole);
+  return (canPick && document.getElementById('csvTarget').value === 'Active') ? 'Active' : 'Prospect';
+}
+function csvTargetChanged() {
+  const btn = document.getElementById('csvImportBtn');
+  if(btn && csvParsedRows) {
+    const ready = csvParsedRows.filter(p=>p.status==='ready').length;
+    btn.textContent = `Import ${ready} Compan${ready===1?'y':'ies'}` + (csvTarget()==='Active' ? ' as Active' : '');
+  }
 }
 function closeCsvImport() {
   document.getElementById('csvImportModal').classList.remove('open');
@@ -6371,17 +6395,49 @@ function handleCsvFile(input) {
   reader.onerror = () => showToast('Could not read that file.');
   reader.readAsText(file);
 }
-function confirmCsvImport() {
+async function confirmCsvImport() {
   if(!csvParsedRows) return;
   const toAdd = csvParsedRows.filter(p=>p.status==='ready');
   if(!toAdd.length) return;
+  const target = csvTarget();
+  const targetLabel = target==='Active' ? 'Active Customers' : 'Prospect Companies';
+  const btn = document.getElementById('csvImportBtn');
+
+  // Real login: save to the database, then reload from it, so the
+  // companies survive a refresh and everyone with access can see them.
+  if(realUser) {
+    btn.disabled = true; btn.style.opacity='0.4'; btn.textContent = 'Importing…';
+    try {
+      const res = await apiFetch('/api/companies/import', {
+        method:'POST',
+        body: JSON.stringify({ target, rows: toAdd.map(p=>({name:p.name, domain:p.domain, location:p.location, owner:p.owner, remarks:p.remarks})) }),
+      });
+      const data = await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(data.error || ('HTTP '+res.status));
+      closeCsvImport();
+      await loadRealCompanies();
+      const skipNote = data.skippedCount ? ` (${data.skippedCount} skipped — already in the CRM)` : '';
+      showToast(`${data.createdCount} compan${data.createdCount===1?'y':'ies'} imported into ${targetLabel}${skipNote}.`);
+      // Jump to the list they just filled, so it's obvious where they went.
+      const viewKey = target==='Active' ? 'companies' : 'deals';
+      nav(document.querySelector(`[data-view="${viewKey}"]`), viewKey, targetLabel);
+    } catch(err) {
+      console.error('CSV import failed', err);
+      showToast('Import failed: ' + err.message);
+      btn.disabled = false; btn.style.opacity='1'; csvTargetChanged();
+    }
+    return;
+  }
+
+  // Demo mode (nobody signed in for real) — local only, as before.
   const me = currentUserName();
   toAdd.forEach(p=>{
     const newId = Math.max(0, ...customers.map(c=>c.id)) + 1;
     customers.push({
       id:newId, name:p.name, domain:p.domain,
       location: LOCATIONS.some(l=>l.id===p.location) ? p.location : (myLocations()[0] || (LOCATIONS[0]?.id||'Houston')),
-      status:'Prospect', statusCls:'s-prospect', prospectStatus:'New Lead',
+      status: target==='Active' ? 'Active' : 'Prospect', statusCls: target==='Active' ? 's-active' : 's-prospect',
+      prospectStatus: target==='Active' ? null : 'New Lead',
       owner: p.owner || me, rep: p.owner || me, coOwners:[],
       compTeam:'—', updatedBy:me, updatedAt:nowStamp(),
       ff:'—', mc:'—', dot:'—', paycat:'—',
@@ -6391,7 +6447,7 @@ function confirmCsvImport() {
   });
   const n = toAdd.length;
   closeCsvImport();
-  showToast(`${n} compan${n===1?'y':'ies'} imported as prospects.`);
+  showToast(`${n} compan${n===1?'y':'ies'} imported into ${targetLabel}.`);
   renderProspectsView();
   renderCoTable();
   updateNavBadges();
