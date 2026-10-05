@@ -1724,6 +1724,7 @@ const TEAMS_BY_LOCATION = {
 // Full list of CRM roles. Order = hierarchy top to bottom.
 const ROLES = [
   'Admin',               // Global. All locations, all teams.
+  'Operations Head',     // Global. All locations, all teams — operations oversight (no Admin/User Management powers).
   'Location Head',       // One location. All teams within it.
   'Operations Manager',  // One location. Only the specific teams assigned to them.
   'Team Leader',         // One or more teams. Assigned per user.
@@ -1755,7 +1756,7 @@ const DEPARTMENTS = [
 // New city? Just create the group in M365. No CRM code changes needed.
 
 // ── COMPLIANCE ROLES (always global — no location scoping) ────
-const GLOBAL_ROLES = ['Admin', 'Customer Compliance', 'Carrier Compliance', 'COI Specialist'];
+const GLOBAL_ROLES = ['Admin', 'Operations Head', 'Customer Compliance', 'Carrier Compliance', 'COI Specialist'];
 
 // ── PROSPECT PIPELINE STAGES (Sales / TL / Location Head) ─────
 // These are owned by Sales. Customer Status is owned by Compliance.
@@ -2458,11 +2459,12 @@ function updateSidebarForRole() {
   const isLocHead  = currentRole === 'Location Head';
   const isSalesRep = currentRole === 'Sales Rep';
   const isOpsMgr   = currentRole === 'Operations Manager';
+  const isOpsHead  = currentRole === 'Operations Head';
   // These four roles can view Prospect Companies / Active Customers but
   // should not be able to bulk-export that list to a file — Export stays
   // Admin-only (Customer/Carrier Compliance don't have Export buttons on
   // these screens to begin with).
-  const exportBlocked = isSalesRep || isTL || isOpsMgr || isLocHead;
+  const exportBlocked = isSalesRep || isTL || isOpsMgr || isOpsHead || isLocHead;
 
   const show = (id, visible) => { const el=document.getElementById(id); if(el) el.style.display=visible?'':'none'; };
 
@@ -2478,7 +2480,7 @@ function updateSidebarForRole() {
   show('navAdminSection', isAdmin);
   // Reports: Admin, Location Head, TL only
   const reportsNav = document.querySelector('[data-view="reports"]');
-  if(reportsNav) reportsNav.style.display = (isAdmin||isLocHead||isTL) ? '' : 'none';
+  if(reportsNav) reportsNav.style.display = (isAdmin||isOpsHead||isLocHead||isTL) ? '' : 'none';
 
   // Company Check topbar button: hide from compliance roles (they don't prospect)
   show('tbCompanyCheck', !isCarrCC && !isCC);
@@ -3429,7 +3431,7 @@ function renderCompanyEmails(id, type) {
   // mailboxes, since there's no real, exact-contact mailbox to match against.
   const u = getDemoUser();
   // Full account history is visible to supervisors & compliance; a rep sees their own.
-  const seesAll = ['Admin','Team Leader','Location Head','Customer Compliance','Carrier Compliance'].includes(currentRole);
+  const seesAll = ['Admin','Operations Head','Team Leader','Location Head','Customer Compliance','Carrier Compliance'].includes(currentRole);
 
   // 1. Emails sent from inside the CRM against this company record
   const own = (companyEmailsDB[id] || []).map(e=>({...e, _src:'crm'}));
@@ -3578,7 +3580,7 @@ function renderCCView() {
 
   // ── ACTIVE MODE ────────────────────────────────────────────
   // Show/hide user filter dropdown for Admin / Compliance Manager
-  const canFilterByUser = currentRole==='Admin' || currentRole==='Location Head';
+  const canFilterByUser = currentRole==='Admin' || currentRole==='Operations Head' || currentRole==='Location Head';
   const ufWrap = document.getElementById('ccUserFilterWrap');
   if(ufWrap) ufWrap.style.display = canFilterByUser ? 'flex' : 'none';
   const userFilterVal = (document.getElementById('ccUserFilter')?.value||'');
@@ -4781,7 +4783,7 @@ function renderProspectsView() {
     }
   }
 
-  const canSubmitRole = (currentRole==='Sales Rep'||currentRole==='Team Leader'||currentRole==='Location Head'||currentRole==='Admin');
+  const canSubmitRole = (currentRole==='Sales Rep'||currentRole==='Team Leader'||currentRole==='Location Head'||currentRole==='Operations Head'||currentRole==='Admin');
   thead.innerHTML = `<tr>
     <th>Company</th>
     <th>Status</th>
@@ -4809,7 +4811,7 @@ function renderProspectsView() {
     // Submit for Compliance — button is visible any time a prospect is
     // actively being worked (any stage except Lost) so it's not hidden
     // away, but it's only clickable once the stage is "Ready to Convert".
-    const canSubmit = (currentRole==='Sales Rep'||currentRole==='Team Leader'||currentRole==='Location Head'||currentRole==='Admin')
+    const canSubmit = (currentRole==='Sales Rep'||currentRole==='Team Leader'||currentRole==='Location Head'||currentRole==='Operations Head'||currentRole==='Admin')
       && c.prospectStatus!=='Lost'
       && !c.status.toLowerCase().includes('pending');
     const submitReady = c.prospectStatus==='Ready to Convert';
