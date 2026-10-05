@@ -1305,14 +1305,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <div class="addco-field">
         <label>CRM Role</label>
-        <select id="aum-role">
-          <option>Sales Rep</option>
-          <option>Team Leader</option>
-          <option>Location Head</option>
-          <option>Customer Compliance</option>
-          <option>Carrier Compliance</option>
-          <option>Admin</option>
-        </select>
+        <select id="aum-role" onchange="updateAumLocationUI()"></select>
       </div>
       <div class="addco-field">
         <label>Department</label>
@@ -1325,14 +1318,9 @@ thead th.cb-th{width:36px;padding:0 10px;}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <div class="addco-field">
-        <label>Location</label>
-        <select id="aum-location">
-          <option>Houston</option>
-          <option>Mohali</option>
-          <option>Gurgaon</option>
-          <option>Ganganagar</option>
-          <option>Global (Compliance/Admin)</option>
-        </select>
+        <label id="aum-location-label">Location(s)</label>
+        <div id="aum-location-list" style="display:flex;flex-direction:column;gap:6px;padding:4px 0;"></div>
+        <div id="aum-location-hint" style="font-size:11px;color:var(--text-faint);line-height:1.4;"></div>
       </div>
       <div class="addco-field">
         <label>Sub-team</label>
@@ -1724,7 +1712,7 @@ const TEAMS_BY_LOCATION = {
 // Full list of CRM roles. Order = hierarchy top to bottom.
 const ROLES = [
   'Admin',               // Global. All locations, all teams.
-  'Operations Head',     // Global. All locations, all teams — operations oversight (no Admin/User Management powers).
+  'Operations Head',     // Operations oversight (no Admin/User Management powers). No locations ticked = all locations; otherwise only the ticked ones.
   'Location Head',       // One location. All teams within it.
   'Operations Manager',  // One location. Only the specific teams assigned to them.
   'Team Leader',         // One or more teams. Assigned per user.
@@ -1756,7 +1744,7 @@ const DEPARTMENTS = [
 // New city? Just create the group in M365. No CRM code changes needed.
 
 // ── COMPLIANCE ROLES (always global — no location scoping) ────
-const GLOBAL_ROLES = ['Admin', 'Operations Head', 'Customer Compliance', 'Carrier Compliance', 'COI Specialist'];
+const GLOBAL_ROLES = ['Admin', 'Customer Compliance', 'Carrier Compliance', 'COI Specialist'];
 
 // ── PROSPECT PIPELINE STAGES (Sales / TL / Location Head) ─────
 // These are owned by Sales. Customer Status is owned by Compliance.
@@ -4350,6 +4338,11 @@ function scopedActiveCustomers() {
     const locs = myLocations();
     return locs.length ? live.filter(c=>locs.includes(c.location)) : live.filter(c=>c.location===realUser.location);
   }
+  if(role==='Operations Head') {
+    const locs = myLocations();
+    return locs.length ? live.filter(c=>locs.includes(c.location)) : live;
+  }
+  if(role==='Operations Manager') return live; // server already limits to their teams/locations
   if(role==='Team Leader') {
     const teamMemberIds = realUsers.map(u=>u.userId); // /api/users already scopes this to the TL's own team + self
     return live.filter(c=>teamMemberIds.includes(c.ownerUserId));
@@ -5341,6 +5334,7 @@ function renderUserManagement() {
     const typeCls = u.type==='SSO'?'utype-sso':'utype-manual';
     const isGlobal = GLOBAL_ROLES.includes(u.role);
     const isCCUser = u.role==='Carrier Compliance';
+    const canHaveLocs = ['Carrier Compliance','Operations Head','Operations Manager','Location Head'].includes(u.role);
     const emailDisplay = u.status==='Former Employee'
       ? `<span style="font-family:var(--mono);font-size:11px;color:var(--text-faint);text-decoration:line-through">${u.originalEmail||'—'}</span><br><span class="crm-email-chip" style="font-size:10px;margin-top:0;">${u.crmEmail}</span>`
       : `<span style="font-family:var(--mono);font-size:11.5px;">${u.email}</span>`;
@@ -5350,13 +5344,13 @@ function renderUserManagement() {
       : (u.subTeam||[]).filter(t=>t!=='—').join(', ') || '—';
     const locationDisplay = isGlobal
       ? `<span style="font-size:11px;color:var(--text-faint);font-style:italic;">All</span>`
-      : esc(locationName(u.location));
+      : ((u.assignedLocations||[]).length ? esc(u.assignedLocations.map(locationName).join(', ')) : (u.role==='Operations Head' ? '<span style="font-size:11px;color:var(--text-faint);font-style:italic;">All</span>' : esc(locationName(u.location))));
     const actions = u.status==='Former Employee'
       ? `<button class="btn btn-ghost btn-sm" style="opacity:0.5;cursor:default;" disabled>Archived</button>`
       : `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openUserDrawer('${u.id}')">Edit</button>`;
 
     // Assigned Locations column — CC users only, Admin-editable chips
-    const assignedLocsHtml = isCCUser
+    const assignedLocsHtml = canHaveLocs
       ? `<div style="display:flex;flex-wrap:wrap;gap:4px;min-width:140px;" onclick="event.stopPropagation();">
           ${(u.assignedLocations||[]).map(loc=>`
             <span style="background:rgba(212,98,26,0.12);border:1px solid rgba(212,98,26,0.3);border-radius:3px;padding:2px 7px;font-size:11px;color:var(--accent);display:inline-flex;align-items:center;gap:4px;">
@@ -5947,12 +5941,32 @@ function openUserModal(mode) {
   // Location/Department options come from the real, manageable lists —
   // see loadRealLocations()/loadRealDepartments() — falling back to the
   // starting defaults if those haven't loaded yet.
-  const locSel = document.getElementById('aum-location');
-  locSel.innerHTML = LOCATIONS.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')
-    + `<option value="">Global (Compliance/Admin)</option>`;
+  document.getElementById('aum-role').innerHTML = ROLES.map(r=>`<option>${esc(r)}</option>`).join('');
+  document.getElementById('aum-location-list').innerHTML = LOCATIONS.map(l=>
+    `<label style="display:flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer;">
+       <input type="checkbox" class="aum-loc-chk" value="${esc(l.id)}" style="accent-color:var(--accent);"> ${esc(l.name)}
+     </label>`).join('');
+  updateAumLocationUI();
   const deptSel = document.getElementById('aum-department');
   deptSel.innerHTML = DEPARTMENTS.map(d=>`<option value="${esc(d.name)}">${esc(d.name)}</option>`).join('');
   m.classList.add('open');
+}
+// Roles that can be tied to one OR MORE specific locations when created
+// (Admin and the Compliance roles are always company-wide, so they get no
+// location picker at all).
+function updateAumLocationUI() {
+  const role = document.getElementById('aum-role').value;
+  const isGlobal = GLOBAL_ROLES.includes(role);
+  const list = document.getElementById('aum-location-list');
+  const label = document.getElementById('aum-location-label');
+  const hint = document.getElementById('aum-location-hint');
+  const wrap = label.parentElement;
+  wrap.style.display = isGlobal ? 'none' : '';
+  if(isGlobal) return;
+  list.querySelectorAll('input').forEach(c=>{ if(isGlobal) c.checked=false; });
+  hint.textContent = role==='Operations Head'
+    ? 'Tick one or more locations. Leave all unticked for access to every location.'
+    : 'Tick one or more locations this person works across.';
 }
 function closeUserModal() {
   const m = document.getElementById('addUserModal');
@@ -5963,9 +5977,11 @@ function submitNewUser() {
   const email = (document.getElementById('aum-email').value||'').trim();
   const role = document.getElementById('aum-role').value;
   const department = document.getElementById('aum-department').value;
-  const location = document.getElementById('aum-location').value;
+  const locations = [...document.querySelectorAll('.aum-loc-chk:checked')].map(c=>c.value);
+  const location = locations[0] || '';
   const expiry = (document.getElementById('aum-expiry')?.value||'').trim();
   if(!name||!email) { showToast('Name and email are required.'); return; }
+  if(!GLOBAL_ROLES.includes(role) && role!=='Operations Head' && !locations.length) { showToast('Tick at least one location for this role.'); return; }
   if(usersDB.some(u=>(u.email||'').toLowerCase()===email.toLowerCase())) { showToast('A user with that email already exists.'); return; }
   const initials = name.split(' ').map(p=>p[0]||'').join('').toUpperCase().slice(0,2);
   const newId = 'USR-0'+String(usersDB.length+1).padStart(2,'0');
@@ -5982,6 +5998,7 @@ function submitNewUser() {
     role, type:addUserMode==='sso'?'SSO':'Manual',
     status:'Active',
     location: isGlobalRole ? null : location,
+    assignedLocations: isGlobalRole ? [] : locations,
     department, subTeam:['—'], m365Group,
     lastLogin:'Never',
     createdAt:nowDateOnly(), offboardedAt:null,
@@ -5995,7 +6012,7 @@ function submitNewUser() {
   if(realUser && addUserMode==='sso') {
     apiFetch('/api/users', {
       method:'POST',
-      body: JSON.stringify({ fullName:name, email, role, location: isGlobalRole?null:location, department }),
+      body: JSON.stringify({ fullName:name, email, role, location: isGlobalRole?null:location, locations: isGlobalRole?[]:locations, department }),
     }).then(async res => {
       if(!res.ok) {
         const body = await res.json().catch(()=>({}));
@@ -6008,7 +6025,7 @@ function submitNewUser() {
   }
 
   closeUserModal();
-  showToast(`${name} added as ${role}${isGlobalRole?'':', '+locationName(location)}.`);
+  showToast(`${name} added as ${role}${isGlobalRole?'':(locations.length?', '+locations.map(locationName).join(' + '):', all locations')}.`);
   renderUserManagement();
 }
 
