@@ -1824,7 +1824,7 @@ let realUser = null;
 // the full legal name and is only the fallback. A real logged-in user takes
 // priority over both once present.
 function currentUserName() {
-  if(realUser) return realUser.shortName;
+  if(realUser) return realUser.fullName || realUser.shortName;
   return DEMO_USERS[currentRole]?.name || getDemoUser()?.name || currentRole;
 }
 // Full name for display in user-management style contexts.
@@ -1900,7 +1900,12 @@ function logActivity(companyId, kind, text, reminder) {
   if(realUser) {
     apiFetch(`/api/companies/${companyId}/activity`, {
       method: 'POST', body: JSON.stringify({ kind, text, reminderAt: reminder||null }),
-    }).catch(e => console.error('Saving activity failed:', e));
+    }).then(async r => {
+      if(!r.ok) {
+        console.error('Saving activity failed:', r.status, await r.text().catch(()=>''));
+        if(reminder) showToast('⚠ The reminder was NOT saved (server error ' + r.status + '). Please tell Deep.');
+      }
+    }).catch(e => { console.error('Saving activity failed:', e); if(reminder) showToast('⚠ The reminder was NOT saved — check your connection.'); });
   }
 }
 // Company ids whose activity has been fetched from the real backend this
@@ -2450,7 +2455,7 @@ async function pollDueReminders() {
   if(!realUser) return;
   try {
     const res = await apiFetch('/api/reminders/due');
-    if(!res.ok) return;
+    if(!res.ok) { console.warn('Reminder check failed:', res.status); return; }
     const rows = await res.json();
     const ids = new Set(rows.map(r=>r.activity_id));
     document.querySelectorAll('#remWrap .rem-card').forEach(el=>{ if(!ids.has(Number(el.id.replace('rem-','')))) el.remove(); });
@@ -2498,7 +2503,7 @@ function openRemindModal(companyId) {
     <div class="addco-field"><label>When</label>
       <select id="remWhen" class="field-select" onchange="document.getElementById('remCustom').style.display=this.value==='custom'?'block':'none'">
         <option value="tomorrow">Tomorrow, 9:00 AM</option><option value="3d">In 3 days, 9:00 AM</option>
-        <option value="1w">Next week, 9:00 AM</option><option value="1h">In 1 hour</option><option value="custom">Pick a date and time…</option>
+        <option value="1w">Next week, 9:00 AM</option><option value="10m">In 10 minutes</option><option value="1h">In 1 hour</option><option value="custom">Pick a date and time…</option>
       </select>
       <input type="datetime-local" id="remCustom" style="display:none;margin-top:8px;width:100%;box-sizing:border-box;">
     </div>
@@ -2514,6 +2519,7 @@ function openRemindModal(companyId) {
 function closeRemindModal() { const m=document.getElementById('remindModal'); if(m) m.classList.remove('open'); remindCtx=null; }
 function remindWhenToDate(v) {
   const d = new Date();
+  if(v==='10m') { d.setMinutes(d.getMinutes()+10); return d; }
   if(v==='1h') { d.setHours(d.getHours()+1); return d; }
   if(v==='custom') { const x = document.getElementById('remCustom').value; return x ? new Date(x) : null; }
   d.setDate(d.getDate() + (v==='3d'?3 : v==='1w'?7 : 1));
@@ -9371,7 +9377,7 @@ function mapCompany(c) {
 // ASSIGNABLE demo list already used, so the Assign Owner picker doesn't
 // need its own rendering logic — only where its data comes from.
 function mapUser(u) {
-  return { userId: u.user_id, name: u.short_name, fullName: u.full_name, role: u.role, location: u.location_id, teamIds: u.teamIds || [] };
+  return { userId: u.user_id, name: u.full_name || u.short_name, fullName: u.full_name, role: u.role, location: u.location_id, teamIds: u.teamIds || [] };
 }
 let realUsers = []; // populated from /api/users at boot — the real Assign Owner list
 async function loadRealUsers() {
