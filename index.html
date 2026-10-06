@@ -1047,6 +1047,16 @@ thead th.cb-th{width:36px;padding:0 10px;}
   <div class="drawer-body" id="dBody"></div>
 </div>
 
+<!-- PROSPECT ALERTS POP-UP -->
+<div class="modal-overlay" id="prospectAlertModal">
+  <div class="modal" style="max-width:520px;">
+    <h3>⏱ Prospects need attention</h3>
+    <p style="margin-bottom:6px;">These prospects are close to the end of their working window, are waiting on an extension decision, or have no owner.</p>
+    <div id="prospectAlertBody" style="max-height:340px;overflow:auto;"></div>
+    <div class="modal-actions"><button class="btn btn-primary" onclick="closeProspectAlerts()">Got it</button></div>
+  </div>
+</div>
+
 <!-- COMPANY CHECK MODAL -->
 <div class="modal-overlay" id="checkModal">
   <div class="modal">
@@ -1088,6 +1098,10 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <div class="addco-field"><label>Domain</label><input id="addCoDomain" placeholder="example.com" style="font-family:var(--mono);font-size:12px;"></div>
       <div class="addco-field" id="addCoOwnerField"><label>Assign Owner</label>
         <select id="addCoOwnerSel"></select>
+      </div>
+      <div class="addco-field" id="addCoDaysField" style="display:none;"><label>Working days for the Sales Rep</label>
+        <input id="addCoDays" type="number" min="1" max="365" value="21" style="max-width:120px;">
+        <div class="addco-hint">How long the Sales Rep has to work this prospect (default 21). If the days run out with no extension it moves to Open. Only you and the other managers can see this.</div>
       </div>
       <div class="addco-field"><label>NAV Office</label>
         <select id="addCoLocation"></select>
@@ -2447,6 +2461,24 @@ function setRole(role, btn) {
   updateNavBadges();
 }
 
+// Admin can switch Carrier Compliance off for a person in User Management
+// (Module Access). Off = no nav item, no dashboard queue, and the server
+// refuses the data too. Admin is never locked out.
+function carrierAccessOn() {
+  if(!realUser) return true;
+  if(currentRole==='Admin') return true;
+  return realUser.carrierAccess !== false;
+}
+function applyCarrierAccessUI() {
+  if(carrierAccessOn()) return;
+  const side = document.querySelector('.dash-side');
+  if(!side) return;
+  let hiding = false;
+  Array.from(side.children).forEach(el=>{
+    if(el.classList.contains('dash-sec-head')) hiding = /Carrier Compliance/i.test(el.textContent);
+    if(hiding) el.style.display = 'none';
+  });
+}
 function updateSidebarForRole() {
   const isAdmin    = currentRole === 'Admin';
   const isCC       = currentRole === 'Customer Compliance';
@@ -2465,7 +2497,7 @@ function updateSidebarForRole() {
   const show = (id, visible) => { const el=document.getElementById(id); if(el) el.style.display=visible?'':'none'; };
 
   // Carrier Compliance nav: hide for Customer Compliance
-  show('navCarrierComp',  !isCC);
+  show('navCarrierComp',  !isCC && carrierAccessOn());
   // Customer Compliance nav: hide for Carrier Compliance only — a Sales
   // Rep can see it too, scoped (by the server) to just the cases they
   // personally submitted, so they can track a prospect they sent in.
@@ -2494,7 +2526,7 @@ function updateSidebarForRole() {
   const restricted = {
     'view-user-management': !isAdmin,
     'view-manage-lists': !isAdmin,
-    'view-carrier-compliance': isCC,
+    'view-carrier-compliance': isCC || !carrierAccessOn(),
     'view-customer-compliance': isCarrCC,
     'view-reports': isSalesRep || isCC || isCarrCC,
   };
@@ -2749,7 +2781,7 @@ function renderCustomerDetails(id) {
 
   const paycatOpts = PAYCATS.map(p=>`<option${p===c.paycat?' selected':''}>${p}</option>`).join('');
   const statusOpts = STATUSES_CUSTOMER.map(s=>`<option${s===c.status?' selected':''}>${s}</option>`).join('');
-  const prospectStageOpts = PROSPECT_STATUSES.map(s=>`<option${s===(c.prospectStatus||'New Lead')?' selected':''}>${s}</option>`).join('');
+  const prospectStageOpts = (c.prospectStatus==='Open' ? ['Open',...PROSPECT_STATUSES] : PROSPECT_STATUSES).map(s=>`<option${s===(c.prospectStatus||'New Lead')?' selected':''}>${s}</option>`).join('');
 
   const linkedCase = compCases.find(cc=>cc.co===c.name);
 
@@ -2798,7 +2830,7 @@ function renderCustomerDetails(id) {
   const drawerEquipList = c.equipmentList || [];
   const drawerEquipChips = EQUIPMENT_TYPES.map(v=>`<button type="button" class="fchip${drawerEquipList.includes(v)?' active':''}" ${canEditProfile?`onclick="toggleCoEquipment(${c.id},'${v.replace(/'/g,"\\'")}')"`:'disabled style="cursor:default;"'}>${v}</button>`).join('');
 
-  document.getElementById('dBody').innerHTML = complianceBarHtml + flagHtml + `
+  document.getElementById('dBody').innerHTML = prospectWindowPanel(c) + complianceBarHtml + flagHtml + `
     <div class="d-sec">
       <div class="d-sec-label">Internal Assignment</div>
       <div class="field-grid">
@@ -3938,6 +3970,162 @@ async function compRejectCase(caseId) {
   if(ok) { showToast(`Case ${caseId} rejected.`); closeDrawer(); }
 }
 
+// ── PROSPECT WORKING WINDOW (days, extensions, ending-soon pop-up) ──────
+// Admin / Customer Compliance / Operations Head / Location Head / Operations
+// Manager set how many days a Sales Rep gets (default 21) and are the only
+// roles that see that setting. When the days run out with no extension the
+// prospect moves to "Open" (the server does this on a schedule).
+const WINDOW_ROLES = ['Admin','Customer Compliance','Operations Head','Location Head','Operations Manager'];
+function canSeeWindow() { return WINDOW_ROLES.includes(currentRole); }
+function prospectDaysLeft(c) {
+  if(!c || !c.expiresAt) return null;
+  return Math.ceil((new Date(c.expiresAt).getTime() - Date.now()) / 86400000);
+}
+// Who decides a pending extension request: the Location Head for the
+// office (Admin / Operations Head too), unless Customer Compliance assigned
+// the prospect directly — then Customer Compliance (or Admin) decides.
+function canDecideExtension(c) {
+  if(!c || !c.extStatus) return false;
+  if(c.extRoute==='Compliance') return currentRole==='Customer Compliance' || currentRole==='Admin';
+  if(currentRole==='Admin') return true;
+  if(currentRole==='Location Head' || currentRole==='Operations Head') return canSeeLocation(c.location);
+  return false;
+}
+function prospectWindowBadge(c) {
+  if(!isProspect(c) || c.status.toLowerCase().includes('pending')) return '';
+  if(c.prospectStatus==='Open') return `<span style="display:inline-block;font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;background:rgba(59,130,246,0.12);color:var(--blue);border:1px solid rgba(59,130,246,0.3);">OPEN</span>`;
+  const left = prospectDaysLeft(c);
+  if(left===null) return '';
+  const urgent = left<=3;
+  if(!canSeeWindow() && !urgent) return '';
+  const col = left<=0 ? 'var(--red)' : urgent ? 'var(--amber)' : 'var(--text-faint)';
+  const txt = left<=0 ? 'ending today' : `${left}d left` + ((canSeeWindow() && c.prospectDays) ? ` of ${c.prospectDays}d` : '');
+  return `<span style="display:inline-block;font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;color:${col};border:1px solid ${col};opacity:0.9;">⏱ ${txt}</span>`;
+}
+async function decideExtension(id, approve) {
+  const inp = document.getElementById('extDaysInput');
+  const days = parseInt(inp ? inp.value : '14', 10) || 14;
+  try {
+    const res = await apiFetch(`/api/companies/${id}/extension-decision`, { method:'POST', body: JSON.stringify({ approve, days }) });
+    if(!res.ok) { const b = await res.json().catch(()=>({})); showToast(b.error || 'Could not save that decision.'); return; }
+    await loadRealCompanies();
+    showToast(approve ? `Extension approved: +${days} days.` : 'Extension request declined.');
+    renderProspectsView();
+    if(openCompanyId===id) renderCustomerDetails(id);
+  } catch(e) { console.error(e); showToast('Could not save that decision.'); }
+}
+async function saveProspectWindow(id) {
+  const ownerSel = document.getElementById('winOwnerSel');
+  const days = parseInt(document.getElementById('winDaysInput').value, 10);
+  if(!days || days<1) { showToast('Enter the number of days (1 or more).'); return; }
+  const body = { days };
+  if(ownerSel && ownerSel.value) body.ownerUserId = ownerSel.value;
+  try {
+    const res = await apiFetch(`/api/companies/${id}/assign`, { method:'POST', body: JSON.stringify(body) });
+    if(!res.ok) { const b = await res.json().catch(()=>({})); showToast(b.error || 'Could not save.'); return; }
+    await loadRealCompanies();
+    showToast(body.ownerUserId ? 'Prospect assigned with a new working window.' : `Working window set to ${days} days.`);
+    renderProspectsView();
+    if(openCompanyId===id) renderCustomerDetails(id);
+  } catch(e) { console.error(e); showToast('Could not save.'); }
+}
+function prospectWindowPanel(c) {
+  if(!realUser || !isProspect(c) || c.status.toLowerCase().includes('pending')) return '';
+  let html = '';
+  const left = prospectDaysLeft(c);
+  if(c.extStatus==='Pending') {
+    if(canDecideExtension(c)) {
+      html += `<div style="margin-bottom:14px;padding:12px 14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.35);border-radius:6px;">
+        <div style="font-size:12.5px;font-weight:600;color:var(--amber);margin-bottom:4px;">⚑ Extension requested</div>
+        <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:9px;line-height:1.5;">${c.extRoute==='Compliance' ? 'This prospect was assigned by Customer Compliance, so Customer Compliance decides.' : 'Location Head decides. Operations Manager has been notified.'}</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:12px;color:var(--text-muted);">Add</span>
+          <input id="extDaysInput" type="number" min="1" max="365" value="14" style="width:70px;padding:5px 8px;font-size:12px;">
+          <span style="font-size:12px;color:var(--text-muted);">days</span>
+          <button class="btn btn-primary btn-sm" onclick="decideExtension(${c.id},true)">Approve</button>
+          <button class="btn btn-ghost btn-sm" style="border-color:var(--red);color:var(--red);" onclick="decideExtension(${c.id},false)">Decline</button>
+        </div></div>`;
+    } else {
+      html += `<div style="margin-bottom:14px;padding:10px 14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:6px;font-size:12px;color:var(--amber);">⚑ Extension requested — waiting for ${c.extRoute==='Compliance'?'Customer Compliance':'your Location Head'} to decide.</div>`;
+    }
+  }
+  if(c.prospectStatus==='Open') {
+    html += `<div style="margin-bottom:14px;padding:10px 14px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.3);border-radius:6px;font-size:12px;color:var(--blue);">This prospect is <strong>Open</strong> — its working window ended and nobody owns it.${canSeeWindow()?' Assign it below.':''}</div>`;
+  } else if(left!==null && left<=3 && c.extStatus!=='Pending') {
+    html += `<div style="margin-bottom:14px;padding:10px 14px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.3);border-radius:6px;font-size:12px;color:var(--red);">⏱ ${left<=0?'The working window ends today.':`Only ${left} day${left===1?'':'s'} left on this prospect's working window.`} ${currentRole==='Sales Rep'?'Set the stage to "Request Extension" if you need more time.':''}</div>`;
+  }
+  if(canSeeWindow()) {
+    const people = (realUsers||[]).filter(u=>['Sales Rep','Team Leader','Supervisor'].includes(u.role));
+    html += `<div style="margin-bottom:16px;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;">
+      <div style="font-size:11px;font-family:var(--mono);color:var(--text-faint);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">Working window</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:9px;">${c.prospectDays?`${c.prospectDays} days assigned`:'Default 21 days'}${left!==null?` · ${left<=0?'ends today':left+' day'+(left===1?'':'s')+' left'}`:''}${c.assignedByRole?` · assigned by ${esc(c.assignedByRole)}`:''}</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select id="winOwnerSel" class="field-select" style="max-width:210px;">
+          <option value="">${c.prospectStatus==='Open'?'— Assign to…':'— Keep current owner'}</option>
+          ${people.map(u=>`<option value="${esc(u.userId)}">${esc(u.name)} · ${esc(u.role)}</option>`).join('')}
+        </select>
+        <input id="winDaysInput" type="number" min="1" max="365" value="${c.prospectDays||21}" style="width:70px;padding:5px 8px;font-size:12px;">
+        <span style="font-size:12px;color:var(--text-muted);">days</span>
+        <button class="btn btn-primary btn-sm" onclick="saveProspectWindow(${c.id})">Save</button>
+      </div></div>`;
+  }
+  return html;
+}
+
+// Pop-up on sign-in (and every 30 min after): prospects close to the end of
+// their window, extension requests waiting for you, and open prospects.
+let prospectAlertSig = '';
+function prospectAlertRelevant(c) {
+  if(!isProspect(c) || c.status.toLowerCase().includes('pending')) return false;
+  if(currentRole==='Sales Rep') return c.owner===currentUserName();
+  if(currentRole==='Team Leader') {
+    const o = (realUsers||[]).find(u=>u.userId===c.ownerUserId);
+    return !!(o && realUser && (o.teamIds||[]).some(t=>(realUser.teamIds||[]).includes(t)));
+  }
+  if(currentRole==='Location Head') return canSeeLocation(c.location);
+  return canSeeWindow();
+}
+function collectProspectAlerts() {
+  const out = [];
+  customers.forEach(c=>{
+    if(!prospectAlertRelevant(c)) return;
+    if(c.prospectStatus==='Open') { if(canSeeWindow()) out.push({c, type:'open'}); return; }
+    if(['Lost','Ready to Convert'].includes(c.prospectStatus)) return;
+    if(c.extStatus==='Pending') { if(canDecideExtension(c)) out.push({c, type:'ext'}); return; }
+    const left = prospectDaysLeft(c);
+    if(left!==null && left<=3) out.push({c, type:'expiring', left});
+  });
+  return out;
+}
+function showProspectAlerts(force) {
+  if(!realUser) return;
+  const items = collectProspectAlerts();
+  const sig = items.map(i=>i.type+i.c.id+(i.left!==undefined?':'+i.left:'')).join('|');
+  if(!items.length) { prospectAlertSig=''; return; }
+  if(!force && sig===prospectAlertSig) return;
+  prospectAlertSig = sig;
+  const label = {expiring:'Ending soon', ext:'Extension request', open:'Open — unassigned'};
+  const body = items.slice(0,12).map(i=>{
+    const detail = i.type==='expiring' ? (i.left<=0?'ends today':`${i.left} day${i.left===1?'':'s'} left`)
+      : i.type==='ext' ? 'waiting for your decision' : 'needs an owner';
+    const col = i.type==='expiring' ? 'var(--red)' : i.type==='ext' ? 'var(--amber)' : 'var(--blue)';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;color:var(--text);">${esc(i.c.name)}</div>
+      <div style="font-size:11.5px;color:${col};margin-top:2px;">${label[i.type]} · ${detail}</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="openProspectFromAlert(${i.c.id})">Open →</button></div>`;
+  }).join('') + (items.length>12?`<div style="padding-top:8px;font-size:11.5px;color:var(--text-faint);">…and ${items.length-12} more in Prospect Companies.</div>`:'');
+  document.getElementById('prospectAlertBody').innerHTML = body;
+  document.getElementById('prospectAlertModal').classList.add('open');
+}
+function closeProspectAlerts() { document.getElementById('prospectAlertModal').classList.remove('open'); }
+function openProspectFromAlert(id) {
+  closeProspectAlerts();
+  const el = document.querySelector('[data-view="deals"]');
+  nav(el,'deals','Prospect Companies');
+  setTimeout(()=>openCustomerDrawer(id),200);
+}
+setInterval(()=>{ try{ showProspectAlerts(false); }catch(e){} }, 30*60*1000);
+
 // ── COMPANY CHECK MODAL ───────────────────────────────────────
 
 function openCheck(){
@@ -3968,7 +4156,7 @@ function runCheck(v){
       const out=await serverCompanyCheck(v.trim());
       if(seq!==_checkSeq) return; // a newer keystroke superseded this
       if(!out){ r.style.display='block'; r.className='modal-result taken-result'; r.innerHTML='Could not check right now — please try again.'; return; }
-      renderCheckResult(!!out.exists);
+      renderCheckResult(out.exists ? (out.kind||'active') : null);
     },400);
     return;
   }
@@ -3978,16 +4166,23 @@ function runCheck(v){
     (c.domain && (c.domain===q || q.includes(c.domain) || c.domain.includes(q)))
     && !c.status.toLowerCase().includes('prospect')
   );
-  renderCheckResult(domainMatch);
+  renderCheckResult(domainMatch ? 'active' : null);
 }
-function renderCheckResult(taken){
+function renderCheckResult(kind){
   const r=document.getElementById('checkResult');
   r.style.display='block';
+  const taken = !!kind;
   r.className='modal-result '+(taken?'taken-result':'open-result');
-  r.innerHTML = taken
-    ? `<strong>⚠ Already active</strong> — this account is owned by another broker or team.<div class="modal-result-sub">You will not see who owns it. Click "Raise a Query" if you have a live load opportunity and need access.</div>
-       <div style="margin-top:10px;"><button class="btn btn-ghost btn-sm" onclick="showToast('Query raised — routed to your team leader.');closeCheck();">Raise a Query</button></div>`
-    : `<strong>✓ Open to work</strong> — this company is not currently active in the system.<div class="modal-result-sub">You can prospect and import this account. It will not lock until compliance approves it as Active.</div>`;
+  if(kind==='active') {
+    r.innerHTML = `<strong>⚠ Already active</strong> — this account is owned by another broker or team.<div class="modal-result-sub">You will not see who owns it. Click "Raise a Query" if you have a live load opportunity and need access.</div>
+       <div style="margin-top:10px;"><button class="btn btn-ghost btn-sm" onclick="showToast('Query raised — routed to your team leader.');closeCheck();">Raise a Query</button></div>`;
+  } else if(kind==='prospect') {
+    r.innerHTML = `<strong>⚠ Already being worked</strong> — this company is a prospect that another team member is working.<div class="modal-result-sub">It cannot be added again, and you will not see who has it.</div>`;
+  } else if(kind==='open') {
+    r.innerHTML = `<strong>⚠ Already in the CRM (open prospect)</strong> — nobody is working this prospect right now.<div class="modal-result-sub">It cannot be added again. Ask your Location Head or Operations Manager to assign it to you.</div>`;
+  } else {
+    r.innerHTML = `<strong>✓ Open to work</strong> — this company is not in the system.<div class="modal-result-sub">You can prospect and import this account.</div>`;
+  }
 }
 document.getElementById('checkModal').addEventListener('click',function(e){if(e.target===this)closeCheck();});
 
@@ -4071,6 +4266,9 @@ function openAddCo() {
       people.map(p=>`<option value="${esc(p.name)}" data-uid="${esc(p.userId||'')}">${esc(p.name)} · ${esc(p.role)}</option>`).join('');
   }
 
+  const daysField = document.getElementById('addCoDaysField');
+  if(daysField) { daysField.style.display = canSeeWindow() ? '' : 'none'; document.getElementById('addCoDays').value = 21; }
+
   // Pre-fill NAV Office — Location Head defaults to their own office
   const locSel = document.getElementById('addCoLocation');
   locSel.innerHTML = `<option value="">— Select office —</option>` +
@@ -4127,7 +4325,7 @@ async function addCoCheck() {
 
   if(!isTaken) {
     res.className='modal-result open-result';
-    res.innerHTML=`<strong>✓ Open to work</strong> — domain not found as an active account.`;
+    res.innerHTML=`<strong>✓ Open to work</strong> — this company is not in the CRM yet.`;
     // Pre-fill name/domain
     document.getElementById('addCoName').value = v.includes('.')?'':v;
     document.getElementById('addCoDomain').value = v.includes('.')?v:'';
@@ -4138,7 +4336,9 @@ async function addCoCheck() {
     },600);
   } else {
     res.className='modal-result taken-result';
-    res.innerHTML=`<strong>⚠ Already active</strong> — this account is in the system.`;
+    res.innerHTML = found.kind==='prospect' ? `<strong>⚠ Already being worked</strong> — this prospect is in the system.`
+      : found.kind==='open' ? `<strong>⚠ Already in the CRM</strong> — this is an open prospect.`
+      : `<strong>⚠ Already active</strong> — this account is in the system.`;
     addCoFoundRecord = found;
     setTimeout(()=>{
       ADDCO_STEPS.forEach(s=>document.getElementById('addCo-'+s).classList.remove('active'));
@@ -4149,8 +4349,18 @@ async function addCoCheck() {
         // Their own / their team's / their location's account: show details.
         msg.textContent='This company already exists in the system. You can open the record directly.';
         info.style.display='';
-        info.innerHTML=`<strong>${found.name}</strong><br><span style="font-family:var(--mono);font-size:11px;color:var(--text-faint);">${found.domain}${found.owner?' · Owner: '+found.owner:''}</span>`;
+        info.innerHTML=`<strong>${esc(found.name)}</strong><br><span style="font-family:var(--mono);font-size:11px;color:var(--text-faint);">${esc(found.domain)}${found.owner?' · Owner: '+esc(found.owner):''}</span>`;
         openBtn.style.display='';
+        document.getElementById('addCo-s2c').classList.add('active');
+      } else if(found.kind==='prospect' || found.kind==='open') {
+        // A prospect that isn't theirs: it can't be added again, and they
+        // learn nothing about it (no name, no owner). Only an ACTIVE
+        // customer can be claimed through a Lead Claim.
+        msg.textContent = found.kind==='open'
+          ? 'This company is already in the CRM as an open prospect. It cannot be added again — ask your Location Head or Operations Manager to assign it to you.'
+          : 'This company is already being worked by another team member. It cannot be added again.';
+        info.style.display='none';
+        openBtn.style.display='none';
         document.getElementById('addCo-s2c').classList.add('active');
       } else if(currentRole==='Sales Rep') {
         document.getElementById('addCo-2b-company').textContent=`${found.name} · ${found.domain}`;
@@ -4200,6 +4410,7 @@ function addCoContinueToContact() {
     loadVolume: document.getElementById('addCoLoadVolume').value,
     equipmentList: addCoDraftEquipment.slice(),
     remarks: document.getElementById('addCoRemarks').value.trim(),
+    prospectDays: canSeeWindow() ? (parseInt(document.getElementById('addCoDays').value,10) || 21) : 21,
   };
 
   document.getElementById('addCo-2a2-company').innerHTML =
@@ -4252,7 +4463,7 @@ function addCoFinish(withContact) {
         employeeRange:d.employeeRange, revenueRange:d.revenueRange, timezone:d.timezone,
         commodity:d.commodity, lanes:d.lanesList, loadFreq:d.loadFreq, loadVolume:d.loadVolume,
         equipment:d.equipmentList,
-        remarks:d.remarks, ownerUserId: d.ownerUserId || undefined,
+        remarks:d.remarks, ownerUserId: d.ownerUserId || undefined, prospectDays: d.prospectDays,
         contact: (withContact && contactName) ? {name:contactName, title:contactTitle, phone:contactPhone, email:contactEmail} : null,
       }),
     }).then(res => { if(!res.ok) console.error('Create company on server failed', res.status); else loadRealCompanies(); })
@@ -4861,8 +5072,8 @@ function renderProspectsView() {
     const submitBtn = canSubmit
       ? `<button class="btn btn-ghost btn-sm" style="margin-left:auto;${submitReady?'border-color:var(--green);color:var(--green);':'opacity:0.45;cursor:not-allowed;'}" ${submitReady?`onclick="event.stopPropagation();submitForCompliance(${c.id})"`:`onclick="event.stopPropagation();" disabled title="Move the prospect stage to 'Ready to Convert' first."`}>Submit for Compliance →</button>` : '';
     // Inactivity alert badge: show for Request Extension stage or prospects past 21 days
-    const iaAlert = c.prospectStatus==='Request Extension'
-      ? `<span style="display:inline-block;font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3);">⚑ Extension</span>` : '';
+    const iaAlert = (c.prospectStatus==='Request Extension'
+      ? `<span style="display:inline-block;font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3);">⚑ Extension</span>` : '') + prospectWindowBadge(c);
     return `<tr onclick="openCustomerDrawer(${c.id})" style="cursor:pointer;">
       <td class="primary">
         ${c.name}${iaAlert}
@@ -5433,8 +5644,8 @@ function renderUserManagement() {
       : `<span style="font-size:11.5px;color:var(--text-faint);">—</span>`;
 
     // Module Access summary chips
-    const ma = u.moduleAccess || {prospects:true,customers:true,contacts:true,custCompliance:true};
-    const modLabels = {prospects:'Prospects',customers:'Customers',contacts:'Contacts',custCompliance:'Cust. Compliance'};
+    const ma = Object.assign({carrierCompliance:true}, u.moduleAccess || {prospects:true,customers:true,contacts:true,custCompliance:true});
+    const modLabels = {prospects:'Prospects',customers:'Customers',contacts:'Contacts',custCompliance:'Cust. Compliance',carrierCompliance:'Carrier Compliance'};
     const enabledCount = Object.values(ma).filter(Boolean).length;
     const moduleAccessSummary = u.status === 'Former Employee'
       ? `<span style="font-size:11px;color:var(--text-faint);">Archived</span>`
@@ -5580,7 +5791,7 @@ function openUserDrawer(userId) {
     </div>`).join('');
 
   // Module Access section (Admin only, for non-former employees)
-  const ma = u.moduleAccess || {prospects:true,customers:true,contacts:true,custCompliance:true};
+  const ma = Object.assign({carrierCompliance:true}, u.moduleAccess || {prospects:true,customers:true,contacts:true,custCompliance:true});
   const isAdmin = currentRole === 'Admin';
   const moduleAccessSection = (isAdmin && u.status !== 'Former Employee') ? `
     <div class="d-sec">
@@ -5594,6 +5805,7 @@ function openUserDrawer(userId) {
           {key:'customers',label:'Active Customers',icon:'✅'},
           {key:'contacts',label:'Contacts',icon:'👤'},
           {key:'custCompliance',label:'Customer Compliance',icon:'📋'},
+          {key:'carrierCompliance',label:'Carrier Compliance',icon:'🚚'},
         ].map(m=>`
           <label style="display:flex;align-items:center;gap:9px;padding:9px 12px;border:1px solid ${ma[m.key]?'rgba(34,197,94,0.25)':'var(--border)'};border-radius:5px;background:${ma[m.key]?'rgba(34,197,94,0.05)':'var(--surface-2)'};cursor:pointer;transition:all 0.15s;" onclick="event.stopPropagation();">
             <input type="checkbox" ${ma[m.key]?'checked':''} style="width:14px;height:14px;accent-color:var(--green);cursor:pointer;"
@@ -5935,7 +6147,7 @@ function setUserModuleAccess(userId, mod, val) {
   if(!u) return;
   if(!u.moduleAccess) u.moduleAccess = {prospects:true,customers:true,contacts:true,custCompliance:true};
   u.moduleAccess[mod] = val;
-  const labels = {prospects:'Prospect Companies',customers:'Active Customers',contacts:'Contacts',custCompliance:'Customer Compliance'};
+  const labels = {prospects:'Prospect Companies',customers:'Active Customers',contacts:'Contacts',custCompliance:'Customer Compliance',carrierCompliance:'Carrier Compliance'};
   if(!u.auditLog) u.auditLog = [];
   u.auditLog.push({ts: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}), action:`Module access "${labels[mod]}" set to ${val?'Enabled':'Disabled'}`, by: getDemoUser()?.name||'Admin'});
   showToast(`${labels[mod]} access ${val?'enabled':'disabled'} for ${u.name}`);
@@ -8731,6 +8943,10 @@ function mapCompany(c) {
     ff: c.ff_number || '—', mc: c.mc_number || '—', dot: c.dot_number || '—',
     paycat: c.paycat_id || '—', remarks: c.remarks || '',
     linkedinUrl: c.linkedin_url || '', facebookUrl: c.facebook_url || '', twitterUrl: c.twitter_url || '',
+    expiresAt: c.prospect_claim_expires_at || null,
+    prospectDays: c.prospect_days == null ? null : c.prospect_days,
+    extStatus: c.ext_status || null, extRoute: c.ext_route || null,
+    assignedByRole: c.assigned_by_role || null, releasedAt: c.released_at || null,
   };
 }
 // Converts one row from GET /api/users into the shape the prototype's old
@@ -9100,6 +9316,9 @@ function applyRealUser(u) {
   updateSidebarForRole();
 }
 
+{ const _renderDashboardBase = renderDashboard;
+  renderDashboard = function() { _renderDashboardBase.apply(this, arguments); applyCarrierAccessUI(); }; }
+
 // Shared by both sign-in paths (Microsoft and Google) once a token is in
 // hand: verify with the API, load the real data, and drop into the app.
 async function finishLogin() {
@@ -9121,6 +9340,7 @@ async function finishLogin() {
       email: me.email, role: me.role, location: me.location_id,
       initials: (me.full_name || '').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase() || 'U',
       teamIds: me.teamIds || [],
+      carrierAccess: me.carrierAccess !== false,
     };
     applyRealUser(realUser);
     // The notifications list above (MC 492817, CEL-2836, etc.) is seed
@@ -9133,6 +9353,7 @@ async function finishLogin() {
     renderDashboard();
     authGateHide();
     restoreLastView();
+    setTimeout(()=>{ try{ showProspectAlerts(true); }catch(e){ console.warn(e); } }, 900);
     if(authProvider === 'microsoft') checkMailboxConnected();
   } catch(err) {
     console.error('Login failed:', err);
