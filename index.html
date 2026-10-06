@@ -2472,9 +2472,11 @@ setInterval(()=>{ pollDueReminders(); }, 30*1000);
 
 // ── "Remind me" on any activity ───────────────────────────────
 let remindCtx = null;
-function openRemindModal(companyId, entryIdx) {
-  const e = (activityDB[companyId]||[])[entryIdx];
-  const base = e ? remPlain(e.text).slice(0,90) : '';
+const REMINDER_TYPES = [
+  ['Call back','📞'],['Send email','📧'],['Send quote / rates','💲'],['Follow up','🔁'],
+  ['Meeting / demo','🗓'],['Collect documents','📎'],['Check credit / compliance','🛡'],['Other','📝'],
+];
+function openRemindModal(companyId) {
   remindCtx = { companyId };
   let m = document.getElementById('remindModal');
   if(!m) {
@@ -2482,8 +2484,11 @@ function openRemindModal(companyId, entryIdx) {
     document.body.appendChild(m);
   }
   m.innerHTML = `<div class="modal" style="max-width:400px;">
-    <h3 style="margin-bottom:4px;">⏰ Remind me</h3>
+    <h3 style="margin-bottom:4px;">⏰ Set a reminder</h3>
     <p style="font-size:12px;color:var(--text-faint);margin-bottom:14px;">Only you will see this reminder.</p>
+    <div class="addco-field"><label>What is this reminder for?</label>
+      <select id="remType" class="field-select">${REMINDER_TYPES.map(t=>`<option value="${esc(t[0])}">${t[1]} ${esc(t[0])}</option>`).join('')}</select>
+    </div>
     <div class="addco-field"><label>When</label>
       <select id="remWhen" class="field-select" onchange="document.getElementById('remCustom').style.display=this.value==='custom'?'block':'none'">
         <option value="tomorrow">Tomorrow, 9:00 AM</option><option value="3d">In 3 days, 9:00 AM</option>
@@ -2492,7 +2497,7 @@ function openRemindModal(companyId, entryIdx) {
       <input type="datetime-local" id="remCustom" style="display:none;margin-top:8px;width:100%;box-sizing:border-box;">
     </div>
     <div class="addco-field"><label>Note</label>
-      <input id="remNote" value="${esc(base ? 'Follow up: '+base : 'Follow up')}" style="width:100%;box-sizing:border-box;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:7px 10px;color:var(--text);font-size:12.5px;">
+      <input id="remNote" placeholder="Optional details (who, what to say…)" style="width:100%;box-sizing:border-box;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:7px 10px;color:var(--text);font-size:12.5px;">
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
       <button class="btn btn-ghost" onclick="closeRemindModal()">Cancel</button>
@@ -2513,7 +2518,10 @@ function saveRemindModal() {
   if(!remindCtx) return;
   const d = remindWhenToDate(document.getElementById('remWhen').value);
   if(!d || isNaN(d) || d.getTime() < Date.now()-60000) { showToast('Pick a time in the future.'); return; }
-  const note = document.getElementById('remNote').value.trim() || 'Follow up';
+  const typ = document.getElementById('remType').value;
+  const extra = document.getElementById('remNote').value.trim();
+  const icon = (REMINDER_TYPES.find(t=>t[0]===typ)||[,'⏰'])[1];
+  const note = `${icon} ${typ}` + (extra ? ' — ' + extra : '');
   const id = remindCtx.companyId;
   logActivity(id, 'REMINDER', esc(note), d.toISOString());
   closeRemindModal();
@@ -3435,12 +3443,13 @@ function renderCustomerTimeline(id) {
       <div class="tl-kind" style="color:${kindColor[e.kind]||'var(--text-faint)'};">${e.kind}</div>
       <div style="flex:1;">
         <div class="tl-text">${e.text}${reminderLabel}</div>
-        <div class="tl-time">by ${e.by} · ${e.time}${realUser && e.kind!=='CREATE' ? ` · <a style="color:var(--accent);cursor:pointer;" onclick="openRemindModal(${id},${eIdx})">⏰ Remind me</a>` : ''}</div>
+        <div class="tl-time">by ${e.by} · ${e.time}${false ? `` : ''}</div>
       </div>
     </div>`;
   }).join('');
 
   document.getElementById('dBody').innerHTML=`
+    ${realUser ? `<div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" onclick="openRemindModal(${id})">⏰ Set a reminder</button></div>` : ''}
     <div class="note-form">
       <textarea id="noteText-${id}" placeholder="Add a note, call log, callback summary…" rows="3"></textarea>
       <div class="note-form-footer">
