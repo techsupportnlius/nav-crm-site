@@ -1851,8 +1851,8 @@ function myLocations() {
 // True when this user may see a record at the given location.
 function canSeeLocation(loc) {
   const mine = myLocations();
-  if(!mine.length) return true;      // no restriction configured
-  if(!loc) return true;              // record has no location set
+  if(!mine.length) return !(realUser && (currentRole==='Location Head' || currentRole==='Supervisor')); // Operations Head with none ticked = all
+  if(!loc) return !realUser;         // real mode: a record with no office is not visible by location
   return mine.includes(loc);
 }
 // Human timestamp for "just happened" events.
@@ -1960,7 +1960,7 @@ async function loadRealContacts(companyId) {
     contactsDB[companyId] = rows.map(r => ({
       contactId: r.contact_id,
       name: r.full_name, title: r.title || '—', phone: r.phone || '—', email: r.email || '',
-      addedBy: resolveUserName(r.added_by_user_id),
+      addedBy: r.added_by_name || resolveUserName(r.added_by_user_id),
       addedAt: r.created_at ? new Date(r.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '',
     }));
     realContactsLoaded.add(companyId);
@@ -1972,8 +1972,13 @@ async function loadRealContacts(companyId) {
 // the roster already knows, falling back to the raw id if unknown.
 function resolveUserName(userId) {
   if(!userId) return '—';
-  const row = usersDB.find(u=>u.id===userId) || realUsers.find(u=>u.userId===userId);
-  return row?.name || row?.fullName || userId;
+  if(realUser && userId===realUser.userId) return realUser.fullName;
+  // Real login: never consult the demo seed roster (that is where the fake
+  // "Ramon Alvarez" came from) and never show a raw id.
+  const row = realUser
+    ? (realUsers.find(u=>u.userId===userId) || usersDB.find(u=>u.id===userId && u.crmId))
+    : (usersDB.find(u=>u.id===userId) || realUsers.find(u=>u.userId===userId));
+  return row?.name || row?.fullName || (realUser ? '—' : userId);
 }
 const contactsDB = {
   1:[
@@ -2591,6 +2596,7 @@ function renderCoView() {
 
 function getVisibleCustomers() {
   const me = currentUserName();
+  if(realUser) return customers; // server already returns only what this person may see
   if(currentRole==='Sales Rep') {
     // Sales Rep: own accounts + co-owned accounts (co-ownership hidden from rep)
     return customers.filter(c=>
@@ -3130,6 +3136,17 @@ function renderCustomerContacts(id) {
   const cardsHtml = contacts.length ? contacts.map(ct=>{
     const initials = ct.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
     const addedByTag = ct.addedBy ? `<span style="font-size:9.5px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:var(--surface-3);border:1px solid var(--border);color:var(--text-faint);margin-top:3px;display:inline-block;">Added by ${ct.addedBy}</span>` : '';
+    let mailTag = '';
+    try {
+      const ea = (ct.email||'').toLowerCase();
+      if(ea) {
+        const ms = (realUser ? realCompanyEmailMatches(id) : (companyEmailsDB[id]||[])).filter(m=>(m.from||'').toLowerCase().includes(ea) || (m.to||'').toLowerCase().includes(ea));
+        if(ms.length) {
+          const sent = ms.filter(m=>m.direction==='sent').length, rec = ms.length - sent;
+          mailTag = `<div style="font-size:11px;color:var(--text-faint);margin-top:3px;">✉ ${sent} sent · ${rec} received · last: ${esc(ms[0].date||'')} ${esc(ms[0].time||'')}</div>`;
+        }
+      }
+    } catch(e) {}
     return `<div class="contact-card">
       <div class="contact-avatar">${initials}</div>
       <div class="contact-info">
@@ -3139,7 +3156,7 @@ function renderCustomerContacts(id) {
           <span>📞 ${ct.phone}</span>
           <span>✉ ${ct.email}</span>
         </div>
-        ${addedByTag}
+        ${addedByTag}${mailTag}
       </div>
       <div class="contact-actions">
         <button class="ca-btn call" onclick="openLogCallModal(${id},'${ct.name.replace(/'/g,"\\'")}')">
@@ -4348,6 +4365,7 @@ function openAddCo() {
     LOCATIONS.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('');
   const myLocs = myLocations();
   if(myLocs.length===1) locSel.value = myLocs[0];
+  else if(realUser && realUser.location) locSel.value = realUser.location;
 
   // Company Profile / Freight Profile dropdowns
   fillSelect(document.getElementById('addCoIndustry'), INDUSTRIES, '— Select industry —');
@@ -5121,8 +5139,8 @@ function renderProspectsView() {
   </tr>`;
 
   let rows = customers.filter(c=>isProspect(c));
-  if(currentRole==='Sales Rep') { const me=currentUserName(); rows = rows.filter(c=>c.owner===me||(c.coOwners&&c.coOwners.includes(me))); }
-  if(currentRole==='Location Head') rows = rows.filter(c=>canSeeLocation(c.location));
+  if(!realUser && currentRole==='Sales Rep') { const me=currentUserName(); rows = rows.filter(c=>c.owner===me||(c.coOwners&&c.coOwners.includes(me))); }
+  if(!realUser && currentRole==='Location Head') rows = rows.filter(c=>canSeeLocation(c.location));
   if(prospectFilter!=='all') rows = rows.filter(c=>c.status.toLowerCase().includes(prospectFilter.toLowerCase()));
   if(search) rows = rows.filter(c=>c.name.toLowerCase().includes(search)||(c.domain&&c.domain.toLowerCase().includes(search)));
 
@@ -5237,7 +5255,9 @@ function renderContactsView() {
 
   // Determine which companies this role can see
   let visibleCos = customers;
-  if(currentRole==='Sales Rep') {
+  if(realUser) {
+    // server already scoped the list
+  } else if(currentRole==='Sales Rep') {
     const meC = currentUserName();
     visibleCos = customers.filter(c=>c.owner===meC||(c.coOwners&&c.coOwners.includes(meC)));
   } else if(currentRole==='Team Leader') {
@@ -5308,7 +5328,7 @@ function openAddContactModal(preselectedId, scope) {
   let visibleCos = customers;
   if(scope==='active') visibleCos = customers.filter(c=>!isProspect(c));
   if(scope==='prospect') visibleCos = customers.filter(c=>isProspect(c));
-  if(currentRole==='Sales Rep') { const meA=currentUserName(); visibleCos = visibleCos.filter(c=>c.owner===meA||(c.coOwners&&c.coOwners.includes(meA))); }
+  if(!realUser && currentRole==='Sales Rep') { const meA=currentUserName(); visibleCos = visibleCos.filter(c=>c.owner===meA||(c.coOwners&&c.coOwners.includes(meA))); }
 
   sel.innerHTML = '<option value="">— Select company…</option>' +
     visibleCos.map(c=>`<option value="${c.id}" ${preselectedId===c.id?'selected':''}>${c.name}</option>`).join('');
@@ -7753,6 +7773,10 @@ async function doSendEmail() {
       return;
     }
 
+    if(realUser && companyId != null) {
+      showToast('You cannot email this company from the CRM — it is not on your account.');
+      return;
+    }
     if(companyId != null) {
       if(!companyEmailsDB[companyId]) companyEmailsDB[companyId] = [];
       companyEmailsDB[companyId].unshift({
@@ -8870,7 +8894,7 @@ function canEmailCompany(c) {
     const teamMemberIds = realUsers.filter(u=>u.teamIds && u.teamIds.some(t=>myTeams.includes(t))).map(u=>u.userId);
     return teamMemberIds.includes(c.ownerUserId);
   }
-  if(currentRole==='Location Head') return canSeeLocation(c.location);
+  if(currentRole==='Location Head' || currentRole==='Operations Head') return canSeeLocation(c.location);
   if(currentRole==='Operations Manager') {
     const myTeams = realUser.teamIds || [];
     if(!myTeams.length) return false; // no teams assigned yet
@@ -9504,6 +9528,14 @@ async function finishLogin() {
       carrierAccess: me.carrierAccess !== false,
     };
     applyRealUser(realUser);
+    // Wipe every piece of demo data before real data loads (the demo roster
+    // is where "Ramon Alvarez" and friends live).
+    try {
+      usersDB.length = 0;
+      Object.keys(companyEmailsDB).forEach(k=>delete companyEmailsDB[k]);
+      Object.keys(contactsDB).forEach(k=>delete contactsDB[k]);
+      Object.keys(activityDB).forEach(k=>delete activityDB[k]);
+    } catch(e) { console.warn('demo purge', e); }
     // The notifications list above (MC 492817, CEL-2836, etc.) is seed
     // data for the standalone demo — none of it is real. Clear it before
     // loadRealNotifications() replaces it with this user's actual
