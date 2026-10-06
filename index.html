@@ -3130,6 +3130,7 @@ function renderCustomerContacts(id) {
       if(openCompanyId===id && drawerTab==='contacts' && !formOpen) renderCustomerContacts(id);
     });
   }
+  if(realUser && !serverEmailsLoaded.has(id)) loadServerEmails(id).then(()=>{ if(openCompanyId===id && drawerTab==='contacts') renderCustomerContacts(id); });
   const contacts = contactsDB[id] || [];
   const body = document.getElementById('dBody');
 
@@ -3140,7 +3141,7 @@ function renderCustomerContacts(id) {
     try {
       const ea = (ct.email||'').toLowerCase();
       if(ea) {
-        const ms = (realUser ? realCompanyEmailMatches(id) : (companyEmailsDB[id]||[])).filter(m=>(m.from||'').toLowerCase().includes(ea) || (m.to||'').toLowerCase().includes(ea));
+        const ms = (realUser ? (serverEmailsDB[id]||[]) : (companyEmailsDB[id]||[])).filter(m=>(m.from||'').toLowerCase().includes(ea) || (m.to||'').toLowerCase().includes(ea));
         if(ms.length) {
           const sent = ms.filter(m=>m.direction==='sent').length, rec = ms.length - sent;
           mailTag = `<div style="font-size:11px;color:var(--text-faint);margin-top:3px;">✉ ${sent} sent · ${rec} received · last: ${esc(ms[0].date||'')} ${esc(ms[0].time||'')}</div>`;
@@ -3402,6 +3403,50 @@ function renderCarrierTimeline(id) {
 // exact saved contact addresses (never company-domain-wide) — a real inbox
 // mixes in far more than one company's traffic, so domain-matching would
 // pull in noise no CRM record asked for.
+
+// ── Emails saved in the CRM database (shared with the people above the rep) ──
+const serverEmailsDB = {}, serverEmailsLoaded = new Set(), serverEmailsSeesAll = {}, emailSyncAt = {};
+async function loadServerEmails(id) {
+  try {
+    const res = await apiFetch(`/api/companies/${id}/emails`);
+    if(!res.ok) { console.error('Loading emails failed:', res.status); serverEmailsLoaded.add(id); return; }
+    const j = await res.json();
+    serverEmailsSeesAll[id] = !!j.seesAll;
+    serverEmailsDB[id] = (j.emails||[]).map(r=>{
+      const d = new Date(r.sent_at.endsWith && !r.sent_at.endsWith('Z') ? r.sent_at+'Z' : r.sent_at);
+      return {
+        id: 's'+r.email_id, direction: r.direction, from: r.from_addr||'', to: r.to_addr||'', cc: r.cc_addr||'',
+        subject: r.subject||'(no subject)',
+        date: d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+        time: d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),
+        body: r.body_main||'', bodyMain: r.body_main||'', bodyQuoted: r.body_quoted||'',
+        conversationId: r.conversation_id||'', _ts: d.getTime(),
+        senderName: serverEmailsSeesAll[id] ? (r.sender_name||'') : '',
+        attachments: [],
+      };
+    });
+  } catch(e) { console.error('Loading emails failed:', e); }
+  serverEmailsLoaded.add(id);
+}
+// Sends this person's own matching mailbox messages to the CRM so their
+// manager chain can see them. Returns how many new ones were stored.
+async function syncMyEmails(id) {
+  if(Date.now() - (emailSyncAt[id]||0) < 2*60*1000) return 0;
+  emailSyncAt[id] = Date.now();
+  const msgs = realCompanyEmailMatches(id).map(e=>({
+    graphId: e.id, conversationId: e.conversationId, direction: e.direction, from: e.from, to: e.to,
+    subject: e.subject, bodyMain: e.bodyMain, bodyQuoted: e.bodyQuoted, ts: e._ts,
+  }));
+  if(!msgs.length) return 0;
+  try {
+    const res = await apiFetch(`/api/companies/${id}/emails/sync`, { method:'POST', body: JSON.stringify({ messages: msgs }) });
+    if(!res.ok) return 0;
+    const j = await res.json();
+    if(j.stored) { await loadServerEmails(id); }
+    return j.stored || 0;
+  } catch(e) { return 0; }
+}
+
 function realCompanyEmailMatches(id) {
   const contacts = contactsDB[id] || [];
   const addrs = new Set(contacts.map(c=>(c.email||'').toLowerCase()).filter(Boolean));
@@ -3460,6 +3505,7 @@ function renderCompanyThreads(emails) {
       return `<div style="padding:10px 0;border-top:1px solid var(--border);">
         <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px;">
           <span class="eti-dir" style="color:${dirColor};">${dirLabel}</span>
+          ${m.senderName ? `<span style="font-size:11px;color:var(--text-faint);">via ${esc(m.senderName)}</span>` : ''}
           <span style="font-size:12px;color:var(--text);">${esc(m.direction==='sent' ? 'To: '+m.to : m.from)}</span>
           <span class="eti-date" style="margin-left:auto;">${esc(m.date)} · ${esc(m.time)}</span>
         </div>
@@ -3494,53 +3540,29 @@ function renderCompanyEmails(id, type) {
   // ── Real signed-in users: only their actual Office 365 mail, matched to
   // this company's exact saved contact addresses — never the demo mailboxDB.
   if(realUser) {
-    if(!mailboxConnected) {
-      body0.innerHTML = `<div style="padding:30px;text-align:center;color:var(--text-faint);font-size:13px;">
-        Connect your Outlook mailbox to see real email history with ${esc(co.name)}'s contacts.<br>
-        <button class="btn btn-ghost btn-sm" style="margin-top:12px;" onclick="connectMailbox()">📧 Connect Mailbox</button>
-      </div>`;
-      return;
-    }
-    if(!realContactsLoaded.has(id)) {
-      loadRealContacts(id).then(()=>{ if(openCompanyId===id && drawerTab==='emails') renderCompanyEmails(id, type); });
-    }
-    if(!realMailLoaded && !realMailLoading) {
-      loadAllRealMail().then(()=>{ if(openCompanyId===id && drawerTab==='emails') renderCompanyEmails(id, type); });
-    }
-    const contacts = contactsDB[id] || [];
-    const hasContactEmail = contacts.some(c=>c.email);
-    if(!hasContactEmail) {
-      body0.innerHTML = `<div style="padding:30px;text-align:center;color:var(--text-faint);font-size:13px;">
-        No saved contact with an email address for ${esc(co.name)} yet — add one to start matching real email history.
-        ${composeBtn0 ? `<div style="margin-top:12px;">${composeBtn0}</div>` : ''}
-      </div>`;
-      return;
-    }
-    const all0 = realCompanyEmailMatches(id);
-    // Emails just sent from the CRM show up instantly (before Microsoft's
-    // Sent Items copy has been picked up) — dropped as soon as the real copy
-    // arrives so nothing appears twice.
-    (companyEmailsDB[id] || []).forEach(le=>{
-      if(!le._ts || Date.now()-le._ts > 15*60*1000) return;
-      const dupe = all0.some(g=>g.direction==='sent' && normSubject(g.subject)===normSubject(le.subject) && Math.abs((g._ts||0)-le._ts) < 15*60*1000);
-      if(!dupe) all0.push({ ...le, bodyMain: cleanEmailText(le.body), bodyQuoted: '', conversationId: '', _src:'crm' });
-    });
-    all0.sort((a,b)=> (b._ts||0) - (a._ts||0));
+    const rerender = ()=>{ if(openCompanyId===id && drawerTab==='emails') renderCompanyEmails(id, type); };
+    if(!realContactsLoaded.has(id)) loadRealContacts(id).then(rerender);
+    if(!serverEmailsLoaded.has(id)) loadServerEmails(id).then(rerender);
+    if(mailboxConnected && !realMailLoaded && !realMailLoading) loadAllRealMail().then(rerender);
+    if(mailboxConnected && realMailLoaded && realContactsLoaded.has(id) && canEmailCompany(co)) syncMyEmails(id).then(n=>{ if(n) rerender(); });
+    const all0 = (serverEmailsDB[id] || []).slice();
+    const connectPrompt = (!mailboxConnected && canEmailCompany(co))
+      ? `<div style="margin-top:12px;"><button class="btn btn-ghost btn-sm" onclick="connectMailbox()">📧 Connect Mailbox</button> <span style="font-size:11px;">to save your replies here</span></div>` : '';
     if(!all0.length) {
       body0.innerHTML = `<div style="padding:30px;text-align:center;color:var(--text-faint);font-size:13px;">
-        No real emails with ${esc(co.name)}'s contacts in the last 30 days.
-        ${composeBtn0 ? `<div style="margin-top:12px;">${composeBtn0}</div>` : ''}
+        ${serverEmailsLoaded.has(id) ? `No emails saved for ${esc(co.name)} yet.` : 'Loading emails…'}
+        ${composeBtn0 ? `<div style="margin-top:12px;">${composeBtn0}</div>` : ''}${connectPrompt}
       </div>`;
       return;
     }
     body0.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;">
         <div style="font-size:12px;color:var(--text-faint);">
-          Real mailbox — ${all0.length} message${all0.length!==1?'s':''} with ${esc(co.name)}'s saved contacts (last 30 days)
+          ${all0.length} message${all0.length!==1?'s':''} with ${esc(co.name)}'s contacts${serverEmailsSeesAll[id] ? ' (everyone on this account)' : ' (yours only)'}
         </div>
         ${composeBtn0}
       </div>
-      ${renderCompanyThreads(all0)}
+      ${renderCompanyThreads(all0)}${connectPrompt}
     `;
     return;
   }
@@ -6821,6 +6843,7 @@ function renderEmailThread(emails) {
       <div class="eti-header">
         <div class="eti-row1">
           <span class="eti-dir" style="color:${dirColor};">${dirLabel}</span>
+          ${m.senderName ? `<span style="font-size:11px;color:var(--text-faint);">via ${esc(m.senderName)}</span>` : ''}
           <span class="eti-from">${esc(e.direction==='sent'?e.to:e.from)}</span>
           <span class="eti-date">${esc(e.date)} · ${esc(e.time)}</span>
           <span id="eti-chev-${e.id}" style="color:var(--text-faint);font-size:10px;flex-shrink:0;">${exp?'▴':'▾'}</span>
@@ -7655,6 +7678,7 @@ async function sendRealCompanyEmail(co, toAddr, ccAddr, subject, body, attachmen
     subject: subject || '(no subject)',
     date: nowDateOnly(), time: nowTimeOnly(), body, attachments: [], _ts: Date.now(),
   });
+  loadServerEmails(co.id).then(()=>{ if(openCompanyId===co.id && drawerTab==='emails') renderCompanyEmails(co.id,'customer'); });
   // Pull the real copy back from Microsoft's Sent Items a few seconds later
   // so the Emails tab shows the genuine message (with its chain).
   setTimeout(async ()=>{ try { await refreshRealMail(); if(openCompanyId===co.id && drawerTab==='emails') renderCompanyEmails(co.id,'customer'); } catch(e){} }, 4000);
