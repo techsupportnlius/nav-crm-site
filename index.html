@@ -4109,7 +4109,6 @@ function prospectWindowBadge(c) {
   const left = prospectDaysLeft(c);
   if(left===null) return '';
   const urgent = left<=3;
-  if(!canSeeWindow() && !urgent) return '';
   const col = left<=0 ? 'var(--red)' : urgent ? 'var(--amber)' : 'var(--text-faint)';
   const txt = left<=0 ? 'ending today' : `${left}d left` + ((canSeeWindow() && c.prospectDays) ? ` of ${c.prospectDays}d` : '');
   return `<span style="display:inline-block;font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;color:${col};border:1px solid ${col};opacity:0.9;">⏱ ${txt}</span>`;
@@ -4145,6 +4144,22 @@ function prospectWindowPanel(c) {
   if(!realUser || !isProspect(c) || c.status.toLowerCase().includes('pending')) return '';
   let html = '';
   const left = prospectDaysLeft(c);
+  // View-only countdown for EVERYONE who can open the prospect (no buttons).
+  if(left!==null && c.prospectStatus!=='Open') {
+    const total = Math.max(c.prospectDays || 21, 1);
+    const used = Math.min(Math.max(total - Math.max(left,0), 0), total);
+    const pct = Math.round(used / total * 100);
+    const col = left<=3 ? 'var(--red)' : left<=7 ? 'var(--amber)' : 'var(--green)';
+    const big = left<=0 ? 'Ends today' : `${left} day${left===1?'':'s'} left`;
+    html += `<div style="margin-bottom:14px;padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;pointer-events:none;user-select:none;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:7px;">
+        <span style="font-size:11px;font-family:var(--mono);color:var(--text-faint);letter-spacing:.06em;text-transform:uppercase;">⏱ Working window</span>
+        <span style="font-size:13px;font-weight:600;color:${col};">${big}</span>
+      </div>
+      <div style="height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden;"><div style="height:100%;width:${pct}%;background:${col};"></div></div>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">Day ${Math.min(used+1,total)} of ${total}</div>
+    </div>`;
+  }
   if(c.extStatus==='Pending') {
     if(canDecideExtension(c)) {
       html += `<div style="margin-bottom:14px;padding:12px 14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.35);border-radius:6px;">
