@@ -283,6 +283,16 @@ td.mono{font-family:var(--mono);font-size:11.5px;}
 /* TOAST */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface-3);border:1px solid var(--border-2);color:var(--text);padding:10px 18px;border-radius:6px;font-size:13px;z-index:500;opacity:0;transition:all 0.2s;pointer-events:none;white-space:nowrap;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#remWrap{position:fixed;right:18px;bottom:18px;z-index:600;display:flex;flex-direction:column;gap:10px;width:330px;max-width:calc(100vw - 36px);}
+.rem-card{background:var(--surface);border:1px solid var(--accent);border-left-width:4px;border-radius:8px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.35);animation:remIn .25s ease-out;}
+@keyframes remIn{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+.rem-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;}
+.rem-title{font-size:11px;font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--accent);}
+.rem-x{background:none;border:none;color:var(--text-faint);font-size:16px;cursor:pointer;line-height:1;padding:0 2px;}
+.rem-co{font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px;}
+.rem-txt{font-size:12.5px;color:var(--text-muted);line-height:1.45;margin-bottom:9px;max-height:72px;overflow:hidden;}
+.rem-btns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.rem-btns .btn{padding:4px 9px;font-size:11.5px;}
 
 /* COMPLIANCE CASE ACTION SELECT */
 .action-select{background:var(--surface-2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:10.5px;border-radius:4px;padding:3px 6px;outline:none;cursor:pointer;}
@@ -1385,6 +1395,10 @@ thead th.cb-th{width:36px;padding:0 10px;}
         accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.txt">
       <button class="btn btn-ghost btn-sm" onclick="document.getElementById('ec-attach-input').click()">📎 Attach File</button>
     </div>
+    <div class="addco-field" id="ec-remind-wrap" style="display:none;">
+      <label>Follow-up reminder</label>
+      <select id="ec-remind" class="field-select"><option value="">No reminder</option><option value="2">Remind me in 2 days</option><option value="3">Remind me in 3 days</option><option value="7">Remind me in 1 week</option></select>
+    </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
       <button class="btn btn-ghost" onclick="closeEmailCompose()">Cancel</button>
       <button class="btn btn-primary" onclick="doSendEmail()">📧 Send Email</button>
@@ -2397,6 +2411,116 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2800);
 }
 
+// ── REMINDER POP-UPS (bottom-right) ───────────────────────────
+const remShown = new Set();
+function remPlain(html) { const d=document.createElement('div'); d.innerHTML=html||''; return (d.textContent||'').trim(); }
+function remWrap() {
+  let w = document.getElementById('remWrap');
+  if(!w) { w = document.createElement('div'); w.id='remWrap'; document.body.appendChild(w); }
+  return w;
+}
+function remRemove(id) {
+  const el = document.getElementById('rem-'+id);
+  if(el) el.remove();
+}
+function showReminderCard(r) {
+  if(document.getElementById('rem-'+r.activity_id)) return;
+  const due = new Date(r.reminder_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  const el = document.createElement('div');
+  el.className = 'rem-card'; el.id = 'rem-'+r.activity_id;
+  el.innerHTML = `
+    <div class="rem-head"><span class="rem-title">⏰ Reminder · ${esc(due)}</span><button class="rem-x" title="Dismiss" onclick="dismissReminderCard(${r.activity_id})">✕</button></div>
+    <div class="rem-co">${esc(r.company_name)}</div>
+    <div class="rem-txt">${esc(remPlain(r.text_html)) || 'Follow up'}</div>
+    <div class="rem-btns">
+      <button class="btn btn-primary btn-sm" onclick="openReminderCompany(${r.activity_id},${r.company_id})">Open</button>
+      <button class="btn btn-ghost btn-sm" onclick="snoozeReminderCard(${r.activity_id},10)">10 min</button>
+      <button class="btn btn-ghost btn-sm" onclick="snoozeReminderCard(${r.activity_id},60)">1 hour</button>
+      <button class="btn btn-ghost btn-sm" onclick="snoozeReminderCard(${r.activity_id},-1)">Tomorrow</button>
+    </div>`;
+  remWrap().appendChild(el);
+}
+async function pollDueReminders() {
+  if(!realUser) return;
+  try {
+    const res = await apiFetch('/api/reminders/due');
+    if(!res.ok) return;
+    const rows = await res.json();
+    const ids = new Set(rows.map(r=>r.activity_id));
+    document.querySelectorAll('#remWrap .rem-card').forEach(el=>{ if(!ids.has(Number(el.id.replace('rem-','')))) el.remove(); });
+    rows.slice(0,5).forEach(showReminderCard);
+  } catch(e) { /* offline — try again next time */ }
+}
+async function dismissReminderCard(id) {
+  remRemove(id);
+  try { await apiFetch(`/api/reminders/${id}/dismiss`, { method:'POST', body:'{}' }); } catch(e) {}
+}
+async function snoozeReminderCard(id, minutes) {
+  remRemove(id);
+  if(minutes < 0) { const t = new Date(); t.setDate(t.getDate()+1); t.setHours(9,0,0,0); minutes = Math.round((t - Date.now())/60000); }
+  try { await apiFetch(`/api/reminders/${id}/snooze`, { method:'POST', body: JSON.stringify({ minutes }) }); showToast('Snoozed.'); } catch(e) {}
+}
+function openReminderCompany(activityId, companyId) {
+  dismissReminderCard(activityId);
+  const co = customers.find(c=>c.id===companyId);
+  if(!co) { showToast('That company is no longer on your list.'); return; }
+  const isProsp = isProspect(co);
+  nav(document.querySelector(`[data-view="${isProsp?'deals':'companies'}"]`), isProsp?'deals':'companies', isProsp?'Prospect Companies':'Active Customers');
+  setTimeout(()=>{ openCustomerDrawer(co.id); }, 80);
+}
+setInterval(()=>{ pollDueReminders(); }, 30*1000);
+
+// ── "Remind me" on any activity ───────────────────────────────
+let remindCtx = null;
+function openRemindModal(companyId, entryIdx) {
+  const e = (activityDB[companyId]||[])[entryIdx];
+  const base = e ? remPlain(e.text).slice(0,90) : '';
+  remindCtx = { companyId };
+  let m = document.getElementById('remindModal');
+  if(!m) {
+    m = document.createElement('div'); m.className='modal-overlay'; m.id='remindModal';
+    document.body.appendChild(m);
+  }
+  m.innerHTML = `<div class="modal" style="max-width:400px;">
+    <h3 style="margin-bottom:4px;">⏰ Remind me</h3>
+    <p style="font-size:12px;color:var(--text-faint);margin-bottom:14px;">Only you will see this reminder.</p>
+    <div class="addco-field"><label>When</label>
+      <select id="remWhen" class="field-select" onchange="document.getElementById('remCustom').style.display=this.value==='custom'?'block':'none'">
+        <option value="tomorrow">Tomorrow, 9:00 AM</option><option value="3d">In 3 days, 9:00 AM</option>
+        <option value="1w">Next week, 9:00 AM</option><option value="1h">In 1 hour</option><option value="custom">Pick a date and time…</option>
+      </select>
+      <input type="datetime-local" id="remCustom" style="display:none;margin-top:8px;width:100%;box-sizing:border-box;">
+    </div>
+    <div class="addco-field"><label>Note</label>
+      <input id="remNote" value="${esc(base ? 'Follow up: '+base : 'Follow up')}" style="width:100%;box-sizing:border-box;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:7px 10px;color:var(--text);font-size:12.5px;">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
+      <button class="btn btn-ghost" onclick="closeRemindModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRemindModal()">Set reminder</button>
+    </div></div>`;
+  m.classList.add('open');
+}
+function closeRemindModal() { const m=document.getElementById('remindModal'); if(m) m.classList.remove('open'); remindCtx=null; }
+function remindWhenToDate(v) {
+  const d = new Date();
+  if(v==='1h') { d.setHours(d.getHours()+1); return d; }
+  if(v==='custom') { const x = document.getElementById('remCustom').value; return x ? new Date(x) : null; }
+  d.setDate(d.getDate() + (v==='3d'?3 : v==='1w'?7 : 1));
+  d.setHours(9,0,0,0);
+  return d;
+}
+function saveRemindModal() {
+  if(!remindCtx) return;
+  const d = remindWhenToDate(document.getElementById('remWhen').value);
+  if(!d || isNaN(d) || d.getTime() < Date.now()-60000) { showToast('Pick a time in the future.'); return; }
+  const note = document.getElementById('remNote').value.trim() || 'Follow up';
+  const id = remindCtx.companyId;
+  logActivity(id, 'REMINDER', esc(note), d.toISOString());
+  closeRemindModal();
+  showToast('Reminder set for ' + d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) + '.');
+  if(openCompanyId===id && drawerTab==='timeline') renderCustomerTimeline(id);
+}
+
 // ── NAV ────────────────────────────────────────────────────────
 // Tracks which screen is on-screen right now (not just the last-saved one)
 // so the Mail auto-refresh timer knows when to run and when to stop.
@@ -3299,6 +3423,7 @@ function renderCustomerTimeline(id) {
   ).join('')}</div>`;
 
   const entriesHtml = entries.map(e=>{
+    const eIdx = allEntries.indexOf(e);
     const hasReminder = e.reminder;
     const reminderLabel = hasReminder ? (() => {
       const d = new Date(e.reminder);
@@ -3308,7 +3433,7 @@ function renderCustomerTimeline(id) {
       <div class="tl-kind" style="color:${kindColor[e.kind]||'var(--text-faint)'};">${e.kind}</div>
       <div style="flex:1;">
         <div class="tl-text">${e.text}${reminderLabel}</div>
-        <div class="tl-time">by ${e.by} · ${e.time}</div>
+        <div class="tl-time">by ${e.by} · ${e.time}${realUser && e.kind!=='CREATE' ? ` · <a style="color:var(--accent);cursor:pointer;" onclick="openRemindModal(${id},${eIdx})">⏰ Remind me</a>` : ''}</div>
       </div>
     </div>`;
   }).join('');
@@ -3345,7 +3470,7 @@ function addNote(id) {
   if(!text) { showToast('Write something first.'); return; }
   const chk = document.getElementById('reminderChk-'+id);
   const dtInput = document.getElementById('reminderDt-'+id);
-  const reminder = (chk && chk.checked && dtInput && dtInput.value) ? dtInput.value : null;
+  const reminder = (chk && chk.checked && dtInput && dtInput.value) ? (realUser ? new Date(dtInput.value).toISOString() : dtInput.value) : null;
   // logActivity() shows this immediately and — for a real signed-in user —
   // saves it to the real activity table under their own real name.
   logActivity(id, 'NOTE', esc(text), reminder);
@@ -7529,6 +7654,7 @@ function openEmailCompose(type, mc, opts) {
     document.getElementById('ec-cc-wrap').style.display = opts.showCc ? 'block' : 'none';
     document.getElementById('ec-subject').value = opts.subject||'';
     document.getElementById('ec-body').value = (opts.body||'') + '\n\n' + sig;
+    { const rw = document.getElementById('ec-remind-wrap'); if(rw) { rw.style.display = (realUser && opts.companyId!=null) ? 'block' : 'none'; document.getElementById('ec-remind').value=''; } }
     modal.classList.add('open');
     return;
   }
@@ -7697,6 +7823,11 @@ async function sendRealCompanyEmail(co, toAddr, ccAddr, subject, body, attachmen
   // Pull the real copy back from Microsoft's Sent Items a few seconds later
   // so the Emails tab shows the genuine message (with its chain).
   setTimeout(async ()=>{ try { await refreshRealMail(); if(openCompanyId===co.id && drawerTab==='emails') renderCompanyEmails(co.id,'customer'); } catch(e){} }, 4000);
+  try {
+    const days = parseInt((document.getElementById('ec-remind')||{}).value, 10);
+    if(days) { const d = new Date(); d.setDate(d.getDate()+days); d.setHours(9,0,0,0);
+      logActivity(co.id, 'REMINDER', esc('Follow up on email: ' + (subject||'(no subject)')), d.toISOString()); }
+  } catch(e) {}
   logActivity(co.id, 'EMAIL',
     `Email sent to ${esc(toAddr)} — <strong>${esc(subject||'(no subject)')}</strong>` +
     (attachments.length ? ` (${attachments.length} attachment${attachments.length>1?'s':''} noted, not yet sent through the mailbox)` : ''));
@@ -9586,6 +9717,7 @@ async function finishLogin() {
     authGateHide();
     restoreLastView();
     setTimeout(()=>{ try{ showProspectAlerts(true); }catch(e){ console.warn(e); } }, 900);
+    setTimeout(pollDueReminders, 2500);
     if(authProvider === 'microsoft') checkMailboxConnected();
   } catch(err) {
     console.error('Login failed:', err);
