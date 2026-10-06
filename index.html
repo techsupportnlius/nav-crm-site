@@ -3397,8 +3397,73 @@ function realCompanyEmailMatches(id) {
   }).map(e=>({
     id: e.id, direction: e.folder==='sent' ? 'sent' : 'received',
     from: e.from, to: e.to, cc: '', subject: e.subject, date: e.date, time: e.time,
-    body: e.body, attachments: [], _src: 'graph',
+    body: e.body, bodyMain: e.bodyMain, bodyQuoted: e.bodyQuoted,
+    conversationId: e.conversationId, _ts: e._ts,
+    attachments: [], _src: 'graph',
   }));
+}
+
+// ── Expandable email chains (one card per conversation) ────────────────
+function normSubject(s) { return String(s||'').replace(/^\s*((re|fw|fwd)\s*:\s*)+/i,'').trim().toLowerCase(); }
+function toggleThreadCard(key) {
+  emailExpandedState['t-'+key] = !emailExpandedState['t-'+key];
+  const b = document.getElementById('tc-body-'+key), c = document.getElementById('tc-chev-'+key);
+  if(b) b.style.display = emailExpandedState['t-'+key] ? 'block' : 'none';
+  if(c) c.textContent = emailExpandedState['t-'+key] ? '▴' : '▾';
+}
+function toggleQuoted(key) {
+  emailExpandedState['q-'+key] = !emailExpandedState['q-'+key];
+  const b = document.getElementById('qt-body-'+key), l = document.getElementById('qt-link-'+key);
+  if(b) b.style.display = emailExpandedState['q-'+key] ? 'block' : 'none';
+  if(l) l.textContent = emailExpandedState['q-'+key] ? '▴ Hide earlier messages' : '▸ Show earlier messages in this chain';
+}
+function renderCompanyThreads(emails) {
+  const groups = new Map();
+  emails.forEach(e=>{
+    const k = (e.conversationId || ('s:'+normSubject(e.subject))).replace(/[^a-zA-Z0-9]/g,'').slice(0,60) || 'x';
+    if(!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(e);
+  });
+  const cards = [...groups.entries()].map(([k, msgs])=>{
+    msgs.sort((a,b)=>(b._ts||0)-(a._ts||0));
+    return { k, msgs, last: msgs[0]._ts||0 };
+  }).sort((a,b)=>b.last-a.last);
+  return cards.map(({k, msgs})=>{
+    const exp = !!emailExpandedState['t-'+k];
+    const latest = msgs[0];
+    const subj = latest.subject || '(no subject)';
+    const people = [...new Set(msgs.map(m=> m.direction==='sent' ? m.to : m.from).filter(Boolean))].slice(0,2).join(', ');
+    const body = msgs.map(m=>{
+      const dirLabel = m.direction==='sent' ? '↑ Sent' : '↓ Received';
+      const dirColor = m.direction==='sent' ? 'var(--accent)' : 'var(--green)';
+      const qk = k + '-' + String(m.id).replace(/[^a-zA-Z0-9]/g,'').slice(-12);
+      const qExp = !!emailExpandedState['q-'+qk];
+      const mainText = (m.bodyMain!==undefined ? m.bodyMain : m.body) || '';
+      const quoted = m.bodyQuoted || '';
+      return `<div style="padding:10px 0;border-top:1px solid var(--border);">
+        <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px;">
+          <span class="eti-dir" style="color:${dirColor};">${dirLabel}</span>
+          <span style="font-size:12px;color:var(--text);">${esc(m.direction==='sent' ? 'To: '+m.to : m.from)}</span>
+          <span class="eti-date" style="margin-left:auto;">${esc(m.date)} · ${esc(m.time)}</span>
+        </div>
+        <pre class="eti-text">${esc(mainText) || '<em>(no text)</em>'}</pre>
+        ${quoted ? `<div style="margin-top:8px;"><a id="qt-link-${qk}" style="font-size:11px;color:var(--accent);cursor:pointer;" onclick="event.stopPropagation();toggleQuoted('${qk}')">${qExp?'▴ Hide earlier messages':'▸ Show earlier messages in this chain'}</a>
+          <pre id="qt-body-${qk}" class="eti-text" style="display:${qExp?'block':'none'};margin-top:6px;padding-left:10px;border-left:2px solid var(--border);opacity:0.8;">${esc(quoted)}</pre></div>` : ''}
+      </div>`;
+    }).join('');
+    return `<div class="email-thread-item" onclick="toggleThreadCard('${k}')">
+      <div class="eti-header">
+        <div class="eti-row1">
+          <span class="eti-from">${esc(people)}</span>
+          <span style="font-size:10px;font-family:var(--mono);color:var(--text-faint);padding:1px 6px;border:1px solid var(--border);border-radius:3px;">${msgs.length} message${msgs.length===1?'':'s'}</span>
+          <span class="eti-date">${esc(latest.date)} · ${esc(latest.time)}</span>
+          <span id="tc-chev-${k}" style="color:var(--text-faint);font-size:10px;flex-shrink:0;">${exp?'▴':'▾'}</span>
+        </div>
+        <div class="eti-row2"><span class="eti-subj">${esc(subj)}</span></div>
+      </div>
+      <div id="tc-body-${k}" class="eti-body" style="display:${exp?'block':'none'};" onclick="event.stopPropagation();">${body}</div>
+    </div>`;
+  }).join('');
 }
 
 function renderCompanyEmails(id, type) {
@@ -3435,7 +3500,15 @@ function renderCompanyEmails(id, type) {
       return;
     }
     const all0 = realCompanyEmailMatches(id);
-    all0.sort((a,b)=> new Date(b.date+' '+b.time) - new Date(a.date+' '+a.time));
+    // Emails just sent from the CRM show up instantly (before Microsoft's
+    // Sent Items copy has been picked up) — dropped as soon as the real copy
+    // arrives so nothing appears twice.
+    (companyEmailsDB[id] || []).forEach(le=>{
+      if(!le._ts || Date.now()-le._ts > 15*60*1000) return;
+      const dupe = all0.some(g=>g.direction==='sent' && normSubject(g.subject)===normSubject(le.subject) && Math.abs((g._ts||0)-le._ts) < 15*60*1000);
+      if(!dupe) all0.push({ ...le, bodyMain: cleanEmailText(le.body), bodyQuoted: '', conversationId: '', _src:'crm' });
+    });
+    all0.sort((a,b)=> (b._ts||0) - (a._ts||0));
     if(!all0.length) {
       body0.innerHTML = `<div style="padding:30px;text-align:center;color:var(--text-faint);font-size:13px;">
         No real emails with ${esc(co.name)}'s contacts in the last 30 days.
@@ -3450,7 +3523,7 @@ function renderCompanyEmails(id, type) {
         </div>
         ${composeBtn0}
       </div>
-      ${renderEmailThread(all0)}
+      ${renderCompanyThreads(all0)}
     `;
     return;
   }
@@ -7560,8 +7633,11 @@ async function sendRealCompanyEmail(co, toAddr, ccAddr, subject, body, attachmen
     id: emailId, direction: 'sent',
     from: currentUserEmail() || 'nav@nlius.com', to: toAddr, cc: ccAddr,
     subject: subject || '(no subject)',
-    date: nowDateOnly(), time: nowTimeOnly(), body, attachments: [],
+    date: nowDateOnly(), time: nowTimeOnly(), body, attachments: [], _ts: Date.now(),
   });
+  // Pull the real copy back from Microsoft's Sent Items a few seconds later
+  // so the Emails tab shows the genuine message (with its chain).
+  setTimeout(async ()=>{ try { await refreshRealMail(); if(openCompanyId===co.id && drawerTab==='emails') renderCompanyEmails(co.id,'customer'); } catch(e){} }, 4000);
   logActivity(co.id, 'EMAIL',
     `Email sent to ${esc(toAddr)} — <strong>${esc(subject||'(no subject)')}</strong>` +
     (attachments.length ? ` (${attachments.length} attachment${attachments.length>1?'s':''} noted, not yet sent through the mailbox)` : ''));
@@ -7881,10 +7957,93 @@ let realMailError = null;
 
 // Strips HTML down to plain text for the reading pane / thread view, which
 // were built to display plain-text bodies.
+// Puts a line break after every block-level element so text from separate
+// paragraphs/divs doesn't run together (textContent alone glues them).
+function addBlockBreaks(root) {
+  root.querySelectorAll('br').forEach(b => b.replaceWith(document.createTextNode('\n')));
+  root.querySelectorAll('div,p,li,tr,h1,h2,h3,h4,h5,h6,table,blockquote').forEach(el => el.appendChild(document.createTextNode('\n')));
+}
 function stripHtmlToText(html) {
   const tmp = document.createElement('div');
   tmp.innerHTML = html || '';
-  return (tmp.textContent || tmp.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
+  tmp.querySelectorAll('style,script').forEach(n => n.remove());
+  addBlockBreaks(tmp);
+  return (tmp.textContent || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// ── Email cleanup: footer links, quoted chain ──────────────────────────
+// Real emails come back from Microsoft with (1) every earlier message in
+// the chain pasted underneath, and (2) whatever footer the Office 365 mail
+// rule adds on send, whose links Microsoft rewrites into very long
+// "safelinks.protection.outlook.com" addresses. This turns each one into the
+// latest message on its own, plus a separate "earlier messages" block, with
+// the footer dropped and any leftover links shortened to just the website.
+//
+// If a footer still shows up, add the first words of it below (any part of
+// the footer's first line works) — everything from that line down is hidden.
+const EMAIL_FOOTER_MARKERS = [
+  // e.g. 'NAV Logistics Inc. |', 'This email and any attachments',
+  /^\s*(confidentiality notice|disclaimer)\b/i,
+  /this (e-?mail|message)( and any (files|attachments))?( transmitted with it)? (is|are|may be) (confidential|intended)/i,
+];
+function unwrapSafeLink(url) {
+  try {
+    const u = new URL(url);
+    if(/safelinks\.protection\.outlook\.com$/i.test(u.hostname)) {
+      const real = u.searchParams.get('url');
+      if(real) return decodeURIComponent(real);
+    }
+  } catch(e) {}
+  return url;
+}
+function shortLinkLabel(url) {
+  try { return new URL(unwrapSafeLink(url)).hostname.replace(/^www\./,''); } catch(e) { return url; }
+}
+function cleanEmailText(text) {
+  let t = String(text || '');
+  // any bare long/rewritten URL -> just the website name
+  t = t.replace(/https?:\/\/[^\s<>"')]+/gi, m => (m.length > 45 || /safelinks/i.test(m)) ? shortLinkLabel(m) : m);
+  // cut at the first footer marker line
+  const lines = t.split('\n');
+  let cut = lines.length;
+  for(let i=0;i<lines.length;i++) {
+    if(EMAIL_FOOTER_MARKERS.some(mk => typeof mk==='string' ? lines[i].toLowerCase().includes(mk.toLowerCase()) : mk.test(lines[i]))) { cut = i; break; }
+  }
+  t = lines.slice(0,cut).join('\n');
+  return t.replace(/\n{3,}/g,'\n\n').trim();
+}
+// Returns { main, quoted }: the newest message, and the older chain below it.
+function splitEmailHtml(html) {
+  const root = document.createElement('div');
+  root.innerHTML = html || '';
+  // tidy links first: unwrap Microsoft's rewriting, and don't show a URL as the link text
+  root.querySelectorAll('a').forEach(a => {
+    const href = a.getAttribute('href') || '';
+    const txt = (a.textContent || '').trim();
+    if(/^(https?:\/\/|www\.)/i.test(txt)) a.textContent = shortLinkLabel(txt.startsWith('http') ? txt : 'https://'+txt);
+    else if(!txt && href) a.textContent = shortLinkLabel(href);
+  });
+  root.querySelectorAll('style,script,img').forEach(n=>n.remove());
+  addBlockBreaks(root);
+  let quotedText = '';
+  const marker = root.querySelector('#appendonsend, #divRplyFwdMsg, div[id^="mail-editor-reference-message-container"], .gmail_quote, div[type="cite"], blockquote');
+  if(marker) {
+    try {
+      const range = document.createRange();
+      range.setStartBefore(marker);
+      range.setEndAfter(root.lastChild);
+      const frag = range.extractContents();
+      const holder = document.createElement('div'); holder.appendChild(frag);
+      quotedText = holder.textContent || '';
+    } catch(e) {}
+  }
+  let main = (root.textContent || '');
+  // text fallback for replies that carry no recognisable HTML marker
+  if(!quotedText) {
+    const m = main.match(/\n\s*(From:\s.+\n\s*Sent:|On .{6,120} wrote:|-{2,}\s*Original Message\s*-{2,})/i);
+    if(m && m.index > 0) { quotedText = main.slice(m.index); main = main.slice(0, m.index); }
+  }
+  return { main: cleanEmailText(main), quoted: cleanEmailText(quotedText) };
 }
 
 // Maps one Microsoft Graph message into the same shape the rest of the app
@@ -7898,7 +8057,9 @@ function graphMessageToMail(m, folder) {
     from: from.address || '', fromName: from.name || from.address || '(unknown sender)',
     to: toList.join(', '),
     subject: m.subject || '(no subject)',
-    body: m.body && m.body.content ? stripHtmlToText(m.body.content) : (m.bodyPreview || ''),
+    body: m.body && m.body.content ? cleanEmailText(stripHtmlToText(m.body.content)) : (m.bodyPreview || ''),
+    ...(function(){ try { if(m.body && m.body.content) { const s = splitEmailHtml(m.body.content); return { bodyMain: s.main, bodyQuoted: s.quoted }; } } catch(e) {} return { bodyMain: (m.bodyPreview||''), bodyQuoted: '' }; })(),
+    conversationId: m.conversationId || '',
     date: when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
     time: when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
     unread: m.isRead === false,
@@ -7948,7 +8109,7 @@ async function loadRealMailFolder(folderKey, opts = {}) {
     const filter = folderKey === 'drafts' ? '' : `&$filter=${dateField} ge ${since}`;
     url = `https://graph.microsoft.com/v1.0/me/mailFolders/${graphFolder}/messages`
       + `?$top=50&$orderby=${dateField} desc`
-      + `&$select=id,subject,bodyPreview,body,from,sender,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead`
+      + `&$select=id,conversationId,subject,bodyPreview,body,from,sender,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead`
       + filter;
   }
   const data = await graphFetch(url);
