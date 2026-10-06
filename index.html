@@ -2764,7 +2764,7 @@ function renderCoTable() {
       if(isAdmin || isCC) return c.compTeam;
       return (c.compTeam && c.compTeam !== '—') ? 'Compliance Team' : '—';
     };
-    const canAssign = isAdmin || isTL;
+    const canAssign = canBulkAssign();
     const canSeeShipment = currentRole==='Admin'||currentRole==='Customer Compliance'||currentRole==='Team Leader';
 
     head.innerHTML=`<tr>
@@ -2894,7 +2894,7 @@ function renderCustomerDetails(id) {
   const canSeePaycat   = !isSalesRep; // SalesRep never sees payment category
   // Remarks / reassign: Admin, TL, LocHead can edit; Sales Rep and CC read-only
   const canEditRemarks = isAdmin || isTL || isLocHead;
-  const canReassign    = isAdmin || isTL;
+  const canReassign    = canBulkAssign();
   // Prospect pipeline stage: Sales, TL, LocHead, Admin can edit; CC reads only
   const canEditProspectStage = isProspectRecord && !isCC;
   // Flag for review: TL and LocHead can flag active (non-prospect) customers
@@ -2994,9 +2994,11 @@ function renderCustomerDetails(id) {
         ${canReassign ? `<div class="field-box"><div class="field-label">Reassign To</div>
           <select class="field-select" onchange="reassignSingle(${c.id},this.value);this.value=''">
             <option value="">— Reassign…</option>
-            ${getAssignableForRole().map(p=>`<option value="${p.name}">${p.name} · ${p.role}</option>`).join('')}
+            ${getAssignableForRole().map(p=>`<option value="${esc(p.userId||p.name)}">${esc(p.name)} · ${esc(p.role)}</option>`).join('')}
             <optgroup label="Assign to Team">
-              ${(isAdmin?TEAMS:TEAMS.filter(t=>t.id===TL_TEAM)).map(t=>`<option value="__team__${t.id}">${t.label} → ${t.tl} (TL)</option>`).join('')}
+              ${realUser
+                ? (REAL_TEAMS||[]).filter(t=>t.teamLeaderUserId && (currentRole!=='Team Leader' || myTeamIds().includes(t.id))).map(t=>`<option value="__team__${esc(t.id)}">${esc(t.name)} → ${esc(t.teamLeaderName||'TL')} (TL)</option>`).join('')
+                : (isAdmin?TEAMS:TEAMS.filter(t=>t.id===TL_TEAM)).map(t=>`<option value="__team__${t.id}">${t.label} → ${t.tl} (TL)</option>`).join('')}
             </optgroup>
           </select>
         </div>` : ''}
@@ -4443,7 +4445,16 @@ function openDrawer(){document.getElementById('drawer').classList.add('open');do
 function closeDrawer(){document.getElementById('drawer').classList.remove('open');document.getElementById('drawerOv').classList.remove('open');openCompanyId=null;}
 
 // ── ROLE-SCOPED ASSIGNABLE LIST ────────────────────────────────
+function canBulkAssign() {
+  return realUser
+    ? ['Admin','Customer Compliance','Operations Head','Location Head','Operations Manager','Team Leader'].includes(currentRole)
+    : (currentRole==='Admin' || currentRole==='Team Leader');
+}
 function getAssignableForRole() {
+  if(realUser) {
+    // Real people only (the server already limits a Team Leader to their own team).
+    return (realUsers||[]).filter(u=>['Sales Rep','Team Leader','Supervisor'].includes(u.role));
+  }
   if(currentRole==='Team Leader') {
     const myTeam = TEAMS.find(t=>t.id===TL_TEAM);
     if(!myTeam) return [];
@@ -5130,7 +5141,7 @@ function syncSelectAll() {
 function refreshAssignBtn() {
   const btns = document.getElementById('coHeaderBtns');
   if(!btns) return;
-  const canAssign = currentRole==='Admin'||currentRole==='Team Leader';
+  const canAssign = canBulkAssign();
   if(!canAssign) { const e=document.getElementById('assignBtn'); if(e) e.remove(); return; }
   let existing = document.getElementById('assignBtn');
   if(selectedIds.size > 0) {
@@ -5151,12 +5162,20 @@ function openAssignModal() {
   const scopedPeople = getAssignableForRole();
   document.getElementById('assignPersonSel').innerHTML =
     `<option value="">— Sales Rep or Team Leader</option>` +
-    scopedPeople.map(p=>`<option value="${p.name}">${p.name} · ${p.role}</option>`).join('');
+    scopedPeople.map(p=>`<option value="${esc(p.userId||p.name)}">${esc(p.name)} · ${esc(p.role)}</option>`).join('');
   // TL can only assign within their own team; Admin sees all teams
-  const visibleTeams = currentRole==='Team Leader' ? TEAMS.filter(t=>t.id===TL_TEAM) : TEAMS;
-  document.getElementById('assignTeamSel').innerHTML =
-    `<option value="">— Select a team</option>` +
-    visibleTeams.map(t=>`<option value="${t.id}">${t.label} (${t.tl}, TL)</option>`).join('');
+  if(realUser) {
+    const myT = currentRole==='Team Leader' ? myTeamIds() : null;
+    const teams = (REAL_TEAMS||[]).filter(t=>t.teamLeaderUserId && (!myT || myT.includes(t.id)));
+    document.getElementById('assignTeamSel').innerHTML =
+      `<option value="">— Select a team</option>` +
+      teams.map(t=>`<option value="${esc(t.id)}">${esc(t.name)} (${esc(t.teamLeaderName||'Team Leader')}, TL)</option>`).join('');
+  } else {
+    const visibleTeams = currentRole==='Team Leader' ? TEAMS.filter(t=>t.id===TL_TEAM) : TEAMS;
+    document.getElementById('assignTeamSel').innerHTML =
+      `<option value="">— Select a team</option>` +
+      visibleTeams.map(t=>`<option value="${t.id}">${t.label} (${t.tl}, TL)</option>`).join('');
+  }
   const n = selectedIds.size;
   document.getElementById('assignModalDesc').textContent =
     `${n} compan${n===1?'y':'ies'} selected. Choose where to route them.`;
@@ -5167,10 +5186,30 @@ function closeAssignModal() {
   document.getElementById('assignModal').classList.remove('open');
 }
 
-function applyAssignment() {
+// Real login: save the new owner on the server for every selected company.
+async function realAssign(ids, ownerUserId, label) {
+  try {
+    const res = await apiFetch('/api/companies-assign', { method:'POST', body: JSON.stringify({ companyIds: [...ids], ownerUserId }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not assign — please try again.'); return false; }
+    await loadRealCompanies();
+    showToast(`${j.moved} assigned to ${label}` + (j.skipped ? ` · ${j.skipped} skipped (already theirs or not yours)` : '') + '.');
+    return true;
+  } catch(e) { console.error(e); showToast('Could not assign — please try again.'); return false; }
+}
+async function applyAssignment() {
   const person = document.getElementById('assignPersonSel').value;
   const teamId = document.getElementById('assignTeamSel').value;
   if(!person && !teamId) { showToast('Select a person or team first.'); return; }
+  if(realUser) {
+    let ownerId, label;
+    if(person) { ownerId = person; const p = realUsers.find(u=>u.userId===person); label = p ? p.name : 'that person'; }
+    else { const t = REAL_TEAMS.find(x=>x.id===teamId); ownerId = t && t.teamLeaderUserId; label = t ? `${t.teamLeaderName} (${t.name})` : 'that team'; }
+    if(!ownerId) { showToast('That team has no Team Leader yet.'); return; }
+    const ok = await realAssign(selectedIds, ownerId, label);
+    if(ok) { selectedIds.clear(); closeAssignModal(); renderCoTable(); try{ renderProspectsView(); }catch(e){} refreshAssignBtn(); }
+    return;
+  }
   let assignTo, msg;
   if(person) {
     assignTo = person;
@@ -5193,8 +5232,17 @@ function applyAssignment() {
   refreshAssignBtn();
 }
 
-function reassignSingle(id, val) {
+async function reassignSingle(id, val) {
   if(!val) return;
+  if(realUser) {
+    let ownerId = val, label;
+    if(val.startsWith('__team__')) { const t = REAL_TEAMS.find(x=>x.id===val.replace('__team__','')); ownerId = t && t.teamLeaderUserId; label = t ? t.teamLeaderName : ''; }
+    else { const p = realUsers.find(u=>u.userId===val); label = p ? p.name : ''; }
+    if(!ownerId) { showToast('That team has no Team Leader yet.'); return; }
+    const ok = await realAssign([id], ownerId, label);
+    if(ok) { renderCoTable(); try{ renderProspectsView(); }catch(e){} if(openCompanyId===id) renderCustomerDetails(id); }
+    return;
+  }
   let assignTo;
   if(val.startsWith('__team__')) {
     const team = TEAMS.find(t=>t.id===val.replace('__team__',''));
