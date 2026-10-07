@@ -1548,8 +1548,8 @@ thead th.cb-th{width:36px;padding:0 10px;}
 <div class="modal-overlay" id="csvImportModal">
   <div class="modal" style="max-width:640px;max-height:92vh;overflow-y:auto;">
     <h3 style="margin-bottom:4px;">Import Companies from CSV</h3>
-    <p style="font-size:12px;color:var(--text-faint);margin-bottom:10px;">
-      Expected columns: <span style="font-family:var(--mono);color:var(--text-muted);">name, domain, location, owner, remarks</span> — only <span style="font-family:var(--mono);">name</span> and <span style="font-family:var(--mono);">domain</span> are required. <span style="font-family:var(--mono);">owner</span> can be the person's work email or full name.
+    <p style="font-size:12px;color:var(--text-faint);margin-bottom:10px;line-height:1.6;">
+      Download the template — it has every column. <strong>Only the company name is required</strong>, plus either a <span style="font-family:var(--mono);">website</span> or (if there is none) the <span style="font-family:var(--mono);">city</span> and <span style="font-family:var(--mono);">state</span>. <span style="font-family:var(--mono);">owner</span> = the person's work email or full name (their office, team, Team Leader, Operations Manager and Location Head then follow automatically). Leave any column blank or delete it.
     </p>
     <button class="btn btn-ghost btn-sm" style="margin-bottom:14px;" onclick="downloadSampleCsv()">⬇ Download Sample CSV</button>
     <div id="csvTargetRow" style="display:none;margin-bottom:14px;">
@@ -1563,7 +1563,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <div id="csvDropZone" style="border:1px dashed var(--border);border-radius:6px;padding:26px;text-align:center;cursor:pointer;margin-bottom:14px;"
          onclick="document.getElementById('csvFileInput').click()">
       <div style="font-size:13px;color:var(--text-muted);">Click to choose a CSV file</div>
-      <div style="font-size:11px;color:var(--text-faint);margin-top:4px;">Duplicates by domain are skipped automatically</div>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:4px;">Duplicates are skipped automatically (same website, or same name in the same city/state)</div>
     </div>
     <div id="csvPreviewWrap" style="display:none;">
       <div id="csvSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;"></div>
@@ -6936,22 +6936,53 @@ function closeCsvImport() {
 // A ready-to-fill-in CSV matching exactly what the importer above expects,
 // so people bulk-uploading a prospect/customer list don't have to guess the
 // column names or format. Uses a real location id when one is loaded.
+const CSV_FIELDS = [
+  // key, template header, accepted header names (lower-case)
+  ['name','company name',['name','company','company name','companyname']],
+  ['domain','website',['domain','website','web site','url','company website']],
+  ['city','city',['city','hq city']],
+  ['state','state',['state','hq state']],
+  ['zip','zip',['zip','zip code','postal code','hq zip']],
+  ['location','nav office',['location','office','nav office']],
+  ['owner','owner (email or full name)',['owner','owner (email or full name)','sales rep','account owner','rep','owner email']],
+  ['days','working days',['days','working days','prospect days','working window']],
+  ['industry','industry',['industry']],
+  ['bizType','business type',['business type','biztype','type']],
+  ['employees','employees',['employees','number of employees','employee range']],
+  ['revenue','annual revenue',['revenue','annual revenue','revenue range']],
+  ['commodity','commodity',['commodity','freight type','commodity / freight type']],
+  ['lanes','lanes (separate with ;)',['lanes','lanes (separate with ;)','typical lanes']],
+  ['equipment','equipment (separate with ;)',['equipment','equipment (separate with ;)','preferred equipment']],
+  ['contactName','contact name',['contact name','contact','primary contact']],
+  ['contactTitle','contact title',['contact title','title']],
+  ['contactPhone','contact phone',['contact phone','phone']],
+  ['contactEmail','contact email',['contact email','email']],
+  ['paycat','payment category',['payment category','paycat','payment terms']],
+  ['ff','ff #',['ff','ff #','ff number']],
+  ['mc','mc #',['mc','mc #','mc number']],
+  ['dot','dot #',['dot','dot #','dot number']],
+  ['remarks','remarks',['remarks','notes','note']],
+];
+// Columns people sometimes add for reference — these are worked out from the
+// owner / office automatically, so they are ignored on import.
+const CSV_IGNORED = ['team leader','tl','operations manager','ops manager','location head'];
 function downloadSampleCsv() {
-  const sampleLoc = (LOCATIONS && LOCATIONS[0] && LOCATIONS[0].id) || 'Houston';
+  const sampleLoc = (LOCATIONS && LOCATIONS[0] && (LOCATIONS[0].name||LOCATIONS[0].id)) || 'Houston';
   const csvEscape = v => {
     const s = String(v==null?'':v);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
   };
-  const rows = [
-    ['name','domain','location','owner','remarks'],
-    ['Example Freight LLC','examplefreight.com', sampleLoc, '', 'Optional notes about this prospect'],
-    ['Sample Logistics Inc','samplelogistics.com', sampleLoc, '', ''],
-  ];
+  const ex1 = { name:'Example Freight LLC', domain:'examplefreight.com', city:'Houston', state:'TX', zip:'77002', location:sampleLoc,
+    owner:'', days:'21', industry:'', bizType:'', employees:'', revenue:'', commodity:'Dry goods', lanes:'TX -> LA; GA -> FL', equipment:'Dry Van',
+    contactName:'Jane Doe', contactTitle:'Logistics Manager', contactPhone:'(713) 555-0100', contactEmail:'jane@examplefreight.com', paycat:'', ff:'', mc:'', dot:'', remarks:'Optional notes' };
+  const ex2 = { name:'Sample Trucking Co', domain:'', city:'Dallas', state:'TX', location:sampleLoc, contactName:'', remarks:'No website — city and state are needed instead' };
+  const rows = [CSV_FIELDS.map(f=>f[1]), ...[ex1,ex2].map(ex=>CSV_FIELDS.map(f=>ex[f[0]]||''))];
   const csv = rows.map(r=>r.map(csvEscape).join(',')).join('\r\n');
   const blob = new Blob([csv], {type:'text/csv'});
   saveFile('nav-crm-import-template.csv', blob);
 }
 function parseCsv(text) {
+  if(text.charCodeAt(0)===0xFEFF) text = text.slice(1); // Excel's invisible marker
   const rows = [];
   let cur = [], field = '', inQ = false;
   for(let i=0;i<text.length;i++){
@@ -6977,43 +7008,48 @@ function handleCsvFile(input) {
     const rows = parseCsv(e.target.result);
     if(rows.length < 2) { showToast('That CSV has no data rows.'); return; }
     const header = rows[0].map(h=>h.trim().toLowerCase());
-    const idx = k => header.indexOf(k);
-    const iName = idx('name'), iDom = idx('domain');
-    if(iName === -1 || iDom === -1) { showToast('CSV must include "name" and "domain" columns.'); return; }
-    const iLoc = idx('location'), iOwner = idx('owner'), iRem = idx('remarks');
-    const existing = new Set(customers.map(c=>(c.domain||'').toLowerCase()));
+    const col = {};
+    CSV_FIELDS.forEach(([key,,aliases])=>{ col[key] = header.findIndex(h=>aliases.includes(h)); });
+    if(col.name === -1) { showToast('The file needs a "company name" column. Use the template.'); return; }
+    const ignored = header.filter(h=>CSV_IGNORED.includes(h));
+    const existing = new Set(customers.map(c=>(c.domain||'').toLowerCase()).filter(Boolean));
     const seen = new Set();
     const parsed = [];
     rows.slice(1).forEach(r=>{
-      const name = (r[iName]||'').trim();
-      const domain = (r[iDom]||'').trim().toLowerCase();
-      if(!name || !domain) return;
-      let status = 'ready';
-      if(existing.has(domain) || seen.has(domain)) status = 'duplicate';
-      seen.add(domain);
-      parsed.push({
-        name, domain, status,
-        location: iLoc>-1 ? (r[iLoc]||'').trim() : '',
-        owner:    iOwner>-1 ? (r[iOwner]||'').trim() : '',
-        remarks:  iRem>-1 ? (r[iRem]||'').trim() : ''
-      });
+      const o = {};
+      CSV_FIELDS.forEach(([key])=>{ o[key] = col[key]>-1 ? (r[col[key]]||'').trim() : ''; });
+      if(!o.name) return;
+      o.domain = o.domain.toLowerCase().replace(/^https?:\/\//,'').replace(/^www\./,'').split('/')[0];
+      let status = 'ready', note = '';
+      if(o.domain) {
+        if(existing.has(o.domain) || seen.has(o.domain)) { status='duplicate'; note='website already in the CRM'; }
+        seen.add(o.domain);
+      } else if(!o.city || !o.state) { status='invalid'; note='no website → city and state needed'; }
+      o.status = status; o.note = note;
+      parsed.push(o);
     });
     if(!parsed.length) { showToast('No valid rows found in that CSV.'); return; }
     csvParsedRows = parsed;
     const ready = parsed.filter(p=>p.status==='ready').length;
-    const dupes = parsed.length - ready;
+    const dupes = parsed.filter(p=>p.status==='duplicate').length;
+    const bad = parsed.filter(p=>p.status==='invalid').length;
     document.getElementById('csvSummary').innerHTML =
       `<strong style="color:var(--green);">${ready}</strong> ready to import` +
-      (dupes ? ` · <strong style="color:var(--amber);">${dupes}</strong> skipped (domain already exists)` : '');
+      (dupes ? ` · <strong style="color:var(--amber);">${dupes}</strong> duplicate` : '') +
+      (bad ? ` · <strong style="color:var(--red);">${bad}</strong> missing website and city/state` : '') +
+      (ignored.length ? `<div style="font-size:11px;color:var(--text-faint);margin-top:4px;">Ignored columns (worked out automatically from the owner and office): ${esc(ignored.join(', '))}</div>` : '') +
+      `<div style="font-size:11px;color:var(--text-faint);margin-top:4px;">Owner names are checked when you click Import — any row with an unknown owner is skipped and explained.</div>`;
     document.getElementById('csvPreviewHead').innerHTML =
-      `<tr><th>Company</th><th>Domain</th><th>Location</th><th>Owner</th><th>Status</th></tr>`;
+      `<tr><th>Company</th><th>Website</th><th>City, State</th><th>Office</th><th>Owner</th><th>Contact</th><th>Status</th></tr>`;
     document.getElementById('csvPreviewBody').innerHTML = parsed.map(p=>`
-      <tr style="${p.status==='duplicate'?'opacity:0.45;':''}">
+      <tr style="${p.status!=='ready'?'opacity:0.5;':''}">
         <td class="primary">${esc(p.name)}</td>
-        <td class="mono" style="font-size:11px;">${esc(p.domain)}</td>
-        <td style="font-size:11.5px;">${esc(locationName(p.location))}</td>
+        <td class="mono" style="font-size:11px;">${esc(p.domain||'No website')}</td>
+        <td style="font-size:11.5px;">${esc([p.city,p.state].filter(Boolean).join(', ')||'—')}</td>
+        <td style="font-size:11.5px;">${esc(p.location ? locationName(p.location) : '—')}</td>
         <td style="font-size:11.5px;">${esc(p.owner||'—')}</td>
-        <td><span class="status ${p.status==='ready'?'s-active':'s-pending'}">${p.status==='ready'?'Ready':'Duplicate'}</span></td>
+        <td style="font-size:11.5px;">${esc(p.contactName||'—')}</td>
+        <td><span class="status ${p.status==='ready'?'s-active':'s-pending'}" title="${esc(p.note)}">${p.status==='ready'?'Ready':(p.status==='duplicate'?'Duplicate':'Incomplete')}</span></td>
       </tr>`).join('');
     document.getElementById('csvPreviewWrap').style.display='block';
     const btn = document.getElementById('csvImportBtn');
@@ -7038,15 +7074,23 @@ async function confirmCsvImport() {
     try {
       const res = await apiFetch('/api/companies/import', {
         method:'POST',
-        body: JSON.stringify({ target, rows: toAdd.map(p=>({name:p.name, domain:p.domain, location:p.location, owner:p.owner, remarks:p.remarks})) }),
+        body: JSON.stringify({ target, rows: toAdd.map(p=>{ const {status,note,...rest}=p; return rest; }) }),
       });
       const data = await res.json().catch(()=>({}));
       if(!res.ok) throw new Error(data.error || ('HTTP '+res.status));
-      closeCsvImport();
       await loadRealCompanies();
-      const skipNote = data.skippedCount ? ` (${data.skippedCount} skipped — already in the CRM)` : '';
-      showToast(`${data.createdCount} compan${data.createdCount===1?'y':'ies'} imported into ${targetLabel}${skipNote}.`);
-      // Jump to the list they just filled, so it's obvious where they went.
+      if(data.skippedCount) {
+        // Stay open and explain every skipped row — nothing disappears silently.
+        document.getElementById('csvSummary').innerHTML =
+          `<strong style="color:var(--green);">${data.createdCount}</strong> imported into ${esc(targetLabel)} · <strong style="color:var(--amber);">${data.skippedCount}</strong> skipped:`;
+        document.getElementById('csvPreviewHead').innerHTML = `<tr><th>Company</th><th>Why it was skipped</th></tr>`;
+        document.getElementById('csvPreviewBody').innerHTML = data.skipped.map(x=>`<tr><td class="primary">${esc(x.name||'—')}</td><td style="font-size:11.5px;">${esc(x.reason||'')}</td></tr>`).join('');
+        btn.textContent = 'Close'; btn.disabled = false; btn.style.opacity='1'; btn.onclick = ()=>{ btn.onclick = confirmCsvImport; closeCsvImport(); };
+        renderCoTable(); try{ renderProspectsView(); }catch(e){}
+        return;
+      }
+      closeCsvImport();
+      showToast(`${data.createdCount} compan${data.createdCount===1?'y':'ies'} imported into ${targetLabel}.`);
       const viewKey = target==='Active' ? 'companies' : 'deals';
       nav(document.querySelector(`[data-view="${viewKey}"]`), viewKey, targetLabel);
     } catch(err) {
