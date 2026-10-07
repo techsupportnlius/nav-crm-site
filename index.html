@@ -1089,6 +1089,11 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <h3>Add Company</h3>
       <p>Enter the company's domain or name to check availability before adding.</p>
       <input class="modal-input" id="addCoInput" placeholder="e.g. walmart.com or Walmart Supply Chain" style="margin-bottom:10px;">
+      <div style="margin:-2px 0 10px;"><a id="addCoNoSiteLink" style="font-size:12px;color:var(--accent);cursor:pointer;" onclick="toggleAddCoNoSite()">This company has no website →</a></div>
+      <div id="addCoNoSiteBox" style="display:none;margin-bottom:10px;">
+        <div style="font-size:11.5px;color:var(--text-faint);margin-bottom:6px;">No website: type the company <strong>name</strong> above, then its city and state. The CRM checks name + city/state for duplicates.</div>
+        <div style="display:flex;gap:8px;"><input class="modal-input" id="addCoNsCity" placeholder="City" style="margin:0;"><input class="modal-input" id="addCoNsState" placeholder="State (e.g. TX)" style="margin:0;"></div>
+      </div>
       <div class="modal-result" id="addCoCheckResult"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeAddCo()">Cancel</button>
@@ -2828,7 +2833,7 @@ function renderCoTable() {
         ${canAssign&&!isCarrCC?`<td class="cb-cell" onclick="event.stopPropagation()"><input type="checkbox" class="row-cb" data-id="${c.id}" ${selectedIds.has(c.id)?'checked':''} onchange="toggleSelect(${c.id},this)"></td>`:(canAssign?'<td></td>':'')}
         <td class="primary">
           ${c.name}${iaBadge}
-          <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:2px;">${c.domain}</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:2px;">${c.domain||'No website'}</div>
         </td>
         <td><span class="status ${c.statusCls}">${c.status}</span></td>
         ${canSeePaycat?`<td><span class="paycat">${c.paycat}</span></td>`:''}
@@ -2984,7 +2989,7 @@ function renderCustomerDetails(id) {
     <div class="d-sec">
       <div class="d-sec-label">Internal Assignment</div>
       <div class="field-grid">
-        <div class="field-box"><div class="field-label">Domain</div><div class="field-val" style="color:var(--blue);">${c.domain}</div></div>
+        <div class="field-box"><div class="field-label">Domain</div><div class="field-val" style="color:var(--blue);">${c.domain||'No website'}</div></div>
         <div class="field-box"><div class="field-label">NAV Office</div>
           ${canReassign
             ? `<select class="field-select" onchange="updateCoField(${c.id},'location',this.value)">${locOpts}</select>`
@@ -3328,7 +3333,7 @@ function renderCustomerContacts(id) {
         <div class="acf-field"><label>Full Name *</label><input id="acf-name-${id}" placeholder="Jane Smith"></div>
         <div class="acf-field"><label>Title / Role</label><input id="acf-title-${id}" placeholder="Logistics Manager"></div>
         <div class="acf-field"><label>Phone</label><input id="acf-phone-${id}" placeholder="(713) 555-0100" type="tel"></div>
-        <div class="acf-field"><label>Email *</label><input id="acf-email-${id}" placeholder="name@${c?c.domain:'company.com'}" type="email" oninput="validateContactEmail(${id})"></div>
+        <div class="acf-field"><label>Email *</label><input id="acf-email-${id}" placeholder="name@${c&&c.domain?c.domain:'company.com'}" type="email" oninput="validateContactEmail(${id})"></div>
       </div>
       <div id="acf-warn-${id}" class="acf-warn" style="display:none;">⚠ Email domain doesn't match <strong>${c?c.domain:'—'}</strong>. Subsidiary or third-party emails are allowed — verify before saving.</div>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -4413,9 +4418,10 @@ function closeCheck(){document.getElementById('checkModal').classList.remove('op
 // Asks the server whether an ACTIVE account exists anywhere in the CRM
 // (not just in what this user can see). Details only come back when the
 // account is the caller's own / their team's / their location's.
-async function serverCompanyCheck(v){
+async function serverCompanyCheck(v, city, state){
   try{
-    const res = await apiFetch('/api/company-check?q='+encodeURIComponent(v));
+    const extra = (city||state) ? '&city='+encodeURIComponent(city||'')+'&state='+encodeURIComponent(state||'') : '';
+    const res = await apiFetch('/api/company-check?q='+encodeURIComponent(v)+extra);
     if(!res.ok) return null;
     return await res.json();
   }catch(e){ console.warn('company-check failed', e); return null; }
@@ -4527,9 +4533,18 @@ function toggleCoDraftEquipment(equip) {
   renderAddCoFreightChips();
 }
 
+let addCoNoSite = false;
+function toggleAddCoNoSite(force) {
+  addCoNoSite = (typeof force==='boolean') ? force : !addCoNoSite;
+  document.getElementById('addCoNoSiteBox').style.display = addCoNoSite ? 'block' : 'none';
+  document.getElementById('addCoNoSiteLink').textContent = addCoNoSite ? '← This company has a website' : 'This company has no website →';
+  document.getElementById('addCoInput').placeholder = addCoNoSite ? 'Company name' : 'e.g. walmart.com or Walmart Supply Chain';
+}
 function openAddCo() {
   addCoFoundRecord = null;
   addCoDraft = null;
+  toggleAddCoNoSite(false);
+  ['addCoNsCity','addCoNsState'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
   document.getElementById('addCoInput').value='';
   document.getElementById('addCoCheckResult').style.display='none';
   ADDCO_STEPS.forEach(s=>document.getElementById('addCo-'+s).classList.remove('active'));
@@ -4588,9 +4603,16 @@ async function addCoCheck() {
   if(!v) { showToast('Enter a company name or domain first.'); return; }
   const q = v.toLowerCase();
   let found, isTaken;
+  let nsCity = '', nsState = '';
+  if(addCoNoSite) {
+    nsCity = document.getElementById('addCoNsCity').value.trim();
+    nsState = document.getElementById('addCoNsState').value.trim();
+    if(!nsCity || !nsState) { showToast('Enter the city and the state too.'); return; }
+    if(!realUser) { showToast('No-website companies need a real sign-in.'); return; }
+  }
   if(realUser) {
     // Server-side check across ALL companies; details only if it's yours.
-    const out = await serverCompanyCheck(v);
+    const out = await serverCompanyCheck(v, nsCity, nsState);
     if(!out) { showToast('Could not check right now — please try again.'); return; }
     isTaken = !!out.exists;
     found = isTaken ? {
@@ -4612,8 +4634,11 @@ async function addCoCheck() {
     res.className='modal-result open-result';
     res.innerHTML=`<strong>✓ Open to work</strong> — this company is not in the CRM yet.`;
     // Pre-fill name/domain
-    document.getElementById('addCoName').value = v.includes('.')?'':v;
-    document.getElementById('addCoDomain').value = v.includes('.')?v:'';
+    document.getElementById('addCoName').value = (addCoNoSite || !v.includes('.')) ? v : '';
+    document.getElementById('addCoDomain').value = (addCoNoSite || !v.includes('.')) ? '' : v;
+    document.getElementById('addCoDomain').disabled = addCoNoSite;
+    document.getElementById('addCoDomain').placeholder = addCoNoSite ? 'No website' : 'example.com';
+    if(addCoNoSite) { document.getElementById('addCoHqCity').value = nsCity; document.getElementById('addCoHqState').value = nsState; }
     document.getElementById('addCoRemarks').value='';
     setTimeout(()=>{
       ADDCO_STEPS.forEach(s=>document.getElementById('addCo-'+s).classList.remove('active'));
@@ -4673,13 +4698,15 @@ function addCoBack() {
 function addCoContinueToContact() {
   const name = document.getElementById('addCoName').value.trim();
   const domain = document.getElementById('addCoDomain').value.trim();
-  if(!name || !domain) { showToast('Company name and domain are required.'); return; }
+  if(addCoNoSite) {
+    if(!name || !document.getElementById('addCoHqCity').value.trim() || !document.getElementById('addCoHqState').value.trim()) { showToast('Company name, city and state are required.'); return; }
+  } else if(!name || !domain) { showToast('Company name and domain are required.'); return; }
   const ownerSel = document.getElementById('addCoOwnerSel');
   const owner = ownerSel.value || (currentRole==='Sales Rep'?currentUserName():'—');
   const ownerUserId = (ownerSel.selectedOptions[0] && ownerSel.selectedOptions[0].dataset.uid) || '';
 
   addCoDraft = {
-    name, domain, owner, ownerUserId,
+    name, domain, noWebsite: addCoNoSite, owner, ownerUserId,
     location: document.getElementById('addCoLocation').value || (myLocations()[0] || ''),
     industry: document.getElementById('addCoIndustry').value,
     bizType: document.getElementById('addCoBizType').value,
@@ -4743,7 +4770,7 @@ function addCoFinish(withContact) {
     apiFetch('/api/companies', {
       method:'POST',
       body: JSON.stringify({
-        name:d.name, domain:d.domain, location:d.location, industry:d.industry,
+        name:d.name, domain:d.domain, noWebsite: !!d.noWebsite, location:d.location, industry:d.industry,
         bizType:d.bizType, hqCity:d.hqCity, hqState:d.hqState, hqZip:d.hqZip,
         employeeRange:d.employeeRange, revenueRange:d.revenueRange, timezone:d.timezone,
         commodity:d.commodity, lanes:d.lanesList, loadFreq:d.loadFreq, loadVolume:d.loadVolume,
@@ -4751,7 +4778,7 @@ function addCoFinish(withContact) {
         remarks:d.remarks, ownerUserId: d.ownerUserId || undefined, prospectDays: d.prospectDays,
         contact: (withContact && contactName) ? {name:contactName, title:contactTitle, phone:contactPhone, email:contactEmail} : null,
       }),
-    }).then(res => { if(!res.ok) console.error('Create company on server failed', res.status); else loadRealCompanies(); })
+    }).then(async res => { if(!res.ok) { console.error('Create company on server failed', res.status); try{ const j=await res.json(); showToast(j.error || 'Could not add the company.'); }catch(e){} } else loadRealCompanies(); })
       .catch(err => console.error('Create company on server failed', err));
   }
 
@@ -5399,7 +5426,7 @@ function renderProspectsView() {
     return `<tr onclick="openCustomerDrawer(${c.id})" style="cursor:pointer;">
       <td class="primary">
         ${c.name}${iaAlert}
-        <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:2px;">${c.domain}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:2px;">${c.domain||'No website'}</div>
       </td>
       <td><span class="status ${c.statusCls}">${c.status}</span></td>
       <td style="font-size:12px;">${ownerLabelFor(c)}</td>
@@ -7834,7 +7861,7 @@ function openSalesEmail(companyId) {
     title: `Email — ${c.name}`,
     subhead: 'Review and edit before sending.',
     from: currentUserEmail()||'nav@nlius.com',
-    to: firstContact?.email||`contact@${c.domain}`,
+    to: firstContact?.email||(c.domain ? `contact@${c.domain}` : ''),
     cc: '',
     showCc: true,
     subject: `Following up — NAV Logistics`,
@@ -9347,7 +9374,7 @@ function relativeTime(iso) {
 // so none of that code needs to change, only where its data comes from.
 function mapCompany(c) {
   return {
-    id: c.company_id, name: c.name, domain: c.domain || '',
+    id: c.company_id, name: c.name, domain: String(c.domain||'').endsWith('.invalid') ? '' : (c.domain || ''), noWebsite: String(c.domain||'').endsWith('.invalid'),
     location: c.location_id || '', industry: c.industry_id || '', bizType: c.business_type_id || '',
     hqCity: c.hq_city || '', hqState: c.hq_state || '', hqZip: c.hq_zip || '',
     employeeRange: c.employee_range_id || '', revenueRange: c.revenue_range_id || '',
