@@ -1073,6 +1073,11 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <h3>Company Check</h3>
     <p>Enter a company name or domain (e.g. <span style="font-family:var(--mono);font-size:11.5px;color:var(--text);">walmart.com</span>) to check if this account is available to work. You'll see "Open to work" or "Already active" — no owner information is shown.</p>
     <input class="modal-input" id="checkInput" placeholder="Company name or domain…" oninput="runCheck(this.value)">
+    <div style="margin:-2px 0 10px;"><a id="checkNoSiteLink" style="font-size:12px;color:var(--accent);cursor:pointer;" onclick="toggleCheckNoSite()">This company has no website →</a></div>
+    <div id="checkNoSiteBox" style="display:none;margin-bottom:10px;">
+      <div style="font-size:11.5px;color:var(--text-faint);margin-bottom:6px;">No website: type the company <strong>name</strong> above, then its city and state. It is matched on name + same city or state.</div>
+      <div style="display:flex;gap:8px;"><input class="modal-input" id="checkNsCity" placeholder="City" style="margin:0;" oninput="runCheck(document.getElementById('checkInput').value)"><input class="modal-input" id="checkNsState" placeholder="State (e.g. TX)" style="margin:0;" oninput="runCheck(document.getElementById('checkInput').value)"></div>
+    </div>
     <div class="modal-result" id="checkResult"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeCheck()">Close</button>
@@ -4408,8 +4413,18 @@ setInterval(()=>{ try{ showProspectAlerts(false); }catch(e){} }, 30*60*1000);
 
 // ── COMPANY CHECK MODAL ───────────────────────────────────────
 
+let checkNoSite = false;
+function toggleCheckNoSite(force){
+  checkNoSite = (typeof force==='boolean') ? force : !checkNoSite;
+  document.getElementById('checkNoSiteBox').style.display = checkNoSite ? 'block' : 'none';
+  document.getElementById('checkNoSiteLink').textContent = checkNoSite ? '← This company has a website' : 'This company has no website →';
+  document.getElementById('checkInput').placeholder = checkNoSite ? 'Company name…' : 'Company name or domain…';
+  runCheck(document.getElementById('checkInput').value);
+}
 function openCheck(){
   document.getElementById('checkModal').classList.add('open');
+  checkNoSite = false; toggleCheckNoSite(false);
+  ['checkNsCity','checkNsState'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
   document.getElementById('checkInput').value='';
   document.getElementById('checkResult').style.display='none';
   document.getElementById('checkInput').focus();
@@ -4431,10 +4446,17 @@ function runCheck(v){
   const r=document.getElementById('checkResult');
   clearTimeout(_checkTimer);
   if(!v.trim()){r.style.display='none';return;}
+  let nsCity='', nsState='';
+  if(checkNoSite){
+    nsCity=document.getElementById('checkNsCity').value.trim();
+    nsState=document.getElementById('checkNsState').value.trim();
+    if(!nsCity && !nsState){ r.style.display='block'; r.className='modal-result'; r.innerHTML='Enter the city and the state to check a company with no website.'; return; }
+    if(!nsCity || !nsState){ r.style.display='none'; return; }
+  }
   if(realUser){
     const seq=++_checkSeq;
     _checkTimer=setTimeout(async()=>{
-      const out=await serverCompanyCheck(v.trim());
+      const out=await serverCompanyCheck(v.trim(), nsCity, nsState);
       if(seq!==_checkSeq) return; // a newer keystroke superseded this
       if(!out){ r.style.display='block'; r.className='modal-result taken-result'; r.innerHTML='Could not check right now — please try again.'; return; }
       renderCheckResult(out.exists ? (out.kind||'active') : null);
