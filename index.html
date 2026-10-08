@@ -4340,7 +4340,7 @@ function prospectWindowPanel(c) {
     html += `<div style="margin-bottom:14px;padding:10px 14px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.3);border-radius:6px;font-size:12px;color:var(--red);">⏱ ${left<=0?'The working window ends today.':`Only ${left} day${left===1?'':'s'} left on this prospect's working window.`} ${currentRole==='Sales Rep'?'Set the stage to "Request Extension" if you need more time.':''}</div>`;
   }
   if(canSeeWindow()) {
-    const people = (realUsers||[]).filter(u=>['Sales Rep','Team Leader','Supervisor'].includes(u.role));
+    const people = (realUsers||[]).filter(u=>['Sales Rep','Team Leader','Supervisor','Operations Manager','Location Head','Operations Head'].includes(u.role));
     html += `<div style="margin-bottom:16px;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;">
       <div style="font-size:11px;font-family:var(--mono);color:var(--text-faint);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">Working window</div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:9px;">${c.prospectDays?`${c.prospectDays} days assigned`:'Default 21 days'}${left!==null?` · ${left<=0?'ends today':left+' day'+(left===1?'':'s')+' left'}`:''}${c.assignedByRole?` · assigned by ${esc(c.assignedByRole)}`:''}</div>
@@ -4502,7 +4502,7 @@ function canBulkAssign() {
 function getAssignableForRole() {
   if(realUser) {
     // Real people only (the server already limits a Team Leader to their own team).
-    return (realUsers||[]).filter(u=>['Sales Rep','Team Leader','Supervisor'].includes(u.role));
+    return (realUsers||[]).filter(u=>['Sales Rep','Team Leader','Supervisor','Operations Manager','Location Head','Operations Head'].includes(u.role));
   }
   if(currentRole==='Team Leader') {
     const myTeam = TEAMS.find(t=>t.id===TL_TEAM);
