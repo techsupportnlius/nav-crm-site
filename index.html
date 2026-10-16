@@ -1004,10 +1004,22 @@ thead th.cb-th{width:36px;padding:0 10px;}
   <div class="view-header"><div><div class="view-title">Bulk Email</div>
     <div style="font-size:12px;color:var(--text-faint);margin-top:3px;">Each person gets their own email from a separate sending address. Normal Outlook email is not affected.</div></div></div>
   <div style="padding:0 24px 24px;overflow:auto;">
+    <div id="bulkSettingsCard" style="margin-bottom:16px;max-width:1100px;border:1px solid var(--border);border-radius:8px;padding:14px 16px;background:var(--surface);font-size:12.5px;">
+      <div id="bulkSettingsText"></div>
+      <div id="bulkSettingsEdit" style="display:none;margin-top:10px;">
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;">
+          <label style="font-size:12px;">People per send<br><input id="bsMax" type="number" min="1" max="200" style="width:110px;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"></label>
+          <label style="font-size:12px;">Minutes between sends<br><input id="bsGap" type="number" min="0" max="1440" style="width:110px;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"></label>
+          <label style="font-size:12px;">Default daily limit per person<br><input id="bsDaily" type="number" min="1" max="100000" style="width:130px;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"></label>
+          <button class="btn btn-primary" onclick="bulkSaveSettings()">Save limits</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">Admin only. Applies to everyone straight away. To give one person a different daily limit, use User Management.</div>
+      </div>
+    </div>
     <div style="display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,1fr);gap:18px;max-width:1100px;">
       <div style="border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--surface);">
         <div style="font-weight:600;margin-bottom:8px;">1. Add your recipients</div>
-        <div style="font-size:12px;color:var(--text-faint);line-height:1.5;margin-bottom:6px;"><b>Option A — type or paste emails.</b> One per line, or separated by commas. Names work too, like <i>John Smith &lt;john@example.com&gt;</i>. Up to <b>50 people</b> per send.</div>
+        <div style="font-size:12px;color:var(--text-faint);line-height:1.5;margin-bottom:6px;"><b>Option A — type or paste emails.</b> One per line, or separated by commas. Names work too, like <i>John Smith &lt;john@example.com&gt;</i>. Up to <b class="bulkMaxTxt">50</b> people per send.</div>
         <textarea id="bulkPaste" rows="5" oninput="bulkHandlePaste()" placeholder="john@example.com&#10;mary@company.com, sam@another.com" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);font-family:inherit;margin-bottom:12px;"></textarea>
         <div style="font-size:12px;color:var(--text-faint);margin-bottom:6px;"><b>Option B — upload a file.</b> (This replaces anything typed above.)</div>
         <div style="font-size:12px;color:var(--text-faint);line-height:1.5;margin-bottom:10px;">Excel (.xlsx) or CSV with a column called <b>email</b>. Optional columns: <b>first name</b> and <b>company</b>.
@@ -2708,7 +2720,7 @@ function nav(el, view, label) {
   if(view==='user-management') renderUserManagement();
   if(view==='manage-lists') renderManageLists();
   if(view==='mail') renderMailView();
-  if(view==='bulk-email') bulkLoadHistory();
+  if(view==='bulk-email') { bulkLoadSettings(); bulkLoadHistory(); }
   if(view==='carrier-lanes') renderCarrierLanesReport();
   updateMailRefreshTimer();
 }
@@ -10272,6 +10284,41 @@ updateNavBadges();
 renderNotifications();
 
 // ── BULK EMAIL ───────────────────────────────────────────────
+let bulkSettings = { maxPerSend: 50, cooldownMinutes: 10, dailyCap: 300, canEdit: false };
+function bulkRenderSettings() {
+  const t = document.getElementById('bulkSettingsText'); if(!t) return;
+  t.innerHTML = `<b>Current limits:</b> up to <b>${bulkSettings.maxPerSend}</b> people per send · <b>${bulkSettings.cooldownMinutes}</b> minute${bulkSettings.cooldownMinutes===1?'':'s'} between your sends · default <b>${bulkSettings.dailyCap}</b> people per day (Admin can set a different daily limit per person).`;
+  document.querySelectorAll('.bulkMaxTxt').forEach(e=>e.textContent = bulkSettings.maxPerSend);
+  const ed = document.getElementById('bulkSettingsEdit');
+  ed.style.display = bulkSettings.canEdit ? 'block' : 'none';
+  if(bulkSettings.canEdit) {
+    document.getElementById('bsMax').value = bulkSettings.maxPerSend;
+    document.getElementById('bsGap').value = bulkSettings.cooldownMinutes;
+    document.getElementById('bsDaily').value = bulkSettings.dailyCap;
+  }
+}
+async function bulkLoadSettings() {
+  try {
+    const res = await apiFetch('/api/bulk-email/settings');
+    if(res.ok) { bulkSettings = Object.assign(bulkSettings, await res.json()); }
+  } catch(e) { console.error(e); }
+  bulkRenderSettings();
+}
+async function bulkSaveSettings() {
+  const body = {
+    maxPerSend: document.getElementById('bsMax').value,
+    cooldownMinutes: document.getElementById('bsGap').value,
+    dailyCap: document.getElementById('bsDaily').value,
+  };
+  try {
+    const res = await apiFetch('/api/bulk-email/settings', { method:'PUT', body: JSON.stringify(body) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not save the limits.'); return; }
+    bulkSettings = Object.assign(bulkSettings, j);
+    bulkRenderSettings(); bulkShowInfo();
+    showToast('Bulk email limits saved.');
+  } catch(e) { showToast('Could not save the limits.'); }
+}
 let bulkList = []; // [{email, firstName, company}]
 function bulkDownloadTemplate() {
   const csv = 'email,first name,company\r\njohn@example.com,John,Example Logistics\r\n';
@@ -10285,10 +10332,10 @@ function bulkShowInfo() {
   const seen = new Set(); let bad=0, dup=0;
   bulkList.forEach(r=>{ const e=r.email.toLowerCase(); if(!re.test(e)) bad++; else if(seen.has(e)) dup++; else seen.add(e); });
   const box = document.getElementById('bulkListInfo');
-  if(seen.size > 50) { bulkList = []; box.innerHTML = `<div style="color:var(--red,#c33);"><b>${seen.size}</b> addresses — the limit is <b>50</b> per send. Please use 50 or fewer.</div>`; return false; }
+  if(seen.size > bulkSettings.maxPerSend) { bulkList = []; box.innerHTML = `<div style="color:var(--red,#c33);"><b>${seen.size}</b> addresses — the limit is <b>${bulkSettings.maxPerSend}</b> per send. Please use ${bulkSettings.maxPerSend} or fewer.</div>`; return false; }
   if(!bulkList.length) { box.innerHTML=''; return true; }
   box.innerHTML =
-    `<div><b>${seen.size}</b> usable addresses (max 50 per send, with a 10-minute gap between sends).${bad?` <span style="color:var(--red,#c33)">${bad} invalid</span>.`:''}${dup?` ${dup} duplicates will be skipped.`:''}</div>` +
+    `<div><b>${seen.size}</b> usable addresses (max ${bulkSettings.maxPerSend} per send, with a ${bulkSettings.cooldownMinutes}-minute gap between sends).${bad?` <span style="color:var(--red,#c33)">${bad} invalid</span>.`:''}${dup?` ${dup} duplicates will be skipped.`:''}</div>` +
     `<div style="margin-top:6px;color:var(--text-faint);">First rows: ${bulkList.slice(0,3).map(r=>esc(r.email)).join(', ')}…</div>`;
   return true;
 }
