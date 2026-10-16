@@ -1006,8 +1006,11 @@ thead th.cb-th{width:36px;padding:0 10px;}
   <div style="padding:0 24px 24px;overflow:auto;">
     <div style="display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,1fr);gap:18px;max-width:1100px;">
       <div style="border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--surface);">
-        <div style="font-weight:600;margin-bottom:8px;">1. Upload your list</div>
-        <div style="font-size:12px;color:var(--text-faint);line-height:1.5;margin-bottom:10px;">Excel (.xlsx) or CSV with a column called <b>email</b> — up to <b>50 people</b> per send. Optional columns: <b>first name</b> and <b>company</b>.
+        <div style="font-weight:600;margin-bottom:8px;">1. Add your recipients</div>
+        <div style="font-size:12px;color:var(--text-faint);line-height:1.5;margin-bottom:6px;"><b>Option A — type or paste emails.</b> One per line, or separated by commas. Names work too, like <i>John Smith &lt;john@example.com&gt;</i>. Up to <b>50 people</b> per send.</div>
+        <textarea id="bulkPaste" rows="5" oninput="bulkHandlePaste()" placeholder="john@example.com&#10;mary@company.com, sam@another.com" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);font-family:inherit;margin-bottom:12px;"></textarea>
+        <div style="font-size:12px;color:var(--text-faint);margin-bottom:6px;"><b>Option B — upload a file.</b> (This replaces anything typed above.)</div>
+        <div style="font-size:12px;color:var(--text-faint);line-height:1.5;margin-bottom:10px;">Excel (.xlsx) or CSV with a column called <b>email</b>. Optional columns: <b>first name</b> and <b>company</b>.
           <a href="#" onclick="bulkDownloadTemplate();return false;" style="color:var(--accent);">Download a template</a></div>
         <input type="file" id="bulkFile" accept=".csv,.xlsx,.xls" onchange="bulkHandleFile(this)">
         <div id="bulkListInfo" style="margin-top:12px;font-size:12px;"></div>
@@ -10277,6 +10280,32 @@ function bulkDownloadTemplate() {
   a.download = 'nav-bulk-email-template.csv';
   a.click();
 }
+function bulkShowInfo() {
+  const re = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+  const seen = new Set(); let bad=0, dup=0;
+  bulkList.forEach(r=>{ const e=r.email.toLowerCase(); if(!re.test(e)) bad++; else if(seen.has(e)) dup++; else seen.add(e); });
+  const box = document.getElementById('bulkListInfo');
+  if(seen.size > 50) { bulkList = []; box.innerHTML = `<div style="color:var(--red,#c33);"><b>${seen.size}</b> addresses — the limit is <b>50</b> per send. Please use 50 or fewer.</div>`; return false; }
+  if(!bulkList.length) { box.innerHTML=''; return true; }
+  box.innerHTML =
+    `<div><b>${seen.size}</b> usable addresses (max 50 per send, with a 10-minute gap between sends).${bad?` <span style="color:var(--red,#c33)">${bad} invalid</span>.`:''}${dup?` ${dup} duplicates will be skipped.`:''}</div>` +
+    `<div style="margin-top:6px;color:var(--text-faint);">First rows: ${bulkList.slice(0,3).map(r=>esc(r.email)).join(', ')}…</div>`;
+  return true;
+}
+function bulkHandlePaste() {
+  const txt = document.getElementById('bulkPaste').value;
+  document.getElementById('bulkFile').value = '';
+  const out = [];
+  // split on new lines, commas, semicolons; each piece may be "Name <email>" or just an email
+  txt.split(/[\n\r,;]+/).forEach(piece => {
+    piece = piece.trim(); if(!piece) return;
+    const m = piece.match(/^(.*?)<\s*([^<>\s]+)\s*>\s*$/);
+    if(m) { const nm = m[1].replace(/["']/g,'').trim(); out.push({ email: m[2].trim(), firstName: nm.split(/\s+/)[0]||'', company:'' }); }
+    else piece.split(/\s+/).forEach(w => { if(w) out.push({ email:w, firstName:'', company:'' }); });
+  });
+  bulkList = out;
+  bulkShowInfo();
+}
 function bulkHandleFile(input) {
   const file = input.files && input.files[0];
   if(!file) return;
@@ -10293,13 +10322,8 @@ function bulkHandleFile(input) {
       firstName: fi>-1 ? String(r[fi]||'').trim().split(/\s+/)[0] : '',
       company: co>-1 ? String(r[co]||'').trim() : '',
     })).filter(r=>r.email);
-    const re = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
-    const seen = new Set(); let bad=0, dup=0;
-    bulkList.forEach(r=>{ const e=r.email.toLowerCase(); if(!re.test(e)) bad++; else if(seen.has(e)) dup++; else seen.add(e); });
-    if(seen.size > 50) { bulkList = []; document.getElementById('bulkListInfo').innerHTML = `<div style="color:var(--red,#c33);"><b>${seen.size}</b> addresses — the limit is <b>50</b> per send. Please upload a file with 50 or fewer.</div>`; return; }
-    document.getElementById('bulkListInfo').innerHTML =
-      `<div><b>${seen.size}</b> usable addresses (max 50 per send, with a 10-minute gap between sends).${bad?` <span style="color:var(--red,#c33)">${bad} invalid</span>.`:''}${dup?` ${dup} duplicates will be skipped.`:''}</div>` +
-      `<div style="margin-top:6px;color:var(--text-faint);">First rows: ${bulkList.slice(0,3).map(r=>esc(r.email)).join(', ')}…</div>`;
+    if(!bulkShowInfo()) return;
+    document.getElementById('bulkPaste').value='';
   };
   const name = file.name.toLowerCase();
   if(name.endsWith('.csv')) {
@@ -10323,7 +10347,7 @@ async function bulkSend() {
   const name = document.getElementById('bulkName').value.trim();
   const subject = document.getElementById('bulkSubject').value.trim();
   const body = document.getElementById('bulkBody').value.trim();
-  if(!bulkList.length) { showToast('Upload your list first.'); return; }
+  if(!bulkList.length) { showToast('Add your recipients first — paste emails or upload a file.'); return; }
   if(!subject || !body) { showToast('Add a subject and a message.'); return; }
   if(!confirm(`Send this email to ${bulkList.length} people? This cannot be undone.`)) return;
   const btn = document.getElementById('bulkSendBtn');
@@ -10338,7 +10362,7 @@ async function bulkSend() {
       const sk = (data.skipped||[]);
       out.innerHTML = `<div style="padding:12px;border:1px solid var(--green,#2a7);border-radius:6px;"><b>${data.sent}</b> sent${data.failed?`, <b>${data.failed}</b> failed`:''}${sk.length?`, <b>${sk.length}</b> skipped`:''}.` +
         (sk.length ? `<div style="margin-top:8px;font-size:12px;color:var(--text-faint);">Skipped: ${sk.slice(0,30).map(s=>esc(s.email)+' ('+esc(s.reason)+')').join('; ')}${sk.length>30?'…':''}</div>` : '') + `</div>`;
-      bulkList = []; document.getElementById('bulkFile').value=''; document.getElementById('bulkListInfo').innerHTML='';
+      bulkList = []; document.getElementById('bulkFile').value=''; document.getElementById('bulkPaste').value=''; document.getElementById('bulkListInfo').innerHTML='';
       bulkLoadHistory();
     }
   } catch(e) {
