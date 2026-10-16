@@ -4750,6 +4750,14 @@ function closeAddCo() {
   addCoDraft = null;
 }
 
+// Turns "https://www.Acme.com/about" into "acme.com". Returns '' if the text
+// is not a real web address (spaces, no dot, no proper ending like .com).
+function cleanDomain(raw) {
+  let d = String(raw||'').trim().toLowerCase();
+  d = d.replace(/^[a-z]+:\/\//,'').replace(/^www\./,'').split(/[\/?#]/)[0];
+  return /^(?!-)[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(d) ? d : '';
+}
+
 async function addCoCheck() {
   const v = document.getElementById('addCoInput').value.trim();
   if(!v) { showToast('Enter a company name or domain first.'); return; }
@@ -4786,8 +4794,9 @@ async function addCoCheck() {
     res.className='modal-result open-result';
     res.innerHTML=`<strong>✓ Open to work</strong> — this company is not in the CRM yet.`;
     // Pre-fill name/domain
-    document.getElementById('addCoName').value = (addCoNoSite || !v.includes('.')) ? v : '';
-    document.getElementById('addCoDomain').value = (addCoNoSite || !v.includes('.')) ? '' : v;
+    const vDom = cleanDomain(v);
+    document.getElementById('addCoName').value = (addCoNoSite || !vDom) ? v : '';
+    document.getElementById('addCoDomain').value = (addCoNoSite || !vDom) ? '' : vDom;
     document.getElementById('addCoDomain').disabled = addCoNoSite;
     document.getElementById('addCoDomain').placeholder = addCoNoSite ? 'No website' : 'example.com';
     if(addCoNoSite) { document.getElementById('addCoHqCity').value = nsCity; document.getElementById('addCoHqState').value = nsState; }
@@ -4849,10 +4858,16 @@ function addCoBack() {
 // the contact step. Nothing is written to `customers` until addCoFinish runs.
 function addCoContinueToContact() {
   const name = document.getElementById('addCoName').value.trim();
-  const domain = document.getElementById('addCoDomain').value.trim();
+  let domain = document.getElementById('addCoDomain').value.trim();
   if(addCoNoSite) {
     if(!name || !document.getElementById('addCoHqCity').value.trim() || !document.getElementById('addCoHqState').value.trim()) { showToast('Company name, city and state are required.'); return; }
   } else if(!name || !domain) { showToast('Company name and domain are required.'); return; }
+  else {
+    const cd = cleanDomain(domain);
+    if(!cd) { showToast('Enter a real website domain, like acme.com — no spaces, and it must end in .com, .net, etc.'); return; }
+    domain = cd;
+    document.getElementById('addCoDomain').value = cd;
+  }
   const ownerSel = document.getElementById('addCoOwnerSel');
   const owner = ownerSel.value || (currentRole==='Sales Rep'?currentUserName():'—');
   const ownerUserId = (ownerSel.selectedOptions[0] && ownerSel.selectedOptions[0].dataset.uid) || '';
@@ -4893,6 +4908,7 @@ function addCoBackToDetails() {
 function addCoFinish(withContact) {
   if(!addCoDraft) return;
   const d = addCoDraft;
+  const asActive = (currentViewName==='companies' && ['Admin','Customer Compliance'].includes(currentRole));
   const contactName  = document.getElementById('addCoContactName').value.trim();
   const contactTitle = document.getElementById('addCoContactTitle').value.trim() || '—';
   const contactPhone = document.getElementById('addCoContactPhone').value.trim() || '—';
@@ -4910,7 +4926,7 @@ function addCoFinish(withContact) {
     commodity:d.commodity, lanes:d.lanesList.join(', '), lanesList:d.lanesList,
     loadFreq:d.loadFreq, loadVolume:d.loadVolume,
     equipment:d.equipmentList[0]||'—', equipmentList:d.equipmentList,
-    status:'Prospect', statusCls:'s-prospect',
+    status: asActive?'Active':'Prospect', statusCls: asActive?'s-active':'s-prospect',
     owner:d.owner, rep:d.owner, coOwners:[], compTeam:'—', updatedBy:updater,
     updatedAt:nowStamp(), ff:'—', mc:'—', dot:'—', paycat:'—',
     remarks:d.remarks, lastUpdated:'Just now'
@@ -4927,7 +4943,7 @@ function addCoFinish(withContact) {
         employeeRange:d.employeeRange, revenueRange:d.revenueRange, timezone:d.timezone,
         commodity:d.commodity, lanes:d.lanesList, loadFreq:d.loadFreq, loadVolume:d.loadVolume,
         equipment:d.equipmentList,
-        remarks:d.remarks, ownerUserId: d.ownerUserId || undefined, prospectDays: d.prospectDays,
+        remarks:d.remarks, ownerUserId: d.ownerUserId || undefined, prospectDays: d.prospectDays, asActive,
         contact: (withContact && contactName) ? {name:contactName, title:contactTitle, phone:contactPhone, email:contactEmail} : null,
       }),
     }).then(async res => { if(!res.ok) { console.error('Create company on server failed', res.status); try{ const j=await res.json(); showToast(j.error || 'Could not add the company.'); }catch(e){} } else loadRealCompanies(); })
@@ -4942,8 +4958,8 @@ function addCoFinish(withContact) {
     contactMsg = ` · contact ${contactName} added`;
   }
 
-  // Auto-create compliance notification case
-  compCases.push({
+  // Auto-create compliance notification case (only for prospects)
+  if(!asActive) compCases.push({
     id:'CEL-'+Math.floor(2900+Math.random()*100),
     type:'New Company Verification',typeCls:'s-check',
     co:d.name,status:'New',sCls:'s-prospect',
@@ -4951,7 +4967,7 @@ function addCoFinish(withContact) {
     by:updater
   });
   closeAddCo();
-  showToast(`"${d.name}" added${contactMsg}. Customer Compliance notified.`);
+  showToast(asActive ? `"${d.name}" added as an Active customer${contactMsg}.` : `"${d.name}" added${contactMsg}. Customer Compliance notified.`);
   renderCoTable();
   renderProspectsView();
   renderCustCompView();
