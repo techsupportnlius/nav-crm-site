@@ -6,6 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
 <script>
 // Applied before the page paints, so there's no flash of the wrong theme
@@ -409,6 +410,97 @@ thead th.cb-th{width:36px;padding:0 10px;}
 .mail-reading-actions{padding:10px 20px;border-top:1px solid var(--border);display:flex;gap:8px;background:var(--surface);flex-shrink:0;}
 .mail-compose-btn{display:flex;align-items:center;gap:7px;margin:10px;padding:7px 12px;border-radius:5px;background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:500;cursor:pointer;transition:opacity 0.1s;}
 .mail-compose-btn:hover{opacity:0.9;}
+
+/* ── OUTLOOK-STYLE MAIL ─────────────────────────────────────── */
+#view-mail{--ol:#0f6cbd;--ol-soft:rgba(15,108,189,0.12);font-family:"Segoe UI","Segoe UI Web (West European)",-apple-system,"Helvetica Neue",Arial,sans-serif;}
+#view-mail .mail-folders{width:210px;padding:10px 6px;}
+#view-mail .mail-compose-btn{background:var(--ol);border-radius:4px;margin:4px 6px 12px;padding:8px 14px;font-family:inherit;font-weight:600;font-size:13px;width:calc(100% - 12px);justify-content:center;}
+#view-mail .mail-folder-item{font-size:13px;padding:7px 12px;margin:1px 0;border-radius:4px;position:relative;font-family:inherit;}
+#view-mail .mail-folder-item.active{background:var(--ol-soft);color:var(--text);font-weight:600;}
+#view-mail .mail-folder-item.active::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:3px;border-radius:2px;background:var(--ol);}
+#view-mail .mail-folder-count{background:transparent;font-family:inherit;font-size:12px;color:var(--text-faint);}
+#view-mail .mail-folder-count.unread{background:transparent;color:var(--ol);font-weight:600;}
+#view-mail .mail-folder-label{font-size:11px;letter-spacing:0.02em;text-transform:none;font-weight:600;color:var(--text-muted);padding:10px 12px 4px;}
+#view-mail .mail-list{width:380px;display:flex;flex-direction:column;overflow:hidden;}
+#view-mail .mail-list-header{display:block;padding:12px 14px 8px;}
+#view-mail .ol-list-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+#view-mail .mail-list-title{font-size:16px;font-weight:600;}
+#view-mail .ol-tabs{display:flex;gap:2px;}
+#view-mail .ol-tab{border:none;background:transparent;color:var(--text-muted);font:inherit;font-size:12.5px;padding:3px 9px;border-radius:12px;cursor:pointer;}
+#view-mail .ol-tab.on{background:var(--ol-soft);color:var(--ol);font-weight:600;}
+#view-mail .ol-search{width:100%;box-sizing:border-box;padding:7px 10px 7px 30px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%23888' stroke-width='2' viewBox='0 0 24 24'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg>") no-repeat 9px center;color:var(--text);font:inherit;font-size:13px;outline:none;}
+#view-mail .ol-search:focus{border-color:var(--ol);}
+#view-mail #mailList{overflow-y:auto;flex:1;}
+#view-mail .mail-item{display:flex;gap:10px;padding:9px 12px 9px 14px;border-bottom:1px solid var(--border);position:relative;}
+#view-mail .mail-item.unread::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ol);}
+#view-mail .mail-item.active{background:var(--ol-soft);}
+#view-mail .ol-av{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;color:#fff;margin-top:2px;}
+#view-mail .ol-mi{flex:1;min-width:0;}
+#view-mail .ol-mi-top{display:flex;align-items:baseline;gap:8px;}
+#view-mail .ol-from{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px;color:var(--text);}
+#view-mail .mail-item.unread .ol-from{font-weight:700;}
+#view-mail .ol-date{font-size:12px;color:var(--text-faint);white-space:nowrap;}
+#view-mail .mail-item.unread .ol-date{color:var(--ol);font-weight:600;}
+#view-mail .ol-subj{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-muted);}
+#view-mail .mail-item.unread .ol-subj{color:var(--ol);font-weight:600;}
+#view-mail .ol-prev{font-size:12.5px;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+#view-mail .mail-reading{background:var(--surface);}
+#view-mail .ol-toolbar{display:flex;gap:4px;padding:8px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;flex-wrap:wrap;}
+#view-mail .ol-tb{display:flex;align-items:center;gap:6px;border:none;background:transparent;color:var(--text);font:inherit;font-size:13px;padding:6px 10px;border-radius:4px;cursor:pointer;}
+#view-mail .ol-tb:hover{background:var(--surface-2);}
+#view-mail .ol-tb svg{color:var(--ol);}
+#view-mail .ol-msg{padding:18px 24px 8px;overflow-y:auto;flex:1;}
+#view-mail .ol-subject{font-size:20px;font-weight:600;color:var(--text);margin-bottom:14px;line-height:1.3;}
+#view-mail .ol-head{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px;}
+#view-mail .ol-head .ol-av{width:40px;height:40px;font-size:14px;margin-top:0;}
+#view-mail .ol-who{flex:1;min-width:0;}
+#view-mail .ol-name{font-size:14px;font-weight:600;color:var(--text);}
+#view-mail .ol-addr{font-weight:400;color:var(--text-faint);font-size:12.5px;}
+#view-mail .ol-to{font-size:12.5px;color:var(--text-muted);margin-top:2px;word-break:break-word;}
+#view-mail .ol-when{font-size:12.5px;color:var(--text-faint);white-space:nowrap;}
+#view-mail .ol-body{font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word;padding-bottom:14px;}
+#view-mail .ol-earlier{margin:6px 0 20px;}
+#view-mail .ol-earlier summary{cursor:pointer;color:var(--ol);font-size:13px;padding:6px 0;}
+#view-mail .ol-quoted{border-left:3px solid var(--border);padding:4px 0 4px 12px;margin-top:6px;font-size:13px;color:var(--text-muted);white-space:pre-wrap;word-break:break-word;}
+#view-mail .ol-quick{display:flex;gap:8px;padding:10px 24px 16px;border-top:1px solid var(--border);flex-shrink:0;background:var(--surface);}
+#view-mail .ol-qbtn{border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:13px;padding:6px 14px;border-radius:4px;cursor:pointer;}
+#view-mail .ol-qbtn:hover{background:var(--surface-2);}
+/* rich text compose */
+.ol-rt{display:flex;align-items:center;gap:2px;padding:4px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.ol-rb{border:none;background:transparent;color:var(--text);font:inherit;font-size:13px;min-width:30px;height:28px;padding:0 8px;border-radius:4px;cursor:pointer;}
+.ol-rb:hover{background:var(--surface-2);}
+.ol-rsep{width:1px;height:18px;background:var(--border);margin:0 4px;}
+#ec-rich{overflow-y:auto;white-space:normal;word-break:break-word;}
+#ec-rich a{color:#0f6cbd;text-decoration:underline;}
+#ec-rich ul,#ec-rich ol{margin:4px 0 4px 22px;padding:0;}
+/* hover quick actions + flag */
+#view-mail .ol-qa{position:absolute;right:8px;top:24px;display:none;gap:2px;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:2px;box-shadow:0 2px 8px rgba(0,0,0,0.25);}
+#view-mail .mail-item:hover .ol-qa{display:flex;}
+#view-mail .ol-qa button{border:none;background:transparent;color:var(--text-muted);width:26px;height:24px;border-radius:4px;cursor:pointer;font-size:13px;}
+#view-mail .ol-qa button:hover{background:var(--surface-2);color:var(--text);}
+#view-mail .ol-flag{color:#c50f1f;margin-left:4px;font-size:12px;}
+#view-mail .ol-tb.on svg{color:#c50f1f;}
+#view-mail .ol-tb.danger svg{color:#c50f1f;}
+#view-mail .ol-grow{flex:1;}
+/* compose window */
+.ol-compose{width:720px;max-width:96vw;max-height:94vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,0.35);font-family:"Segoe UI",-apple-system,"Helvetica Neue",Arial,sans-serif;overflow:hidden;}
+.ol-c-bar{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text);}
+.ol-c-x{border:none;background:transparent;color:var(--text-muted);font-size:16px;cursor:pointer;padding:2px 6px;border-radius:4px;}
+.ol-c-x:hover{background:var(--surface-2);}
+.ol-c-tools{display:flex;align-items:center;gap:6px;padding:8px 14px;border-bottom:1px solid var(--border);}
+.ol-c-send{background:#0f6cbd;color:#fff;border:none;border-radius:4px;padding:7px 18px;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px;}
+.ol-c-send:hover{opacity:.92;}
+.ol-c-send:disabled{opacity:.6;cursor:default;}
+.ol-c-tb{border:none;background:transparent;color:var(--text);font:inherit;font-size:13px;padding:7px 10px;border-radius:4px;cursor:pointer;}
+.ol-c-tb:hover{background:var(--surface-2);}
+.ol-c-sub{padding:6px 16px 0;font-size:12px;color:var(--text-faint);margin:0;}
+.ol-c-row{display:flex;align-items:center;gap:10px;padding:2px 16px;border-bottom:1px solid var(--border);}
+.ol-c-row label{width:54px;font-size:13px;color:var(--text-muted);flex-shrink:0;}
+.ol-c-row input{flex:1;border:none;outline:none;background:transparent;color:var(--text);font:inherit;font-size:14px;padding:9px 0;min-width:0;}
+.ol-c-row input[readonly]{color:var(--text-faint);}
+.ol-c-body{flex:1;min-height:240px;border:none;outline:none;resize:none;background:transparent;color:var(--text);font:inherit;font-size:14px;line-height:1.6;padding:14px 16px;}
+.ol-c-foot{padding:6px 16px 12px;border-top:1px solid var(--border);}
+
 .mail-unknown-banner{margin:16px 20px;padding:12px 14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.35);border-radius:6px;}
 .mail-unknown-banner-title{font-size:13px;font-weight:500;color:var(--amber);margin-bottom:4px;}
 .mail-unknown-banner-sub{font-size:12px;color:var(--text-muted);}
@@ -649,6 +741,10 @@ thead th.cb-th{width:36px;padding:0 10px;}
       Mail
       <span class="nav-badge hot" id="navMailBadge">3</span>
     </div>
+    <div class="nav-item" id="navBulk" data-view="bulk-email" style="display:none;" onclick="nav(this,'bulk-email','Bulk Email')">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+      Bulk Email
+    </div>
     <div class="nav-section-label">Reporting</div>
     <div class="nav-item" data-view="reports" onclick="nav(this,'reports','Reports')">
       <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
@@ -884,8 +980,11 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <!-- Email list -->
     <div class="mail-list">
       <div class="mail-list-header">
-        <span class="mail-list-title" id="mailListTitle">Inbox</span>
-        <button class="mail-compose-btn" style="margin:0;padding:5px 10px;font-size:12px;" onclick="openMailCompose()">✏ Compose</button>
+        <div class="ol-list-top">
+          <span class="mail-list-title" id="mailListTitle">Inbox</span>
+          <div class="ol-tabs"><button class="ol-tab on" id="olTabAll" onclick="setMailFilter('all')">All</button><button class="ol-tab" id="olTabUnread" onclick="setMailFilter('unread')">Unread</button><button class="ol-tab" id="olTabFlag" onclick="setMailFilter('flagged')">Flagged</button></div>
+        </div>
+        <input class="ol-search" id="mailSearch" placeholder="Search mail" oninput="mailSearchText=this.value;renderMailList()">
       </div>
       <div id="mailList"></div>
     </div>
@@ -900,6 +999,37 @@ thead th.cb-th{width:36px;padding:0 10px;}
 </div>
 
 <!-- REPORTS -->
+<!-- BULK EMAIL (sent through Resend — separate from normal Microsoft 365 email) -->
+<div class="view" id="view-bulk-email">
+  <div class="view-header"><div><div class="view-title">Bulk Email</div>
+    <div style="font-size:12px;color:var(--text-faint);margin-top:3px;">Each person gets their own email from a separate sending address. Normal Outlook email is not affected.</div></div></div>
+  <div style="padding:0 24px 24px;overflow:auto;">
+    <div style="display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,1fr);gap:18px;max-width:1100px;">
+      <div style="border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--surface);">
+        <div style="font-weight:600;margin-bottom:8px;">1. Upload your list</div>
+        <div style="font-size:12px;color:var(--text-faint);line-height:1.5;margin-bottom:10px;">Excel (.xlsx) or CSV with a column called <b>email</b> — up to <b>50 people</b> per send. Optional columns: <b>first name</b> and <b>company</b>.
+          <a href="#" onclick="bulkDownloadTemplate();return false;" style="color:var(--accent);">Download a template</a></div>
+        <input type="file" id="bulkFile" accept=".csv,.xlsx,.xls" onchange="bulkHandleFile(this)">
+        <div id="bulkListInfo" style="margin-top:12px;font-size:12px;"></div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--surface);">
+        <div style="font-weight:600;margin-bottom:8px;">2. Write the email</div>
+        <input id="bulkName" placeholder="Name for this send (only you see it)" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);">
+        <input id="bulkSubject" placeholder="Subject" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);">
+        <textarea id="bulkBody" rows="9" placeholder="Hi {{first_name}},&#10;&#10;..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);font-family:inherit;"></textarea>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">You can use {{first_name}} and {{company}}. An unsubscribe line is added automatically.</div>
+        <button class="btn btn-primary" id="bulkSendBtn" style="margin-top:12px;" onclick="bulkSend()">Send to everyone on the list</button>
+      </div>
+    </div>
+    <div id="bulkResult" style="margin-top:16px;max-width:1100px;"></div>
+    <div style="margin-top:22px;max-width:1100px;">
+      <div style="font-weight:600;margin-bottom:8px;">Past sends</div>
+      <div id="bulkHistory" style="font-size:12.5px;">Loading…</div>
+      <div id="bulkDetail" style="margin-top:12px;"></div>
+    </div>
+  </div>
+</div>
+
 <div class="view" id="view-reports">
   <div class="view-header"><div><div class="view-title">Reports</div></div></div>
   <div class="empty">Reporting — Phase 5</div>
@@ -1375,43 +1505,39 @@ thead th.cb-th{width:36px;padding:0 10px;}
 
 <!-- EMAIL COMPOSE MODAL -->
 <div class="modal-overlay" id="emailComposeModal">
-  <div class="modal" style="max-width:520px;max-height:92vh;overflow-y:auto;">
-    <h3 id="emailComposeTitle" style="margin-bottom:4px;">Compose Email</h3>
-    <p style="font-size:12px;color:var(--text-faint);margin-bottom:16px;" id="emailComposeSubhead">Review and edit before sending.</p>
-    <div class="addco-field">
-      <label>From</label>
-      <input id="ec-from" readonly style="background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:7px 10px;width:100%;color:var(--text-faint);font-size:12.5px;font-family:var(--mono);">
+  <div class="ol-compose">
+    <div class="ol-c-bar"><span id="emailComposeTitle">New message</span><button class="ol-c-x" onclick="closeEmailCompose()" title="Close">✕</button></div>
+    <div class="ol-c-tools">
+      <button class="ol-c-send btn-primary" onclick="doSendEmail()">➤ Send</button>
+      <button class="ol-c-tb" onclick="document.getElementById('ec-attach-input').click()">📎 Attach</button>
+      <button class="ol-c-tb" onclick="closeEmailCompose()">🗑 Discard</button>
     </div>
-    <div class="addco-field">
-      <label>To</label>
-      <input id="ec-to" style="background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:7px 10px;width:100%;color:var(--text);font-size:12.5px;font-family:var(--mono);">
+    <p class="ol-c-sub" id="emailComposeSubhead">Review and edit before sending.</p>
+    <div class="ol-c-row"><label>From</label><input id="ec-from" readonly></div>
+    <div class="ol-c-row"><label>To</label><input id="ec-to" placeholder="Separate several addresses with commas"></div>
+    <div class="ol-c-row" id="ec-cc-wrap"><label>Cc</label><input id="ec-cc"></div>
+    <div class="ol-c-row"><label>Subject</label><input id="ec-subject" placeholder="Add a subject"></div>
+    <div class="ol-rt" id="ec-rt">
+      <button type="button" class="ol-rb" title="Bold" onmousedown="event.preventDefault();olFmt('bold')"><b>B</b></button>
+      <button type="button" class="ol-rb" title="Italic" onmousedown="event.preventDefault();olFmt('italic')"><i>I</i></button>
+      <button type="button" class="ol-rb" title="Underline" onmousedown="event.preventDefault();olFmt('underline')"><u>U</u></button>
+      <span class="ol-rsep"></span>
+      <button type="button" class="ol-rb" title="Bullet list" onmousedown="event.preventDefault();olFmt('insertUnorderedList')">&#8226;&#8801;</button>
+      <button type="button" class="ol-rb" title="Numbered list" onmousedown="event.preventDefault();olFmt('insertOrderedList')">1.&#8801;</button>
+      <span class="ol-rsep"></span>
+      <button type="button" class="ol-rb" title="Add link" onmousedown="event.preventDefault();olLink()">&#128279; Link</button>
+      <button type="button" class="ol-rb" title="Clear formatting" onmousedown="event.preventDefault();olFmt('removeFormat')">Tx</button>
     </div>
-    <div class="addco-field" id="ec-cc-wrap">
-      <label>CC</label>
-      <input id="ec-cc" style="background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:7px 10px;width:100%;color:var(--text);font-size:12.5px;font-family:var(--mono);">
-    </div>
-    <div class="addco-field">
-      <label>Subject</label>
-      <input id="ec-subject" style="background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:7px 10px;width:100%;color:var(--text);font-size:12.5px;font-family:var(--sans);">
-    </div>
-    <div class="addco-field">
-      <label>Message</label>
-      <textarea id="ec-body" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:9px 10px;font-size:12.5px;font-family:var(--sans);resize:vertical;min-height:160px;line-height:1.6;box-sizing:border-box;"></textarea>
-    </div>
-    <div class="addco-field" id="ec-attach-wrap">
-      <label>Attachments</label>
-      <div id="ec-attach-list" style="margin-bottom:6px;"></div>
+    <div class="ol-c-body" id="ec-rich" contenteditable="true" spellcheck="true"></div>
+    <textarea id="ec-body" style="display:none;"></textarea>
+    <div class="ol-c-foot" id="ec-attach-wrap">
+      <div id="ec-attach-list"></div>
       <input type="file" id="ec-attach-input" style="display:none;" onchange="addEmailAttachment(this)"
         accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.txt">
-      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('ec-attach-input').click()">📎 Attach File</button>
-    </div>
-    <div class="addco-field" id="ec-remind-wrap" style="display:none;">
-      <label>Follow-up reminder</label>
-      <select id="ec-remind" class="field-select"><option value="">No reminder</option><option value="2">Remind me in 2 days</option><option value="3">Remind me in 3 days</option><option value="7">Remind me in 1 week</option></select>
-    </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
-      <button class="btn btn-ghost" onclick="closeEmailCompose()">Cancel</button>
-      <button class="btn btn-primary" onclick="doSendEmail()">📧 Send Email</button>
+      <div id="ec-remind-wrap" style="display:none;margin-top:6px;font-size:12.5px;">
+        <label style="color:var(--text-muted);margin-right:8px;">Follow-up reminder</label>
+        <select id="ec-remind" class="field-select" style="width:auto;display:inline-block;"><option value="">No reminder</option><option value="2">Remind me in 2 days</option><option value="3">Remind me in 3 days</option><option value="7">Remind me in 1 week</option></select>
+      </div>
     </div>
   </div>
 </div>
@@ -2579,6 +2705,7 @@ function nav(el, view, label) {
   if(view==='user-management') renderUserManagement();
   if(view==='manage-lists') renderManageLists();
   if(view==='mail') renderMailView();
+  if(view==='bulk-email') bulkLoadHistory();
   if(view==='carrier-lanes') renderCarrierLanesReport();
   updateMailRefreshTimer();
 }
@@ -2657,6 +2784,8 @@ function updateSidebarForRole() {
 
   // Carrier Compliance nav: hide for Customer Compliance
   show('navCarrierComp',  !isCC && carrierAccessOn());
+  // Bulk Email: Admin, or anyone Admin switched it on for (real logins only)
+  show('navBulk', !!realUser && (isAdmin || realUser.canBulkEmail === true));
   // Customer Compliance nav: hide for Carrier Compliance only — a Sales
   // Rep can see it too, scoped (by the server) to just the cases they
   // personally submitted, so they can track a prospect they sent in.
@@ -2688,6 +2817,7 @@ function updateSidebarForRole() {
     'view-carrier-compliance': isCC || !carrierAccessOn(),
     'view-customer-compliance': isCarrCC,
     'view-reports': isSalesRep || isCC || isCarrCC,
+    'view-bulk-email': !(realUser && (isAdmin || realUser.canBulkEmail === true)),
   };
   if(activeView && restricted[activeView]) {
     nav(document.querySelector('[data-view="dashboard"]'),'dashboard','Dashboard');
@@ -6017,7 +6147,7 @@ function renderUserManagement() {
       : `<span style="font-size:11.5px;color:var(--text-faint);">—</span>`;
 
     // Module Access summary chips
-    const ma = Object.assign({carrierCompliance:true}, u.moduleAccess || {prospects:true,customers:true,contacts:true,custCompliance:true});
+    const ma = Object.assign({carrierCompliance:true,bulkEmail:false}, u.moduleAccess || {prospects:true,customers:true,contacts:true,custCompliance:true});
     const modLabels = {prospects:'Prospects',customers:'Customers',contacts:'Contacts',custCompliance:'Cust. Compliance',carrierCompliance:'Carrier Compliance'};
     const enabledCount = Object.values(ma).filter(Boolean).length;
     const moduleAccessSummary = u.status === 'Former Employee'
@@ -6164,7 +6294,7 @@ function openUserDrawer(userId) {
     </div>`).join('');
 
   // Module Access section (Admin only, for non-former employees)
-  const ma = Object.assign({carrierCompliance:true}, u.moduleAccess || {prospects:true,customers:true,contacts:true,custCompliance:true});
+  const ma = Object.assign({carrierCompliance:true,bulkEmail:false}, u.moduleAccess || {prospects:true,customers:true,contacts:true,custCompliance:true});
   const isAdmin = currentRole === 'Admin';
   const moduleAccessSection = (isAdmin && u.status !== 'Former Employee') ? `
     <div class="d-sec">
@@ -6179,6 +6309,7 @@ function openUserDrawer(userId) {
           {key:'contacts',label:'Contacts',icon:'👤'},
           {key:'custCompliance',label:'Customer Compliance',icon:'📋'},
           {key:'carrierCompliance',label:'Carrier Compliance',icon:'🚚'},
+          {key:'bulkEmail',label:'Bulk Email',icon:'📣'},
         ].map(m=>`
           <label style="display:flex;align-items:center;gap:9px;padding:9px 12px;border:1px solid ${ma[m.key]?'rgba(34,197,94,0.25)':'var(--border)'};border-radius:5px;background:${ma[m.key]?'rgba(34,197,94,0.05)':'var(--surface-2)'};cursor:pointer;transition:all 0.15s;" onclick="event.stopPropagation();">
             <input type="checkbox" ${ma[m.key]?'checked':''} style="width:14px;height:14px;accent-color:var(--green);cursor:pointer;"
@@ -6189,6 +6320,11 @@ function openUserDrawer(userId) {
             </div>
           </label>`).join('')}
       </div>
+      ${ma.bulkEmail ? `<div style="margin-top:10px;font-size:12px;display:flex;align-items:center;gap:8px;" onclick="event.stopPropagation();">
+        <span>Bulk Email daily limit (people per day):</span>
+        <input type="number" min="1" value="${u.bulkDailyLimit||''}" placeholder="300 (default)" style="width:120px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"
+          onchange="setBulkDailyLimit('${u.id}',this.value)">
+      </div>` : ''}
     </div>` : '';
 
   document.getElementById('dTitle').textContent = u.name;
@@ -6520,7 +6656,7 @@ function setUserModuleAccess(userId, mod, val) {
   if(!u) return;
   if(!u.moduleAccess) u.moduleAccess = {prospects:true,customers:true,contacts:true,custCompliance:true};
   u.moduleAccess[mod] = val;
-  const labels = {prospects:'Prospect Companies',customers:'Active Customers',contacts:'Contacts',custCompliance:'Customer Compliance',carrierCompliance:'Carrier Compliance'};
+  const labels = {prospects:'Prospect Companies',customers:'Active Customers',contacts:'Contacts',custCompliance:'Customer Compliance',carrierCompliance:'Carrier Compliance',bulkEmail:'Bulk Email'};
   if(!u.auditLog) u.auditLog = [];
   u.auditLog.push({ts: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}), action:`Module access "${labels[mod]}" set to ${val?'Enabled':'Disabled'}`, by: getDemoUser()?.name||'Admin'});
   showToast(`${labels[mod]} access ${val?'enabled':'disabled'} for ${u.name}`);
@@ -6532,6 +6668,16 @@ function setUserModuleAccess(userId, mod, val) {
     }).catch(err => console.error('Save module access failed', err));
   }
   renderUserManagement();
+}
+
+function setBulkDailyLimit(userId, val) {
+  if(currentRole !== 'Admin') return;
+  const u = usersDB.find(u=>u.id===userId);
+  if(u) u.bulkDailyLimit = val ? Number(val) : null;
+  if(!realUser) return;
+  apiFetch(`/api/users/${encodeURIComponent(userId)}/bulk-limit`, { method:'PATCH', body: JSON.stringify({ limit: val===''?null:Number(val) }) })
+    .then(async res => { if(res.ok) showToast('Bulk daily limit saved.'); else { const b=await res.json().catch(()=>({})); showToast('Could not save: '+(b.error||res.status)); } })
+    .catch(()=>showToast('Could not save the limit.'));
 }
 
 function toggleViewRestriction(userId, key, val) {
@@ -7813,10 +7959,11 @@ function openEmailCompose(type, mc, opts) {
     document.getElementById('ec-from').value = opts.from||(currentUserEmail()||'nav@nlius.com');
     document.getElementById('ec-to').value = opts.to||'';
     document.getElementById('ec-cc').value = opts.cc||'';
-    document.getElementById('ec-cc-wrap').style.display = opts.showCc ? 'block' : 'none';
+    document.getElementById('ec-cc-wrap').style.display = opts.showCc ? 'flex' : 'none';
     document.getElementById('ec-subject').value = opts.subject||'';
     document.getElementById('ec-body').value = (opts.body||'') + '\n\n' + sig;
     { const rw = document.getElementById('ec-remind-wrap'); if(rw) { rw.style.display = (realUser && opts.companyId!=null) ? 'block' : 'none'; document.getElementById('ec-remind').value=''; } }
+    olLoadRich();
     modal.classList.add('open');
     return;
   }
@@ -7831,7 +7978,7 @@ function openEmailCompose(type, mc, opts) {
     document.getElementById('ec-from').value = u?.email||'ops.carrier@nlius.com';
     document.getElementById('ec-to').value = c.dispEmail||'dispatcher@carrier.com';
     document.getElementById('ec-cc').value = c.brokerEmail||(c.broker+' (broker)');
-    document.getElementById('ec-cc-wrap').style.display='block';
+    document.getElementById('ec-cc-wrap').style.display='flex';
     document.getElementById('ec-subject').value = `Carrier Onboarding — ${c.carrier} (${c.mc})`;
     document.getElementById('ec-body').value =
 `Hi ${c.dispName||'Dispatcher'},
@@ -7885,6 +8032,7 @@ Please reply directly to this email. Do not include the carrier or their represe
 
 ${sig}`;
   }
+  olLoadRich();
   modal.classList.add('open');
 }
 
@@ -7954,18 +8102,18 @@ async function sendRealCompanyEmail(co, toAddr, ccAddr, subject, body, attachmen
   try {
     const res = await apiFetch(`/api/companies/${co.id}/send-email`, {
       method: 'POST',
-      body: JSON.stringify({ to: toAddr, cc: ccAddr, subject, body, graphAccessToken: graphToken || undefined }),
+      body: JSON.stringify({ to: toAddr, cc: ccAddr, subject, body, bodyHtml: emailComposeHtml || undefined, graphAccessToken: graphToken || undefined }),
     });
     if(!res.ok) {
       const err = await res.json().catch(()=>({}));
       showToast(err.error || 'That email did not send — please try again.');
-      if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '📧 Send Email'; }
+      if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '➤ Send'; }
       return;
     }
   } catch(e) {
     console.error('Real send failed:', e);
     showToast('That email did not send — please try again.');
-    if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '📧 Send Email'; }
+    if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '➤ Send'; }
     return;
   }
 
@@ -8013,7 +8161,7 @@ async function sendRealGenericEmail(toAddr, ccAddr, subject, body, emailId) {
 
   const graphToken = await getGraphToken();
   if(!graphToken) {
-    if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '📧 Send Email'; }
+    if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '➤ Send'; }
     showToast('Your mailbox isn\'t connected yet — click "Connect Mailbox" at the top, then try again.');
     return;
   }
@@ -8026,20 +8174,20 @@ async function sendRealGenericEmail(toAddr, ccAddr, subject, body, emailId) {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + graphToken, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: { subject: subject || '(no subject)', body: { contentType: 'Text', content: body || '' }, toRecipients, ccRecipients },
+        message: { subject: subject || '(no subject)', body: emailComposeHtml ? { contentType: 'HTML', content: emailComposeHtml } : { contentType: 'Text', content: body || '' }, toRecipients, ccRecipients },
         saveToSentItems: true,
       }),
     });
     if(!res.ok) {
       console.error('Graph sendMail failed:', res.status, await res.text().catch(()=> ''));
       showToast('That email did not send — please try again.');
-      if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '📧 Send Email'; }
+      if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '➤ Send'; }
       return;
     }
   } catch(e) {
     console.error('Real send failed:', e);
     showToast('That email did not send — please try again.');
-    if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '📧 Send Email'; }
+    if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '➤ Send'; }
     return;
   }
 
@@ -8048,6 +8196,48 @@ async function sendRealGenericEmail(toAddr, ccAddr, subject, body, emailId) {
   // Not tied to any CRM company record, so there's no Activity/Emails tab
   // to log it to — it'll show up in the Mail sidebar's Sent folder on the
   // next refresh, same as anything else sent from the real mailbox.
+}
+
+// ── Rich-text compose helpers ─────────────────────────────────
+let emailComposeHtml = null;
+function olEscHtml(t) { return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function olLoadRich() {
+  const rich = document.getElementById('ec-rich'), ta = document.getElementById('ec-body');
+  if(!rich || !ta) return;
+  rich.innerHTML = olEscHtml(ta.value).replace(/\n/g,'<br>');
+  emailComposeHtml = null;
+}
+function olFmt(cmd) { const r=document.getElementById('ec-rich'); if(r) { r.focus(); document.execCommand(cmd,false,null); } }
+function olLink() {
+  const r=document.getElementById('ec-rich'); if(!r) return;
+  r.focus();
+  let url = (prompt('Link address (https://…):','https://')||'').trim();
+  if(!url) return;
+  if(!/^(https?:\/\/|mailto:)/i.test(url)) url = 'https://' + url;
+  document.execCommand('createLink', false, url);
+}
+const OL_OK_TAGS = {B:'b',STRONG:'strong',I:'i',EM:'em',U:'u',UL:'ul',OL:'ol',LI:'li',P:'p',DIV:'div'};
+function olCleanNode(n) {
+  if(n.nodeType === 3) return olEscHtml(n.nodeValue);
+  if(n.nodeType !== 1) return '';
+  const tag = n.tagName;
+  const inner = Array.from(n.childNodes).map(olCleanNode).join('');
+  if(tag === 'SCRIPT' || tag === 'STYLE') return '';
+  if(tag === 'BR') return '<br>';
+  if(tag === 'A') {
+    const href = (n.getAttribute('href')||'').trim();
+    return /^(https?:\/\/|mailto:)/i.test(href) ? `<a href="${olEscHtml(href).replace(/"/g,'&quot;')}">${inner}</a>` : inner;
+  }
+  const t = OL_OK_TAGS[tag];
+  return t ? `<${t}>${inner}</${t}>` : inner;
+}
+// Copies what's typed in the editor back into the plain-text box (used by the
+// CRM log + every older code path) and builds the cleaned HTML version.
+function olSyncFromRich() {
+  const rich = document.getElementById('ec-rich'), ta = document.getElementById('ec-body');
+  if(!rich || !ta) return;
+  ta.value = (rich.innerText || '').replace(/\u00a0/g,' ').replace(/\n{3,}/g,'\n\n').trimEnd();
+  emailComposeHtml = Array.from(rich.childNodes).map(olCleanNode).join('');
 }
 
 function closeEmailCompose() {
@@ -8059,6 +8249,7 @@ function closeEmailCompose() {
 
 async function doSendEmail() {
   if(!emailComposeContext) return;
+  olSyncFromRich();
   const {type, mc, companyId} = emailComposeContext;
   // A real signed-in user's own mailbox address always wins over the demo
   // role-switcher's address — same fix as openSalesEmail() above.
@@ -8284,7 +8475,7 @@ function getMailbox() {
   // mail (see the REAL O365 MAIL section below); until then the Mail
   // screen shows a "Connect Mailbox" prompt instead of fake data.
   if(realUser) {
-    return [...realMail.inbox, ...realMail.sent, ...realMail.drafts];
+    return [...realMail.inbox, ...realMail.sent, ...realMail.drafts, ...realMail.deleted];
   }
   if(currentRole === 'COI Specialist' && mailAccount === 'coi') {
     return coiSharedMailboxDB;
@@ -8296,9 +8487,10 @@ function getMailbox() {
 // Separate from sending (companies.js's sendCompanyEmail): reading one's
 // own mail needs no server-side permission arbitration, so this is pure
 // frontend Graph calls once "Connect Mailbox" has granted Mail.Read.
-const REAL_MAIL_GRAPH_FOLDER = { inbox: 'inbox', sent: 'sentitems', drafts: 'drafts' };
-let realMail = { inbox: [], sent: [], drafts: [] };
-let realMailNextLink = { inbox: null, sent: null, drafts: null };
+const REAL_MAIL_GRAPH_FOLDER = { inbox: 'inbox', sent: 'sentitems', drafts: 'drafts', deleted: 'deleteditems' };
+let realMail = { inbox: [], sent: [], drafts: [], deleted: [] };
+let realMailDeletedLoaded = false;
+let realMailNextLink = { inbox: null, sent: null, drafts: null, deleted: null };
 let realMailLoaded = false;
 let realMailLoading = false;
 let realMailLastRefreshed = null;
@@ -8416,6 +8608,7 @@ function graphMessageToMail(m, folder) {
     date: when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
     time: when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
     unread: m.isRead === false,
+    flagged: !!(m.flag && m.flag.flagStatus === 'flagged'),
     domain: (from.address || toList[0] || '').split('@')[1] || '',
     // Raw timestamp, kept alongside the display-formatted date/time above,
     // so re-sorting after merging a background refresh with an already
@@ -8462,7 +8655,7 @@ async function loadRealMailFolder(folderKey, opts = {}) {
     const filter = folderKey === 'drafts' ? '' : `&$filter=${dateField} ge ${since}`;
     url = `https://graph.microsoft.com/v1.0/me/mailFolders/${graphFolder}/messages`
       + `?$top=50&$orderby=${dateField} desc`
-      + `&$select=id,conversationId,subject,bodyPreview,body,from,sender,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead`
+      + `&$select=id,conversationId,subject,bodyPreview,body,from,sender,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,flag`
       + filter;
   }
   const data = await graphFetch(url);
@@ -8589,7 +8782,7 @@ function renderMailView() {
     ${accountSwitcher}
     <button class="mail-compose-btn" onclick="openMailCompose()">
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-      Compose
+      New mail
     </button>
     <div class="mail-folder-label">Folders</div>
     <div class="mail-folder-item ${mailFolder==='inbox'?'active':''}" onclick="setMailFolder('inbox')">
@@ -8599,7 +8792,7 @@ function renderMailView() {
     </div>
     <div class="mail-folder-item ${mailFolder==='sent'?'active':''}" onclick="setMailFolder('sent')">
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-      Sent
+      Sent Items
       <span class="mail-folder-count">${sent.length}</span>
     </div>
     <div class="mail-folder-item ${mailFolder==='drafts'?'active':''}" onclick="setMailFolder('drafts')">
@@ -8649,7 +8842,7 @@ function renderRealMailView() {
   foldersEl.innerHTML = `
     <button class="mail-compose-btn" onclick="openMailCompose()">
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-      Compose
+      New mail
     </button>
     <div class="mail-folder-label">Folders</div>
     <div class="mail-folder-item ${mailFolder==='inbox'?'active':''}" onclick="setMailFolder('inbox')">
@@ -8659,13 +8852,18 @@ function renderRealMailView() {
     </div>
     <div class="mail-folder-item ${mailFolder==='sent'?'active':''}" onclick="setMailFolder('sent')">
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-      Sent
+      Sent Items
       <span class="mail-folder-count">${sent.length}</span>
     </div>
     <div class="mail-folder-item ${mailFolder==='drafts'?'active':''}" onclick="setMailFolder('drafts')">
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
       Drafts
       <span class="mail-folder-count">${drafts.length}</span>
+    </div>
+    <div class="mail-folder-item ${mailFolder==='deleted'?'active':''}" onclick="setMailFolder('deleted')">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+      Deleted Items
+      <span class="mail-folder-count">${realMail.deleted.length || ''}</span>
     </div>
     <div class="mail-folder-divider"></div>
     <div style="padding:6px 4px;">
@@ -8682,6 +8880,10 @@ function renderRealMailView() {
 
 function setMailFolder(folder) {
   mailFolder = folder;
+  if(realUser && folder==='deleted' && !realMailDeletedLoaded && mailboxConnected) {
+    realMailDeletedLoaded = true;
+    loadRealMailFolder('deleted').then(()=>{ if(currentViewName==='mail') renderMailView(); });
+  }
   mailSelected = null;
   document.getElementById('mailReadingPane').innerHTML = `
     <div class="mail-reading-empty">
@@ -8691,11 +8893,37 @@ function setMailFolder(folder) {
   renderMailView();
 }
 
+let mailSearchText = '';
+let mailFilterMode = 'all';
+function setMailFilter(m) {
+  mailFilterMode = m;
+  const a=document.getElementById('olTabAll'), u=document.getElementById('olTabUnread'), f=document.getElementById('olTabFlag');
+  if(a) a.classList.toggle('on', m==='all'); if(u) u.classList.toggle('on', m==='unread'); if(f) f.classList.toggle('on', m==='flagged');
+  renderMailList();
+}
+const OL_COLORS = ['#0f6cbd','#8764b8','#038387','#c239b3','#498205','#ca5010','#da3b01','#986f0b','#5c2e91','#0078d4'];
+function olColor(str) { let h=0; for(const ch of String(str||'')) h=(h*31+ch.charCodeAt(0))|0; return OL_COLORS[Math.abs(h)%OL_COLORS.length]; }
+function olInitials(name, addr) {
+  const n = String(name||'').replace(/[<>"]/g,'').trim();
+  const src = (n && n!==addr) ? n : String(addr||'?').split('@')[0].replace(/[._-]+/g,' ');
+  const p = src.split(/\s+/).filter(Boolean);
+  return ((p[0]||'?')[0] + (p.length>1 ? p[p.length-1][0] : '')).toUpperCase();
+}
+// Outlook-style date: time today, weekday this week, otherwise the date.
+function olDate(ts) {
+  if(!ts) return '';
+  const d = new Date(ts), now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if(ts >= startToday) return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  if(ts >= startToday - 6*86400000) return d.toLocaleDateString('en-US',{weekday:'short'});
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric', year: d.getFullYear()===now.getFullYear()?undefined:'numeric'});
+}
 function renderMailList() {
   const listEl = document.getElementById('mailList');
   const titleEl = document.getElementById('mailListTitle');
+  const folderName = ({inbox:'Inbox', sent:'Sent Items', drafts:'Drafts', deleted:'Deleted Items'})[mailFolder] || mailFolder;
   if(realUser && mailboxConnected && !realMailLoaded && !realMailError) {
-    if(titleEl) titleEl.textContent = mailFolder.charAt(0).toUpperCase()+mailFolder.slice(1);
+    if(titleEl) titleEl.textContent = folderName;
     listEl.innerHTML = `<div style="padding:30px 14px;text-align:center;color:var(--text-faint);font-size:13px;">Loading your mailbox…</div>`;
     return;
   }
@@ -8703,7 +8931,7 @@ function renderMailList() {
   // load used to look exactly like an empty folder, which is what made a
   // stale/broken connection so hard to notice.
   if(realUser && mailboxConnected && realMailError) {
-    if(titleEl) titleEl.textContent = mailFolder.charAt(0).toUpperCase()+mailFolder.slice(1);
+    if(titleEl) titleEl.textContent = folderName;
     const isNotConnected = realMailError === 'not-connected';
     listEl.innerHTML = `<div style="padding:30px 14px;text-align:center;color:var(--red);font-size:13px;">
       ${isNotConnected ? 'Your mailbox connection expired — reconnect to see your real mail again.' : "Couldn't load your mailbox — " + esc(realMailError)}<br>
@@ -8711,24 +8939,37 @@ function renderMailList() {
     </div>`;
     return;
   }
-  const emails = getMailbox().filter(e=>e.folder===mailFolder);
-  if(titleEl) titleEl.textContent = mailFolder.charAt(0).toUpperCase()+mailFolder.slice(1)+` (${emails.length})`;
+  let emails = getMailbox().filter(e=>e.folder===mailFolder);
+  const total = emails.length;
+  if(mailFilterMode==='unread') emails = emails.filter(e=>e.unread);
+  if(mailFilterMode==='flagged') emails = emails.filter(e=>e.flagged);
+  const q = (mailSearchText||'').trim().toLowerCase();
+  if(q) emails = emails.filter(e=>[e.fromName,e.from,e.to,e.subject,e.body].join(' ').toLowerCase().includes(q));
+  if(titleEl) titleEl.textContent = folderName;
   if(!emails.length) {
-    listEl.innerHTML = `<div style="padding:30px 14px;text-align:center;color:var(--text-faint);font-size:13px;">No emails in this folder.</div>`;
+    listEl.innerHTML = `<div style="padding:30px 14px;text-align:center;color:var(--text-faint);font-size:13px;">${(q||mailFilterMode!=='all') ? 'Nothing matches.' : 'No emails in this folder.'}</div>`;
     return;
   }
-  listEl.innerHTML = emails.map(e=>`
+  listEl.innerHTML = emails.map(e=>{
+    const outgoing = mailFolder==='sent' || mailFolder==='drafts';
+    const who = outgoing ? (e.to || '(no recipient)') : (e.fromName || e.from);
+    const initSrc = outgoing ? e.to.split(',')[0] : e.fromName;
+    const prev = String(e.bodyMain || e.body || '').replace(/\s+/g,' ').trim().slice(0,110);
+    return `
     <div class="mail-item ${e.unread?'unread':''} ${mailSelected===e.id?'active':''}" onclick="openMailEmail('${e.id}')">
-      <div class="mail-item-meta">
-        <div class="mail-item-from">
-          ${e.unread?'<span class="mail-unread-dot"></span>':''}
-          ${mailFolder==='sent'||mailFolder==='drafts' ? 'To: '+e.to : e.fromName}
-        </div>
-        <span class="mail-item-time">${e.time}</span>
+      <div class="ol-av" style="background:${olColor(outgoing?e.to:e.from)}">${esc(olInitials(initSrc, outgoing?e.to:e.from))}</div>
+      <div class="ol-mi">
+        <div class="ol-mi-top"><span class="ol-from">${esc(who)}${e.flagged?'<span class="ol-flag">⚑</span>':''}</span><span class="ol-date">${esc(e._ts ? olDate(e._ts) : (e.time||''))}</span></div>
+        <div class="ol-subj">${esc(e.subject)}</div>
+        <div class="ol-prev">${esc(prev)}</div>
       </div>
-      <div class="mail-item-subject">${e.subject}</div>
-      <div class="mail-item-preview">${e.body.replace(/\n/g,' ').slice(0,70)}…</div>
-    </div>`).join('');
+      <div class="ol-qa">
+        <button title="${e.unread?'Mark as read':'Mark as unread'}" onclick="mailToggleRead('${e.id}',event)">${e.unread?'✉':'✓'}</button>
+        <button title="${e.flagged?'Remove flag':'Flag'}" onclick="mailToggleFlag('${e.id}',event)" style="${e.flagged?'color:#c50f1f':''}">⚑</button>
+        <button title="Delete" onclick="mailDelete('${e.id}',event)">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function openMailEmail(id) {
@@ -8744,36 +8985,132 @@ function openMailEmail(id) {
   const isUnknownSender = mailFolder==='inbox' && senderDomain && !knownDomains.includes(senderDomain) && !senderDomain.endsWith('nlius.com');
   // Find linked company
   const linkedCo = customers.find(c=>c.domain===senderDomain) || null;
+  const outgoing = mailFolder==='sent' || mailFolder==='drafts';
   const pane = document.getElementById('mailReadingPane');
+  const main = email.bodyMain !== undefined && email.bodyMain !== '' ? email.bodyMain : email.body;
+  const quoted = email.bodyQuoted || '';
+  const ic = n => `<svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${n}</svg>`;
   pane.innerHTML = `
+    <div class="ol-toolbar">
+      <button class="ol-tb" onclick="replyToEmail('${id}')">${ic('<polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>')} Reply</button>
+      <button class="ol-tb" onclick="replyAllToEmail('${id}')">${ic('<polyline points="7 17 2 12 7 7"/><polyline points="12 17 7 12 12 7"/><path d="M22 18v-2a4 4 0 0 0-4-4H7"/>')} Reply all</button>
+      <button class="ol-tb" onclick="forwardEmail('${id}')">${ic('<polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/>')} Forward</button>
+      ${linkedCo ? `<button class="ol-tb" onclick="openCustomerDrawer(${linkedCo.id})">${ic('<path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/>')} Open ${esc(linkedCo.name)}</button>` : ''}
+      <span class="ol-grow"></span>
+      <button class="ol-tb ${email.flagged?'on':''}" onclick="mailToggleFlag('${id}',event)">${ic('<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>')} ${email.flagged?'Unflag':'Flag'}</button>
+      <button class="ol-tb" onclick="mailToggleRead('${id}',event)">${ic('<path d="M4 4h16v16H4z"/><polyline points="22,6 12,13 2,6"/>')} Mark as unread</button>
+      <button class="ol-tb danger" onclick="mailDelete('${id}',event)">${ic('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>')} Delete</button>
+    </div>
     ${isUnknownSender ? `
-    <div class="mail-unknown-banner">
-      <div class="mail-unknown-banner-title">Unknown sender — ${email.fromName} (${email.from})</div>
+    <div class="mail-unknown-banner" style="margin:12px 24px 0;">
+      <div class="mail-unknown-banner-title">Unknown sender — ${esc(email.fromName)} (${esc(email.from)})</div>
       <div class="mail-unknown-banner-sub">
-        ${linkedCo ? `Domain matches <strong>${linkedCo.name}</strong>. ` : 'No matching company in CRM. '}
-        <button class="btn btn-ghost btn-sm" style="margin-left:8px;font-size:11px;" onclick="promptAddContact('${id}')">+ Add as Contact${linkedCo?' to '+linkedCo.name:''}</button>
+        ${linkedCo ? `Domain matches <strong>${esc(linkedCo.name)}</strong>. ` : 'No matching company in CRM. '}
+        <button class="btn btn-ghost btn-sm" style="margin-left:8px;font-size:11px;" onclick="promptAddContact('${id}')">+ Add as Contact${linkedCo?' to '+esc(linkedCo.name):''}</button>
       </div>
     </div>` : ''}
-    <div class="mail-reading-header">
-      <div class="mail-reading-subject">${email.subject}</div>
-      <div class="mail-reading-meta">
-        <span><strong style="color:var(--text-faint);">From:</strong> ${email.fromName} &lt;${email.from}&gt;</span>
-        <span><strong style="color:var(--text-faint);">To:</strong> ${email.to}</span>
-        <span style="margin-left:auto;"><strong style="color:var(--text-faint);">${email.date}</strong> · ${email.time}</span>
+    <div class="ol-msg">
+      <div class="ol-subject">${esc(email.subject)}</div>
+      <div class="ol-head">
+        <div class="ol-av" style="background:${olColor(email.from)}">${esc(olInitials(email.fromName, email.from))}</div>
+        <div class="ol-who">
+          <div class="ol-name">${esc(email.fromName)} <span class="ol-addr">&lt;${esc(email.from)}&gt;</span></div>
+          <div class="ol-to">To: ${esc(email.to||'')}</div>
+        </div>
+        <div class="ol-when">${esc(email.date)} · ${esc(email.time)}</div>
       </div>
+      <div class="ol-body">${esc(main)}</div>
+      ${quoted ? `<details class="ol-earlier"><summary>Show earlier messages</summary><div class="ol-quoted">${esc(quoted)}</div></details>` : ''}
     </div>
-    <div class="mail-reading-body">${email.body}</div>
-    <div class="mail-reading-actions">
-      <button class="btn btn-ghost btn-sm" onclick="replyToEmail('${id}')">↩ Reply</button>
-      <button class="btn btn-ghost btn-sm" onclick="replyAllToEmail('${id}')">↩↩ Reply All</button>
-      <button class="btn btn-ghost btn-sm" onclick="forwardEmail('${id}')">→ Forward</button>
-      ${linkedCo ? `<button class="btn btn-ghost btn-sm" onclick="openCustomerDrawer(${linkedCo.id})">🏢 Open ${linkedCo.name}</button>` : ''}
+    <div class="ol-quick">
+      <button class="ol-qbtn" onclick="replyToEmail('${id}')">↩ Reply</button>
+      <button class="ol-qbtn" onclick="replyAllToEmail('${id}')">↩↩ Reply all</button>
+      <button class="ol-qbtn" onclick="forwardEmail('${id}')">→ Forward</button>
     </div>
   `;
   // Re-render list to show read state
   renderMailList();
   // Update badge
   updateNavBadges();
+}
+
+// ── Mail actions: mark read/unread, flag, delete ──────────────
+// Real mailboxes go to Microsoft (needs the Mail.ReadWrite permission); the
+// demo mailbox just changes locally. Each one updates the screen first and
+// puts it back if Microsoft refuses.
+function mailActionError(status) {
+  if(status === 403 || status === 401) showToast('Microsoft needs the new mailbox permission — click "Connect Mailbox" at the top and approve it, then try again.');
+  else showToast('That did not work — please try again.');
+}
+async function mailGraphCall(method, id, suffix, body) {
+  const token = await getGraphToken();
+  if(!token) { showToast('Your mailbox isn\'t connected — click "Connect Mailbox" at the top.'); return null; }
+  try {
+    const res = await fetch('https://graph.microsoft.com/v1.0/me/messages/' + encodeURIComponent(id) + (suffix || ''), {
+      method, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if(!res.ok) { mailActionError(res.status); return null; }
+    return res;
+  } catch(e) { console.error('Mail action failed', e); mailActionError(0); return null; }
+}
+async function mailToggleRead(id, ev) {
+  if(ev) ev.stopPropagation();
+  const email = getMailbox().find(e=>e.id===id); if(!email) return;
+  const wasUnread = !!email.unread;
+  email.unread = !wasUnread;
+  renderMailList(); updateNavBadges();
+  if(currentViewName==='mail') renderMailView();
+  if(realUser) {
+    const res = await mailGraphCall('PATCH', id, '', { isRead: !email.unread });
+    if(!res) { email.unread = wasUnread; renderMailList(); updateNavBadges(); if(currentViewName==='mail') renderMailView(); }
+  }
+}
+async function mailToggleFlag(id, ev) {
+  if(ev) ev.stopPropagation();
+  const email = getMailbox().find(e=>e.id===id); if(!email) return;
+  const was = !!email.flagged;
+  email.flagged = !was;
+  renderMailList();
+  if(mailSelected===id) openMailEmail(id);
+  if(realUser) {
+    const res = await mailGraphCall('PATCH', id, '', { flag: { flagStatus: email.flagged ? 'flagged' : 'notFlagged' } });
+    if(!res) { email.flagged = was; renderMailList(); if(mailSelected===id) openMailEmail(id); }
+  }
+}
+function mailClearReading() {
+  mailSelected = null;
+  const p = document.getElementById('mailReadingPane');
+  if(p) p.innerHTML = `<div class="mail-reading-empty"><svg width="40" height="40" fill="none" stroke="var(--border-2)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg><span style="font-size:13px;">Select an email to read</span></div>`;
+}
+async function mailDelete(id, ev) {
+  if(ev) ev.stopPropagation();
+  const email = getMailbox().find(e=>e.id===id); if(!email) return;
+  const permanent = email.folder === 'deleted';
+  if(permanent && !confirm('Delete this message forever? This cannot be undone.')) return;
+  if(realUser) {
+    let newMsg = null;
+    if(permanent) {
+      const res = await mailGraphCall('DELETE', id, '');
+      if(!res) return;
+    } else {
+      const res = await mailGraphCall('POST', id, '/move', { destinationId: 'deleteditems' });
+      if(!res) return;
+      try { newMsg = await res.json(); } catch(e) {}
+    }
+    const src = realMail[email.folder];
+    const i = src ? src.findIndex(e=>e.id===id) : -1;
+    if(i > -1) src.splice(i, 1);
+    if(!permanent && realMailDeletedLoaded) {
+      email.folder = 'deleted'; if(newMsg && newMsg.id) email.id = newMsg.id;
+      realMail.deleted.unshift(email);
+    }
+  } else {
+    const box = getMailbox(); const i = box.findIndex(e=>e.id===id); if(i > -1) box.splice(i, 1);
+  }
+  if(mailSelected === id) mailClearReading();
+  showToast(permanent ? 'Message deleted permanently.' : 'Moved to Deleted Items.');
+  renderMailView(); updateNavBadges();
 }
 
 function promptAddContact(emailId) {
@@ -9105,7 +9442,7 @@ async function getGoogleTokenSilently() {
 // "Connect Mailbox" stays a single step — it also unlocks the real O365
 // inbox in the Mail sidebar and the per-company Emails tab (see the
 // REAL O365 MAIL section below).
-const GRAPH_MAIL_SCOPES = ['Mail.Send', 'Mail.Read'];
+const GRAPH_MAIL_SCOPES = ['Mail.Send', 'Mail.ReadWrite']; // ReadWrite = read + delete / flag / mark read-unread
 let mailboxConnected = false;
 
 async function connectMailbox() {
@@ -9855,6 +10192,7 @@ async function finishLogin() {
       initials: (me.full_name || '').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase() || 'U',
       teamIds: me.teamIds || [],
       carrierAccess: me.carrierAccess !== false,
+      canBulkEmail: me.canBulkEmail === true,
     };
     applyRealUser(realUser);
     // Wipe every piece of demo data before real data loads (the demo roster
@@ -9913,6 +10251,106 @@ renderCustCompView();
 renderDashboard();
 updateNavBadges();
 renderNotifications();
+
+// ── BULK EMAIL ───────────────────────────────────────────────
+let bulkList = []; // [{email, firstName, company}]
+function bulkDownloadTemplate() {
+  const csv = 'email,first name,company\r\njohn@example.com,John,Example Logistics\r\n';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = 'nav-bulk-email-template.csv';
+  a.click();
+}
+function bulkHandleFile(input) {
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const done = rows => {
+    if(rows.length < 2) { showToast('No data rows found in that file.'); return; }
+    const header = rows[0].map(h=>String(h||'').trim().toLowerCase());
+    const find = names => header.findIndex(h=>names.includes(h));
+    const ci = find(['email','e-mail','email address','emailaddress']);
+    const fi = find(['first name','firstname','first_name','first','name']);
+    const co = find(['company','company name','companyname','organization']);
+    if(ci === -1) { showToast('The file needs a column called "email".'); return; }
+    bulkList = rows.slice(1).map(r=>({
+      email: String(r[ci]||'').trim(),
+      firstName: fi>-1 ? String(r[fi]||'').trim().split(/\s+/)[0] : '',
+      company: co>-1 ? String(r[co]||'').trim() : '',
+    })).filter(r=>r.email);
+    const re = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+    const seen = new Set(); let bad=0, dup=0;
+    bulkList.forEach(r=>{ const e=r.email.toLowerCase(); if(!re.test(e)) bad++; else if(seen.has(e)) dup++; else seen.add(e); });
+    if(seen.size > 50) { bulkList = []; document.getElementById('bulkListInfo').innerHTML = `<div style="color:var(--red,#c33);"><b>${seen.size}</b> addresses — the limit is <b>50</b> per send. Please upload a file with 50 or fewer.</div>`; return; }
+    document.getElementById('bulkListInfo').innerHTML =
+      `<div><b>${seen.size}</b> usable addresses (max 50 per send, with a 10-minute gap between sends).${bad?` <span style="color:var(--red,#c33)">${bad} invalid</span>.`:''}${dup?` ${dup} duplicates will be skipped.`:''}</div>` +
+      `<div style="margin-top:6px;color:var(--text-faint);">First rows: ${bulkList.slice(0,3).map(r=>esc(r.email)).join(', ')}…</div>`;
+  };
+  const name = file.name.toLowerCase();
+  if(name.endsWith('.csv')) {
+    const reader = new FileReader();
+    reader.onload = e => done(parseCsv(e.target.result));
+    reader.readAsText(file);
+  } else {
+    if(typeof XLSX === 'undefined') { showToast('Excel reading did not load — save the file as CSV and upload that instead.'); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, {type:'array'});
+        const csv = XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]);
+        done(parseCsv(csv));
+      } catch(err) { console.error(err); showToast('Could not read that Excel file — try saving it as CSV.'); }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+async function bulkSend() {
+  const name = document.getElementById('bulkName').value.trim();
+  const subject = document.getElementById('bulkSubject').value.trim();
+  const body = document.getElementById('bulkBody').value.trim();
+  if(!bulkList.length) { showToast('Upload your list first.'); return; }
+  if(!subject || !body) { showToast('Add a subject and a message.'); return; }
+  if(!confirm(`Send this email to ${bulkList.length} people? This cannot be undone.`)) return;
+  const btn = document.getElementById('bulkSendBtn');
+  btn.disabled = true; btn.textContent = 'Sending… please wait';
+  const out = document.getElementById('bulkResult');
+  try {
+    const res = await apiFetch('/api/bulk-email/send', { method:'POST', body: JSON.stringify({ name, subject, body, recipients: bulkList }) });
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) {
+      out.innerHTML = `<div style="padding:12px;border:1px solid var(--red,#c33);border-radius:6px;">${esc(data.error||('Send failed ('+res.status+')'))}</div>`;
+    } else {
+      const sk = (data.skipped||[]);
+      out.innerHTML = `<div style="padding:12px;border:1px solid var(--green,#2a7);border-radius:6px;"><b>${data.sent}</b> sent${data.failed?`, <b>${data.failed}</b> failed`:''}${sk.length?`, <b>${sk.length}</b> skipped`:''}.` +
+        (sk.length ? `<div style="margin-top:8px;font-size:12px;color:var(--text-faint);">Skipped: ${sk.slice(0,30).map(s=>esc(s.email)+' ('+esc(s.reason)+')').join('; ')}${sk.length>30?'…':''}</div>` : '') + `</div>`;
+      bulkList = []; document.getElementById('bulkFile').value=''; document.getElementById('bulkListInfo').innerHTML='';
+      bulkLoadHistory();
+    }
+  } catch(e) {
+    console.error(e); out.innerHTML = `<div style="padding:12px;border:1px solid var(--red,#c33);border-radius:6px;">Could not reach the server — check History below before sending again.</div>`;
+  }
+  btn.disabled = false; btn.textContent = 'Send to everyone on the list';
+}
+async function bulkLoadHistory() {
+  const box = document.getElementById('bulkHistory');
+  if(!box || !realUser) return;
+  try {
+    const res = await apiFetch('/api/bulk-email/campaigns');
+    if(!res.ok) { const b = await res.json().catch(()=>({})); box.textContent = b.error || 'Could not load past sends.'; return; }
+    const rows = await res.json();
+    if(!rows.length) { box.textContent = 'No bulk sends yet.'; return; }
+    box.innerHTML = `<table style="width:100%;border-collapse:collapse;"><tr style="text-align:left;color:var(--text-faint);"><th>Date</th><th>Name / subject</th><th>By</th><th>Sent</th><th>Delivered</th><th>Bounced</th><th>Spam</th><th>Failed</th></tr>` +
+      rows.map(r=>`<tr style="border-top:1px solid var(--border);cursor:pointer;" onclick="bulkOpenCampaign(${r.campaign_id})"><td style="padding:7px 4px;">${esc(new Date(r.created_at).toLocaleString())}</td><td>${esc(r.name)}<div style="color:var(--text-faint);font-size:11px;">${esc(r.subject)}</div></td><td>${esc(r.created_by||'')}</td><td>${r.sent_n||0}</td><td>${r.delivered_n||0}</td><td>${r.bounced_n||0}</td><td>${r.spam_n||0}</td><td>${r.failed_n||0}</td></tr>`).join('') + `</table>`;
+  } catch(e) { box.textContent = 'Could not load past sends.'; }
+}
+async function bulkOpenCampaign(id) {
+  const box = document.getElementById('bulkDetail');
+  box.textContent = 'Loading…';
+  const res = await apiFetch('/api/bulk-email/campaigns/'+id);
+  if(!res.ok) { box.textContent = 'Could not load that send.'; return; }
+  const d = await res.json();
+  box.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">${esc(d.campaign.name)} — people</div><div style="max-height:320px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">` +
+    d.recipients.map(r=>`<tr style="border-top:1px solid var(--border);"><td style="padding:5px 4px;">${esc(r.email)}</td><td>${esc(r.company_name||'')}</td><td>${esc(r.status)}</td><td style="color:var(--text-faint);">${esc(r.status_detail||'')}${r.matched_company_id?' · saved on company record':''}</td></tr>`).join('') + `</table></div>`;
+}
 </script>
 </body>
 </html>
