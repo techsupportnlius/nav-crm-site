@@ -7947,17 +7947,12 @@ async function sendRealCompanyEmail(co, toAddr, ccAddr, subject, body, attachmen
   const sendBtn = document.querySelector('#emailComposeModal .btn-primary');
   if(sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
 
-  const graphToken = await getGraphToken();
-  if(!graphToken) {
-    if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '📧 Send Email'; }
-    showToast('Your mailbox isn\'t connected yet — click "Connect Mailbox" at the top, then try again.');
-    return;
-  }
-
+  // CRM email now goes out through the CRM's own email service (not through
+  // the person's Microsoft mailbox), so no mailbox connection is needed to send.
   try {
     const res = await apiFetch(`/api/companies/${co.id}/send-email`, {
       method: 'POST',
-      body: JSON.stringify({ to: toAddr, cc: ccAddr, subject, body, graphAccessToken: graphToken }),
+      body: JSON.stringify({ to: toAddr, cc: ccAddr, subject, body }),
     });
     if(!res.ok) {
       const err = await res.json().catch(()=>({}));
