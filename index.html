@@ -14,7 +14,7 @@
 (function(){
   try{
     var saved = localStorage.getItem('nav-crm-theme');
-    if(saved === 'light') document.documentElement.setAttribute('data-theme','light');
+    if(saved !== 'dark') document.documentElement.setAttribute('data-theme','light'); // C-021: pastel light is the default
   }catch(e){}
 })();
 </script>
@@ -654,6 +654,78 @@ thead th.cb-th{width:36px;padding:0 10px;}
 .eti-meta{font-size:10.5px;color:var(--text-faint);font-family:var(--mono);margin-bottom:8px;line-height:1.6;}
 .eti-text{font-size:12px;color:var(--text-muted);font-family:var(--mono);white-space:pre-wrap;margin:0;line-height:1.55;}
 .loc-locked-banner{background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:5px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--amber);display:flex;align-items:center;gap:8px;}
+
+/* SOFT PASTEL THEME (C-021) — colours, sidebar, top bar, dashboard tiles. Styling only; no behaviour. */
+:root{
+  --bg:#17141F;--surface:#1D1928;--surface-2:#262033;--surface-3:#2F2840;
+  --border:#2C2638;--border-2:#3A3349;
+  --text:#ECE8F4;--text-muted:#B5ADC6;--text-faint:#7F7694;
+  --accent:#F97316;--accent-dim:rgba(249,115,22,0.16);
+  --sidebar:236px;--topbar:64px;
+}
+:root[data-theme="light"]{
+  --bg:#FFFAF5;--surface:#FFFFFF;--surface-2:#FFF4EA;--surface-3:#FBE9DA;
+  --border:#F1E8DF;--border-2:#E6D8CA;
+  --text:#33302C;--text-muted:#6D6458;--text-faint:#9A8F82;
+  --accent:#D4621A;--accent-dim:rgba(249,115,22,0.14);
+}
+.topbar{border-bottom:0;position:relative}
+.topbar::after{content:"";position:absolute;left:var(--sidebar);right:0;bottom:0;height:1px;background:var(--border)}
+.tb-logo{border-right:1px solid var(--border)}
+.tb-logo-img{height:40px}
+.tb-breadcrumb{font-size:13.5px}
+.tb-user{border-radius:99px;padding:4px 12px 4px 4px;background:var(--surface-2)}
+.tb-avatar{width:30px;height:30px;background:linear-gradient(135deg,#f97316,#c13b14)}
+.tb-role-chip{border-radius:99px;background:var(--accent-dim);color:var(--accent);border-color:transparent;font-family:var(--sans);font-weight:600;font-size:11px;padding:2px 10px}
+.theme-toggle-btn{width:36px;height:36px;border-radius:11px}
+.btn-check{border-radius:11px;padding:8px 13px}
+.sidebar{padding:10px 0}
+.nav-section-label{font-size:10.5px;letter-spacing:.09em;padding:16px 20px 5px}
+.nav-item{border-radius:12px;padding:9px 12px;margin:1px 10px;font-weight:500;gap:11px}
+.nav-item:hover{background:var(--surface-2)}
+.nav-item.active{background:var(--accent-dim);color:var(--accent);font-weight:700}
+.nav-badge{font-family:var(--sans);font-weight:600;background:var(--surface-3);color:var(--text-muted)}
+.nav-badge.hot{background:var(--accent-dim);color:var(--accent)}
+.btn{border-radius:11px;padding:8px 15px}
+.btn-sm{padding:5px 11px}
+.btn-primary{background:linear-gradient(135deg,#f97316,#c13b14);box-shadow:0 6px 16px rgba(232,89,12,.26)}
+.btn-ghost{background:var(--surface)}
+.view-header{padding:20px 28px 14px;border-bottom:0}
+.view-title{font-size:24px;letter-spacing:-.015em}
+.sub-tabs{padding:0 28px;background:transparent}
+.filter-bar{padding:10px 28px;border-bottom:0}
+.search-box{border-radius:12px;background:var(--surface)}
+.fchip{background:var(--surface)}
+.fchip.active{background:var(--accent-dim);border-color:transparent;color:var(--accent);font-weight:600}
+.modal{border-radius:20px}
+/* dashboard: colourful tiles + card panels */
+.kpi-grid{gap:14px;padding:6px 28px 18px;background:transparent;border-bottom:0}
+.kpi{border-radius:20px;padding:18px 20px}
+.kpi-label{font-size:11px;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px}
+.kpi-val{font-family:var(--sans);font-size:30px;font-weight:700;letter-spacing:-.02em}
+.kpi-delta{color:var(--text-muted)}
+:root[data-theme="light"] .kpi:nth-child(1){background:#FFE6D2}
+:root[data-theme="light"] .kpi:nth-child(2){background:#D9EFFF}
+:root[data-theme="light"] .kpi:nth-child(3){background:#E2F6DC}
+:root[data-theme="light"] .kpi:nth-child(4){background:#EEE6FF}
+:root[data-theme="light"] .kpi:nth-child(5){background:#FFF3C4}
+:root[data-theme="light"] .kpi:nth-child(6){background:#FFE1E6}
+:root:not([data-theme="light"]) .kpi:nth-child(1){background:rgba(249,115,22,.16)}
+:root:not([data-theme="light"]) .kpi:nth-child(2){background:rgba(56,189,248,.14)}
+:root:not([data-theme="light"]) .kpi:nth-child(3){background:rgba(34,197,94,.14)}
+:root:not([data-theme="light"]) .kpi:nth-child(4){background:rgba(139,92,246,.18)}
+:root:not([data-theme="light"]) .kpi:nth-child(5){background:rgba(250,204,21,.13)}
+:root:not([data-theme="light"]) .kpi:nth-child(6){background:rgba(244,63,94,.14)}
+.dash-grid{gap:16px;padding:0 28px 24px}
+.dash-main,.dash-side{background:var(--surface);border:1px solid var(--border);border-radius:20px}
+.dash-sec-head{font-size:13px;text-transform:none;letter-spacing:0;font-weight:700;padding:16px 20px}
+.dash-sec-head{border-bottom:0}
+.tb-user-name{white-space:nowrap}
+.table-wrap{flex:0 1 auto;margin:0 28px 24px;background:var(--surface);border:1px solid var(--border);border-radius:20px}
+.table-wrap thead th:first-child{border-top-left-radius:20px}.table-wrap thead th:last-child{border-top-right-radius:20px}
+.um-table-wrap{flex:0 1 auto;margin:0 28px 24px;background:var(--surface);border:1px solid var(--border);border-radius:20px}
+:root:not([data-theme="light"]) .tb-logo-img{background:#fff;border-radius:9px;padding:3px 7px;height:38px}
+@media(max-width:1100px){.kpi-grid{grid-template-columns:repeat(3,1fr)}}
 </style>
 </head>
 
@@ -3486,7 +3558,8 @@ let pendingDocUpload = null;
 function handleDocUpload(id, input) {
   const file = input.files && input.files[0];
   if(!file) return;
-  if(file.size > 8*1024*1024) { showToast('File too large — 8 MB maximum.'); input.value=''; return; }
+  const usedBytes = emailAttachments.reduce((n,a)=>n+(a.size||0),0);
+  if(usedBytes + file.size > 3*1024*1024) { showToast('Attachments can total 3 MB per email. For bigger files, share a link instead.'); input.value=''; return; }
   const reader = new FileReader();
   reader.onload = e => {
     pendingDocUpload = {companyId:id, name:file.name, size:file.size, type:file.type, dataUrl:e.target.result};
@@ -3878,12 +3951,17 @@ async function syncMyEmails(id) {
 function realCompanyEmailMatches(id) {
   const contacts = contactsDB[id] || [];
   const addrs = new Set(contacts.map(c=>(c.email||'').toLowerCase()).filter(Boolean));
-  if(!addrs.size) return [];
+  // Also anyone at the company's own website domain (not just saved contacts).
+  const coRow = customers.find(x=>x.id===id);
+  let coDom = String((coRow && coRow.domain) || '').toLowerCase().replace(/^www\./,'');
+  if(!coDom || coDom.endsWith('.invalid') || /^(gmail|yahoo|outlook|hotmail|live|aol|icloud|msn|proton|protonmail)\.(com|me)$/.test(coDom)) coDom = '';
+  if(!addrs.size && !coDom) return [];
+  const isCo = a => addrs.has(a) || (coDom && a.endsWith('@'+coDom));
   const pool = [...realMail.inbox, ...realMail.sent];
   return pool.filter(e=>{
     const from = (e.from||'').toLowerCase();
     const toList = (e.to||'').toLowerCase().split(',').map(s=>s.trim());
-    return addrs.has(from) || toList.some(t=>addrs.has(t));
+    return isCo(from) || toList.some(isCo);
   }).map(e=>({
     id: e.id, direction: e.folder==='sent' ? 'sent' : 'received',
     from: e.from, to: e.to, cc: '', subject: e.subject, date: e.date, time: e.time,
@@ -8364,9 +8442,8 @@ function openSalesEmail(companyId) {
 // Active Customer they're allowed to email (their own account). The
 // permission check runs again on the server
 // (companies.js's sendCompanyEmail) — this function just calls it.
-// Note: attachments aren't sent for real yet — the compose window only
-// keeps their name/size today, not the file's actual contents, so there's
-// nothing to attach. They still show up in the activity log note below.
+// Attachments are sent for real: the file contents go to the server with the
+// email (3 MB total limit per email).
 async function sendRealCompanyEmail(co, toAddr, ccAddr, subject, body, attachments, emailId) {
   const sendBtn = document.querySelector('#emailComposeModal .btn-primary');
   if(sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
@@ -8378,7 +8455,7 @@ async function sendRealCompanyEmail(co, toAddr, ccAddr, subject, body, attachmen
   try {
     const res = await apiFetch(`/api/companies/${co.id}/send-email`, {
       method: 'POST',
-      body: JSON.stringify({ to: toAddr, cc: ccAddr, subject, body, bodyHtml: emailComposeHtml || undefined, graphAccessToken: graphToken || undefined }),
+      body: JSON.stringify({ to: toAddr, cc: ccAddr, subject, body, bodyHtml: emailComposeHtml || undefined, graphAccessToken: graphToken || undefined, attachments: emailAttachPayload(attachments) }),
     });
     if(!res.ok) {
       const err = await res.json().catch(()=>({}));
@@ -8400,7 +8477,7 @@ async function sendRealCompanyEmail(co, toAddr, ccAddr, subject, body, attachmen
     id: emailId, direction: 'sent',
     from: currentUserEmail() || 'nav@nlius.com', to: toAddr, cc: ccAddr,
     subject: subject || '(no subject)',
-    date: nowDateOnly(), time: nowTimeOnly(), body, attachments: [], _ts: Date.now(),
+    date: nowDateOnly(), time: nowTimeOnly(), body, attachments: (attachments||[]).map(a=>({id:a.id,name:a.name,size:a.size,type:a.type})), _ts: Date.now(),
   });
   loadServerEmails(co.id).then(()=>{ if(openCompanyId===co.id && drawerTab==='emails') renderCompanyEmails(co.id,'customer'); });
   // Pull the real copy back from Microsoft's Sent Items a few seconds later
@@ -8413,7 +8490,7 @@ async function sendRealCompanyEmail(co, toAddr, ccAddr, subject, body, attachmen
   } catch(e) {}
   logActivity(co.id, 'EMAIL',
     `Email sent to ${esc(toAddr)} — <strong>${esc(subject||'(no subject)')}</strong>` +
-    (attachments.length ? ` (${attachments.length} attachment${attachments.length>1?'s':''} noted, not yet sent through the mailbox)` : ''));
+    (attachments.length ? ` · ${attachments.length} attachment${attachments.length>1?'s':''}: ${attachments.map(a=>esc(a.name)).join(', ')}` : ''));
   co.lastUpdated = 'Just now';
 
   closeEmailCompose();
@@ -8431,7 +8508,7 @@ async function sendRealCompanyEmail(co, toAddr, ccAddr, subject, body, attachmen
 // company means no sending rule to enforce, so this goes straight to Graph
 // from the browser — there's nothing for companies.js to arbitrate, exactly
 // like reading the inbox needs no server-side permission check either.
-async function sendRealGenericEmail(toAddr, ccAddr, subject, body, emailId) {
+async function sendRealGenericEmail(toAddr, ccAddr, subject, body, emailId, attachments) {
   const sendBtn = document.querySelector('#emailComposeModal .btn-primary');
   if(sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
 
@@ -8450,7 +8527,7 @@ async function sendRealGenericEmail(toAddr, ccAddr, subject, body, emailId) {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + graphToken, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: { subject: subject || '(no subject)', body: emailComposeHtml ? { contentType: 'HTML', content: emailComposeHtml } : { contentType: 'Text', content: body || '' }, toRecipients, ccRecipients },
+        message: { subject: subject || '(no subject)', body: emailComposeHtml ? { contentType: 'HTML', content: emailComposeHtml } : { contentType: 'Text', content: body || '' }, toRecipients, ccRecipients, attachments: emailAttachPayload(attachments).map(f=>({ '@odata.type':'#microsoft.graph.fileAttachment', name:f.name, contentType:f.type, contentBytes:f.contentBase64 })) },
         saveToSentItems: true,
       }),
     });
@@ -8565,7 +8642,7 @@ async function doSendEmail() {
     // (see sendRealGenericEmail() below for why) while still claiming
     // "Email sent" — fixed so it actually sends.
     if(realUser && companyId == null) {
-      sendRealGenericEmail(toAddr, ccAddr, subject, body, emailId);
+      sendRealGenericEmail(toAddr, ccAddr, subject, body, emailId, attachments);
       return;
     }
 
@@ -8655,6 +8732,14 @@ async function downloadAttachment(aid) {
   const blob = dataUrlToBlob(a.dataUrl);
   if(!blob) { showToast('That attachment is no longer available.'); return; }
   await saveFile(a.name, blob);
+}
+// The attachments in the exact shape the server (and Microsoft) expect.
+function emailAttachPayload(list) {
+  return (list||[]).map(a=>{
+    const st = attachmentStore[a.id];
+    if(!st || !st.dataUrl) return null;
+    return { name: a.name, type: a.type || 'application/octet-stream', contentBase64: String(st.dataUrl).split(',')[1] || '' };
+  }).filter(Boolean);
 }
 function removeEmailAttachment(i) {
   emailAttachments.splice(i,1);
@@ -8963,6 +9048,7 @@ async function loadAllRealMail() {
   realMailLastRefreshed = Date.now();
   realMailLoaded = true;
   realMailLoading = false;
+  syncAllMyEmails();
 }
 
 // Periodic + manual "Refresh now" — re-pulls the fast 30-day window for
@@ -8975,6 +9061,25 @@ async function refreshRealMail() {
   realMailLastRefreshed = Date.now();
   realMailLoaded = true;
   if(currentViewName==='mail') renderMailView();
+  syncAllMyEmails();
+}
+
+// Saves this person's customer/prospect emails (both directions, including
+// replies) to each account's Emails tab, automatically — not only when they
+// happen to open that account. Only their own accounts (canEmailCompany),
+// only messages not already stored, and each account at most every 2 minutes.
+let _syncAllBusy = false;
+async function syncAllMyEmails() {
+  if(_syncAllBusy || !realUser || !mailboxConnected || !realMailLoaded) return;
+  _syncAllBusy = true;
+  try {
+    for(const co of customers) {
+      if(!co.domain || !canEmailCompany(co)) continue;
+      if(!realCompanyEmailMatches(co.id).length) continue;
+      await syncMyEmails(co.id);
+    }
+  } catch(e) { console.warn('Auto email sync failed', e); }
+  _syncAllBusy = false;
 }
 
 async function loadOlderRealMail() {
@@ -8990,8 +9095,10 @@ async function loadOlderRealMail() {
 // silently polling Microsoft Graph in the background the rest of the time.
 function updateMailRefreshTimer() {
   if(mailRefreshTimer) { clearInterval(mailRefreshTimer); mailRefreshTimer = null; }
-  if(currentViewName==='mail' && realUser && mailboxConnected) {
-    mailRefreshTimer = setInterval(refreshRealMail, 60000);
+  if(realUser && mailboxConnected) {
+    // Every minute on the Mail screen; every 5 minutes anywhere else, so
+    // customer replies get saved to their accounts even while the rep works elsewhere.
+    mailRefreshTimer = setInterval(refreshRealMail, currentViewName==='mail' ? 60000 : 300000);
   }
 }
 
