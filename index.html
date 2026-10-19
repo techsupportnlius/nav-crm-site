@@ -149,6 +149,12 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14
 .search-box input{background:none;border:none;outline:none;color:var(--text);font-size:13px;font-family:var(--sans);width:100%;}
 .search-box input::placeholder{color:var(--text-faint);}
 .filter-chips{display:flex;gap:6px;}
+.dd-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 24px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.dd-bar:empty{display:none;}
+.dd-sel{background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text-muted);font-size:12px;font-family:var(--sans);padding:5px 8px;cursor:pointer;max-width:200px;}
+.dd-sel.on{border-color:var(--accent);color:var(--accent);}
+.dd-clear{background:transparent;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:4px 6px;}
+.dd-count{font-size:11.5px;color:var(--text-faint);margin-left:auto;}
 .fchip{padding:4px 10px;font-size:12px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;transition:all 0.1s;}
 .fchip:hover{color:var(--text);}
 .fchip.active{background:var(--surface-3);border-color:var(--border-2);color:var(--text);}
@@ -851,6 +857,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     </div>
     <div class="role-note" id="coRoleNote" style="display:none;"></div>
   </div>
+  <div class="dd-bar" id="coDD"></div>
   <div class="table-wrap"><table><thead id="coThead"></thead><tbody id="coTbody"></tbody></table></div>
 </div>
 
@@ -866,6 +873,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <button class="btn btn-primary" onclick="openAddContactModal(null,'all')">+ Add Contact</button>
     </div>
   </div>
+  <div class="dd-bar" id="ctDD"></div>
   <div class="contacts-table-wrap">
     <table>
       <thead><tr>
@@ -899,6 +907,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     </div>
     <div class="role-note" id="prospectRoleNote" style="display:none;"></div>
   </div>
+  <div class="dd-bar" id="prospectDD"></div>
   <div class="table-wrap"><table><thead id="prospectThead"></thead><tbody id="prospectTbody"></tbody></table></div>
 </div>
 
@@ -920,19 +929,13 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <button class="fchip" onclick="setCCFilter('setup',this)">Setup</button>
       <button class="fchip" onclick="setCCFilter('sla',this)">Over SLA</button>
     </div>
-    <div id="ccUserFilterWrap" style="display:none;padding-left:12px;border-left:1px solid var(--border);">
-      <select id="ccUserFilter" onchange="renderCCView()"
-        style="background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text-muted);font-size:12px;font-family:var(--sans);padding:4px 8px;cursor:pointer;">
-        <option value="">All Users</option>
-        ${(()=>{const names=[...new Set(realCarrierChecks.map(c=>c.broker))];return names.map(n=>`<option value="${n}">${n}</option>`).join('');})()}
-      </select>
-    </div>
     <div class="filter-chips" style="padding-left:12px;border-left:1px solid var(--border);">
       <button class="fchip" id="ccHistTab" onclick="setCCViewMode('history',this)">History</button>
       <button class="fchip active" id="ccActiveTab" onclick="setCCViewMode('active',this)">Active Queue</button>
     </div>
     <div class="role-note" id="ccRoleNote" style="display:none;margin-left:auto;"></div>
   </div>
+  <div class="dd-bar" id="ccDD"></div>
   <div class="table-wrap">
     <table>
       <thead id="ccThead"><tr><th>MC #</th><th>Carrier</th><th>Stage</th><th>Team</th><th>Submitted by</th><th>Lane</th><th>SLA</th><th>When</th></tr></thead>
@@ -964,6 +967,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     </div>
     <div class="role-note" id="custCompRoleNote" style="display:none;margin-left:auto;"></div>
   </div>
+  <div class="dd-bar" id="compDD"></div>
   <div class="table-wrap">
     <table>
       <thead id="custCompThead"><tr><th>Case ID</th><th>Type</th><th>Company</th><th>Status</th><th>Assigned</th><th>SLA</th><th>Raised by</th></tr></thead>
@@ -1073,6 +1077,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <input class="modal-input" style="width:220px;margin:0;" id="clFilterCarrier" placeholder="Filter by carrier or MC #…" oninput="renderCarrierLanesTable()">
     <button class="btn btn-ghost btn-sm" onclick="clearCarrierLanesFilters()">Clear filters</button>
   </div>
+  <div class="dd-bar" id="umDD"></div>
   <div class="um-table-wrap">
     <table>
       <thead>
@@ -2925,6 +2930,74 @@ function ownerLabelFor(c) {
   return c.owner;
 }
 
+// ── DROPDOWN FILTERS (shared by every long list) ─────────────────
+const DD = {};
+function ddOpts(rows, def) {
+  return [...new Set(rows.map(r=>def.get(r)).filter(v=>v!=null && v!=='' && v!=='—'))].sort((a,b)=>String(a).localeCompare(String(b)));
+}
+function ddRender(key, boxId, rows, defs, rerender, shown) {
+  const box = document.getElementById(boxId); if(!box) return;
+  const st = DD[key] = DD[key] || {};
+  DD[key+'_re'] = rerender;
+  const lists = defs.map(d=>ddOpts(rows,d));
+  const sig = key + JSON.stringify(lists) + JSON.stringify(st) + (shown==null?'':shown);
+  if(box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  let html = '';
+  defs.forEach((d,i)=>{
+    if(lists[i].length < 2 && !st[d.key]) return; // nothing to choose between
+    html += `<select class="dd-sel${st[d.key]?' on':''}" onchange="ddSet('${key}','${d.key}',this.value)"><option value="">${esc(d.label)}: All</option>` +
+      lists[i].map(v=>`<option value="${esc(v)}"${st[d.key]===v?' selected':''}>${esc(v)}</option>`).join('') + `</select>`;
+  });
+  const any = Object.values(st).some(Boolean);
+  if(html && any) html += `<button class="dd-clear" onclick="ddClear('${key}')">✕ Clear filters</button>`;
+  if(html && shown!=null) html += `<span class="dd-count">${shown} shown</span>`;
+  box.innerHTML = html;
+}
+function ddApply(key, rows, defs) {
+  const st = DD[key] || {};
+  return rows.filter(r=>defs.every(d=>!st[d.key] || d.get(r)===st[d.key]));
+}
+function ddSet(key, k, v) { (DD[key] = DD[key] || {})[k] = v; if(DD[key+'_re']) DD[key+'_re'](); }
+function ddClear(key) { DD[key] = {}; if(DD[key+'_re']) DD[key+'_re'](); }
+const locOf = c => (c.location && c.location!=='—') ? locationName(c.location) : '';
+const CO_DD = [
+  {key:'loc', label:'Location', get:locOf},
+  {key:'owner', label:'Owner', get:c=>ownerLabelFor(c)},
+  {key:'ind', label:'Industry', get:c=>c.industry||''},
+  {key:'pay', label:'Payment', get:c=>c.paycat||''},
+];
+const PR_DD = [
+  {key:'loc', label:'Location', get:locOf},
+  {key:'owner', label:'Owner', get:c=>ownerLabelFor(c)},
+  {key:'stage', label:'Stage', get:c=>c.prospectStatus||''},
+  {key:'ind', label:'Industry', get:c=>c.industry||''},
+];
+const CT_DD = [
+  {key:'co', label:'Company', get:c=>c.company||''},
+  {key:'by', label:'Added by', get:c=>c.addedBy||''},
+];
+const CC_DD = [
+  {key:'stage', label:'Stage', get:c=>c.stage||''},
+  {key:'team', label:'Team', get:c=>c.team||''},
+  {key:'by', label:'Submitted by', get:c=>c.broker||''},
+];
+const CCH_DD = [
+  {key:'out', label:'Outcome', get:c=>c.outcome||c.stage||''},
+  {key:'by', label:'Submitted by', get:c=>c.broker||''},
+];
+const COMP_DD = [
+  {key:'type', label:'Type', get:c=>c.type||''},
+  {key:'status', label:'Status', get:c=>c.status||''},
+  {key:'assigned', label:'Assigned', get:c=>c.assigned||''},
+  {key:'by', label:'Raised by', get:c=>c.by||''},
+];
+const UM_DD = [
+  {key:'role', label:'Role', get:u=>u.role||''},
+  {key:'bulk', label:'Bulk Email', get:u=>(u.moduleAccess&&u.moduleAccess.bulkEmail)?'Enabled':'Not enabled'},
+  {key:'team', label:'Sub-team', get:u=>(u.subTeam||[]).filter(t=>t!=='—').join(', ')},
+];
+
 function renderCoTable() {
   const search = (document.getElementById('coSearch')||{value:''}).value.toLowerCase();
   const head = document.getElementById('coThead');
@@ -2958,8 +3031,9 @@ function renderCoTable() {
       <th>Last Updated</th>
     </tr>`;
 
-    let rows = getVisibleCustomers()
-      .filter(c => !isProspect(c)) // Active Customers only
+    const coBase = getVisibleCustomers().filter(c => !isProspect(c)); // Active Customers only
+    const coDefs = canSeePaycat ? CO_DD : CO_DD.filter(d=>d.key!=='pay');
+    let rows = ddApply('co', coBase, coDefs)
       .filter(c=>{
         const sm = !search || c.name.toLowerCase().includes(search) || (c.domain&&c.domain.toLowerCase().includes(search));
         let fm = true;
@@ -2973,6 +3047,7 @@ function renderCoTable() {
         return sm&&fm;
       });
 
+    ddRender('co', 'coDD', coBase, coDefs, renderCoTable, rows.length);
     if(!rows.length) {
       body.innerHTML=`<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">No records match your filter.</td></tr>`;
       return;
@@ -3000,6 +3075,7 @@ function renderCoTable() {
     }).join('');
   } else {
     // Carriers tab
+    { const dd = document.getElementById('coDD'); if(dd){ dd.innerHTML=''; dd.dataset.sig=''; } }
     head.innerHTML=`<tr><th>Carrier Name</th><th>Status</th><th>MC #</th><th>DOT #</th><th>Last Updated</th></tr>`;
     let rows = carriers.filter(c=>!search||c.name.toLowerCase().includes(search));
     body.innerHTML = rows.map(c=>`
@@ -4009,6 +4085,9 @@ function renderCCView() {
     }
     let rows = realCarrierChecks.filter(c=>c.resolvedAt);
     if(isSalesRep) rows = rows.filter(c=>c.broker===currentUserName());
+    const cchBase = rows;
+    rows = ddApply('cch', rows, CCH_DD);
+    ddRender('cch', 'ccDD', cchBase, CCH_DD, renderCCView, rows.length);
     if(search) rows = rows.filter(c=>c.mc.toLowerCase().includes(search)||c.carrier.toLowerCase().includes(search)||(c.lane||'').toLowerCase().includes(search));
     document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Lane</th><th>Submitted by</th><th>Commodity</th><th>Value</th><th>Submitted</th><th>Outcome</th></tr>`;
     document.getElementById('ccTbody').innerHTML = rows.length ? rows.map(c=>`
@@ -4055,6 +4134,9 @@ function renderCCView() {
   }
 
   if(userFilterVal) activeCases = activeCases.filter(c=>c.broker===userFilterVal);
+  const ccBase = activeCases;
+  activeCases = ddApply('cc', activeCases, CC_DD);
+  ddRender('cc', 'ccDD', ccBase, CC_DD, renderCCView, activeCases.length);
   if(search) activeCases = activeCases.filter(c=>c.mc.toLowerCase().includes(search)||c.carrier.toLowerCase().includes(search)||(c.lane||'').toLowerCase().includes(search));
 
   if(isSalesRep) {
@@ -4158,6 +4240,9 @@ function renderCustCompView() {
     note.style.display='none';
     hdr.innerHTML = isAdmin ? `<button class="btn btn-ghost btn-sm" onclick="exportCompHistory()">Export</button>` : '';
     let rows = realComplianceCases.filter(c=>c.resolvedAt);
+    const compHBase = rows;
+    rows = ddApply('comph', rows, COMP_DD);
+    ddRender('comph', 'compDD', compHBase, COMP_DD, renderCustCompView, rows.length);
     if(search) rows = rows.filter(c=>c.id.toLowerCase().includes(search)||c.co.toLowerCase().includes(search));
     document.getElementById('custCompThead').innerHTML=`<tr><th>Case ID</th><th>Type</th><th>Company</th><th>Outcome</th><th>Assigned</th><th>Raised by</th><th>Resolved</th></tr>`;
     document.getElementById('compTbody').innerHTML = rows.length ? rows.map(c=>`
@@ -4206,7 +4291,10 @@ function renderCustCompView() {
   else if(compFilter==='conflict') visibleCases = visibleCases.filter(c=>c.type.toLowerCase().includes('conflict'));
   else if(compFilter==='awaiting') visibleCases = visibleCases.filter(c=>c.status.toLowerCase().includes('awaiting'));
 
+  const compBase = visibleCases;
+  visibleCases = ddApply('comp', visibleCases, COMP_DD);
   if(search) visibleCases = visibleCases.filter(c=>c.id.toLowerCase().includes(search)||c.co.toLowerCase().includes(search));
+  ddRender('comp', 'compDD', compBase, COMP_DD, renderCustCompView, visibleCases.length);
 
   const showAction = isCustomerComp || isAdmin;
   document.getElementById('custCompThead').innerHTML=`<tr><th>Case ID</th><th>Type</th><th>Company</th><th>Status</th><th>Assigned</th><th>SLA</th><th>Raised by</th></tr>`;
@@ -5587,8 +5675,11 @@ function renderProspectsView() {
   let rows = customers.filter(c=>isProspect(c));
   if(!realUser && currentRole==='Sales Rep') { const me=currentUserName(); rows = rows.filter(c=>c.owner===me||(c.coOwners&&c.coOwners.includes(me))); }
   if(!realUser && currentRole==='Location Head') rows = rows.filter(c=>canSeeLocation(c.location));
+  const prBase = rows;
+  rows = ddApply('pr', rows, PR_DD);
   if(prospectFilter!=='all') rows = rows.filter(c=>c.status.toLowerCase().includes(prospectFilter.toLowerCase()));
   if(search) rows = rows.filter(c=>c.name.toLowerCase().includes(search)||(c.domain&&c.domain.toLowerCase().includes(search)));
+  ddRender('pr', 'prospectDD', prBase, PR_DD, renderProspectsView, rows.length);
 
   if(!rows.length) {
     tbody.innerHTML = `<tr><td colspan="5" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">No prospects match your filter.</td></tr>`;
@@ -5734,6 +5825,8 @@ function renderContactsView() {
     });
   });
 
+  const ctBase = allContacts;
+  allContacts = ddApply('ct', allContacts, CT_DD);
   if(search) allContacts = allContacts.filter(ct=>
     (ct.name&&ct.name.toLowerCase().includes(search))||
     (ct.title&&ct.title.toLowerCase().includes(search))||
@@ -5741,6 +5834,7 @@ function renderContactsView() {
     (ct.email&&ct.email.toLowerCase().includes(search))
   );
 
+  ddRender('ct', 'ctDD', ctBase, CT_DD, renderContactsView, allContacts.length);
   if(subtitle) subtitle.textContent = `${allContacts.length} contact${allContacts.length!==1?'s':''} across ${visibleCos.length} accounts`;
 
   if(!allContacts.length) {
@@ -6112,6 +6206,8 @@ function renderUserManagement() {
   if(umStatusFilter !== 'All') users = users.filter(u=>u.status===umStatusFilter);
   if(umTypeFilter !== 'All') users = users.filter(u=>u.type===umTypeFilter);
   if(umLocFilter !== 'All') users = users.filter(u=>u.location===umLocFilter);
+  const umBase = users;
+  users = ddApply('um', users, UM_DD);
   if(search) users = users.filter(u=>
     u.name.toLowerCase().includes(search)||
     u.email.toLowerCase().includes(search)||
@@ -6119,6 +6215,7 @@ function renderUserManagement() {
     locationName(u.location).toLowerCase().includes(search)||
     (u.subTeam||[]).join(' ').toLowerCase().includes(search)
   );
+  ddRender('um', 'umDD', umBase, UM_DD, renderUserManagement, users.length);
   const sub = document.getElementById('umSubtitle');
   if(sub) {
     const active = usersDB.filter(u=>u.status==='Active').length;
