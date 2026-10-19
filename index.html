@@ -957,6 +957,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <div class="filter-chips" id="coFilterChips">
       <button class="fchip active" onclick="setCoFilter(this,'all')">All</button>
       <button class="fchip" onclick="setCoFilter(this,'Active')">Active</button>
+      <button class="fchip" onclick="setCoFilter(this,'Open')">Open</button>
       <button class="fchip" onclick="setCoFilter(this,'Limited')">Limited Credit</button>
       <button class="fchip" onclick="setCoFilter(this,'Prepaid')">Prepaid</button>
     </div>
@@ -1055,6 +1056,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <div><div class="view-title">Customer Compliance</div><div class="view-subtitle">Customer eligibility checks and account-conflict queries</div></div>
     <div class="view-header-right" id="custCompHeaderBtns"></div>
   </div>
+  <div id="emailReqBox"></div>
   <div class="filter-bar">
     <div class="search-box">
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -1321,6 +1323,16 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <p style="margin-bottom:6px;">These prospects are close to the end of their working window, are waiting on an extension decision, or have no owner.</p>
     <div id="prospectAlertBody" style="max-height:340px;overflow:auto;"></div>
     <div class="modal-actions"><button class="btn btn-primary" onclick="closeProspectAlerts()">Got it</button></div>
+  </div>
+</div>
+
+<!-- EMAIL BLOCKED MODAL (C-022) -->
+<div class="modal-overlay" id="emailBlockedModal">
+  <div class="modal" style="max-width:460px;">
+    <h3>This email can’t be sent</h3>
+    <p id="ebMsg" style="margin-bottom:10px;"></p>
+    <div id="ebList"></div>
+    <div class="modal-actions"><button class="btn btn-primary" onclick="closeEmailBlocked()">OK</button></div>
   </div>
 </div>
 
@@ -2331,7 +2343,7 @@ const compCases = [
 ];
 
 const PAYCATS = ['—','Prepaid','Net 30','Net 45','Net 60','Prepaid + Limited Credit','Factoring','COD'];
-const STATUSES_CUSTOMER = ['Active','Active — limited credit','Approved — prepaid only','Pending — eligibility','Prospect','On hold — credit review','Blacklisted'];
+const STATUSES_CUSTOMER = ['Active','Open','Active — limited credit','Approved — prepaid only','Pending — eligibility','Prospect','On hold — credit review','Blacklisted'];
 
 // ── COMPANY PROFILE (V21) ──────────────────────────────────────
 // Who the company is — separate from PROSPECT_STATUSES / STATUSES_CUSTOMER,
@@ -2828,7 +2840,7 @@ function nav(el, view, label) {
   if(view==='deals') renderProspectsView();
   if(view==='contacts') renderContactsView();
   if(view==='carrier-compliance') renderCCView();
-  if(view==='customer-compliance') renderCustCompView();
+  if(view==='customer-compliance') { renderCustCompView(); loadEmailRequests(); }
   if(view==='user-management') renderUserManagement();
   if(view==='manage-lists') renderManageLists();
   if(view==='mail') renderMailView();
@@ -3156,6 +3168,7 @@ function renderCoTable() {
         if(coFilter!=='all') {
           const sl = c.status.toLowerCase();
           if(coFilter==='Active') fm = sl==='active';
+          else if(coFilter==='Open') fm = sl==='open' || isOpenCo(c);
           else if(coFilter==='Limited') fm = sl.includes('limited');
           else if(coFilter==='Prepaid') fm = sl.includes('prepaid');
           else fm = sl.startsWith(coFilter.toLowerCase());
@@ -3178,7 +3191,7 @@ function renderCoTable() {
       return `<tr class="${selectedIds.has(c.id)?'row-selected':''}" ${rowClick} style="${rowStyle}">
         ${canAssign&&!isCarrCC?`<td class="cb-cell" onclick="event.stopPropagation()"><input type="checkbox" class="row-cb" data-id="${c.id}" ${selectedIds.has(c.id)?'checked':''} onchange="toggleSelect(${c.id},this)"></td>`:(canAssign?'<td></td>':'')}
         <td class="primary">
-          ${c.name}${iaBadge}
+          ${c.name}${iaBadge}${isOpenCo(c)&&c.status!=='Open'?'<span style="display:inline-block;font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;background:rgba(59,130,246,0.12);color:var(--blue);border:1px solid rgba(59,130,246,0.3);">OPEN</span>':''}
           <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:2px;">${c.domain||'No website'}</div>
         </td>
         <td><span class="status ${c.statusCls}">${c.status}</span></td>
@@ -3249,6 +3262,7 @@ function switchDrawerTab(tab, type) {
 }
 
 function renderCustomerDetails(id) {
+  setTimeout(()=>loadEmailAccessBox(id), 0);
   const c = customers.find(x=>x.id===id);
   if(!c) return;
 
@@ -3386,6 +3400,7 @@ function renderCustomerDetails(id) {
         </div>
       </div>
     </div>
+    <div id="emailAccessBox"></div>
     <div class="d-sec">
       <div class="d-sec-label">Social Media</div>
       <div class="field-grid">
@@ -8402,7 +8417,7 @@ function emailContactFromCard(companyId, contactName, contactEmail) {
   const c = customers.find(x=>x.id===companyId);
   if(!c) return;
   if(realUser && !canEmailCompany(c)) {
-    showToast(`You don't have permission to email ${c.name} — only the assigned rep, their Team Leader, their Location Head, or Customer Compliance/Admin can.`);
+    showEmailBlocked([{companyId:c.id,name:c.name}]);
     return;
   }
   openEmailCompose('sales', null, {
@@ -8420,7 +8435,7 @@ function openSalesEmail(companyId) {
   const c = customers.find(x=>x.id===companyId);
   if(!c) return;
   if(realUser && !canEmailCompany(c)) {
-    showToast(`You don't have permission to email ${c.name} — only the assigned rep, their Team Leader, their Location Head, or Customer Compliance/Admin can.`);
+    showEmailBlocked([{companyId:c.id,name:c.name}]);
     return;
   }
   const firstContact = (contactsDB[companyId]||[])[0];
@@ -8642,12 +8657,16 @@ async function doSendEmail() {
     // (see sendRealGenericEmail() below for why) while still claiming
     // "Email sent" — fixed so it actually sends.
     if(realUser && companyId == null) {
+      // C-022: check every address first — prospect/customer domains are only
+      // allowed for the people who may email that company.
+      const okToSend = await guardRecipients(toAddr, ccAddr);
+      if(!okToSend) return;
       sendRealGenericEmail(toAddr, ccAddr, subject, body, emailId, attachments);
       return;
     }
 
     if(realUser && companyId != null) {
-      showToast('You cannot email this company from the CRM — it is not on your account.');
+      showEmailBlocked([{companyId,name:(customers.find(x=>x.id===companyId)||{}).name||'this company'}]);
       return;
     }
     if(companyId != null) {
@@ -9927,6 +9946,139 @@ function updateMailboxButton() {
   btn.onclick = mailboxConnected ? null : connectMailbox;
 }
 
+
+// ══ EMAIL ACCESS (C-022) ═══════════════════════════════════════════
+// Who may email a company: the owner / co-owner, their managers, Customer
+// Compliance, Admin — plus anyone when the company is Open (no owner), or
+// someone Admin / Customer Compliance gave timed access. The server makes
+// the same decision; this copy only decides which buttons to show.
+function isOpenCo(c) { return !!realUser && !!c && (!c.ownerUserId || c.prospectStatus==='Open'); }
+function hasEmailGrant(c) { return !!(c && c.emailGrantUntil && new Date(c.emailGrantUntil) > new Date()); }
+function canEmailCompany(c) {
+  if(!c || !realUser) return false;
+  return canEmailCompanyByRole(c) || isOpenCo(c) || hasEmailGrant(c);
+}
+const EMAIL_BLOCKED_MSG = 'This company is already owned by another employee. Only its owner, their managers, Customer Compliance or Admin can email them.';
+function isEmailStaff() { return currentRole==='Admin' || currentRole==='Customer Compliance'; }
+
+function showEmailBlocked(list, msg) {
+  document.getElementById('ebMsg').textContent = msg || EMAIL_BLOCKED_MSG;
+  document.getElementById('ebList').innerHTML = (list||[]).map(b=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--border);">
+      <div style="flex:1;font-weight:600;">${esc(b.name||'This company')}</div>
+      <button class="btn btn-ghost btn-sm" id="ebReq${b.companyId}" onclick="requestEmailAccess(${b.companyId},this)">Request access</button>
+    </div>`).join('');
+  document.getElementById('emailBlockedModal').classList.add('open');
+}
+function closeEmailBlocked() { document.getElementById('emailBlockedModal').classList.remove('open'); }
+
+async function requestEmailAccess(companyId, btn) {
+  if(btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    const res = await apiFetch('/api/email/access-requests', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({companyId}) });
+    if(!res.ok) throw new Error((await res.json().catch(()=>({}))).error || ('Error '+res.status));
+    if(btn) btn.textContent = 'Request sent ✓';
+    showToast('Request sent to Customer Compliance.');
+  } catch(e) {
+    if(btn) { btn.disabled = false; btn.textContent = 'Request access'; }
+    showToast('Could not send the request: ' + e.message);
+  }
+}
+
+// Asks the server whether these recipients may be emailed. Fails closed:
+// if the check can't run, the email is not sent.
+async function guardRecipients(toAddr, ccAddr) {
+  const addrs = String((toAddr||'')+','+(ccAddr||'')).split(/[,;]+/).map(x=>x.trim()).filter(Boolean);
+  if(!addrs.length) return true;
+  try {
+    const res = await apiFetch('/api/email/check', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({recipients: addrs}) });
+    if(!res.ok) throw new Error('Error '+res.status);
+    const r = await res.json();
+    if(r.ok) return true;
+    showEmailBlocked(r.blocked, r.message);
+    return false;
+  } catch(e) {
+    showToast('Could not check the recipients, so the email was not sent. Please try again. (' + e.message + ')');
+    return false;
+  }
+}
+
+// Drawer section: Admin / Customer Compliance manage timed access; everyone
+// else who can't email this company sees how to ask for it.
+async function loadEmailAccessBox(id) {
+  const box = document.getElementById('emailAccessBox'); if(!box) return;
+  const c = customers.find(x=>x.id===id); if(!c || !realUser) { box.innerHTML=''; return; }
+  if(!isEmailStaff()) {
+    box.innerHTML = canEmailCompany(c) ? '' : `<div class="d-sec"><div class="d-sec-label">Email access</div>
+      <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:8px;">${esc(EMAIL_BLOCKED_MSG)}</div>
+      <button class="btn btn-ghost btn-sm" onclick="requestEmailAccess(${id},this)">Request access</button></div>`;
+    return;
+  }
+  let grants = [];
+  try { const r = await apiFetch('/api/companies/'+id+'/email-grants'); if(r.ok) grants = await r.json(); } catch(e) {}
+  const people = (realUsers||[]).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+  box.innerHTML = `<div class="d-sec"><div class="d-sec-label">Email access</div>
+    <div style="font-size:12px;color:var(--text-faint);margin-bottom:8px;">${isOpenCo(c)?'This company is Open — any employee can email it.':'Owner, their managers, Customer Compliance and Admin can email this company. You can also give one person timed access.'}</div>
+    ${grants.map(g=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border);font-size:12.5px;">
+      <div style="flex:1;"><b>${esc(g.full_name)}</b> <span style="color:var(--text-faint);">until ${esc(new Date(g.expires_at).toLocaleDateString())}</span></div>
+      <button class="btn btn-ghost btn-sm" onclick="emailGrantRevoke(${id},${g.grant_id})">Remove</button></div>`).join('')}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+      <select id="egUser" class="field-select" style="flex:1;min-width:140px;"><option value="">Give access to…</option>${people.map(u=>`<option value="${esc(u.userId)}">${esc(u.name)} (${esc(u.role)})</option>`).join('')}</select>
+      <select id="egDays" class="field-select" style="width:110px;"><option value="1">1 day</option><option value="3">3 days</option><option value="7" selected>7 days</option><option value="14">14 days</option><option value="30">30 days</option><option value="90">90 days</option></select>
+      <button class="btn btn-primary btn-sm" onclick="emailGrantAdd(${id})">Grant</button>
+    </div></div>`;
+}
+async function emailGrantAdd(id) {
+  const userId = document.getElementById('egUser').value, days = document.getElementById('egDays').value;
+  if(!userId) { showToast('Pick a person first.'); return; }
+  try {
+    const res = await apiFetch('/api/companies/'+id+'/email-grants', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({userId, days: +days}) });
+    if(!res.ok) throw new Error((await res.json().catch(()=>({}))).error || ('Error '+res.status));
+    showToast('Access granted for '+days+' day'+(days==='1'?'':'s')+'.');
+    loadEmailAccessBox(id);
+  } catch(e) { showToast('Could not grant access: '+e.message); }
+}
+async function emailGrantRevoke(id, grantId) {
+  try {
+    const res = await apiFetch('/api/companies/'+id+'/email-grants/'+grantId, { method:'DELETE' });
+    if(!res.ok) throw new Error('Error '+res.status);
+    showToast('Access removed.'); loadEmailAccessBox(id);
+  } catch(e) { showToast('Could not remove access: '+e.message); }
+}
+
+// Customer Compliance screen: access requests (Admin also sees blocked attempts).
+let emailReqShowLog = false;
+async function loadEmailRequests() {
+  const box = document.getElementById('emailReqBox'); if(!box) return;
+  if(!realUser || !isEmailStaff()) { box.innerHTML=''; return; }
+  let rows = [], log = [];
+  try { const r = await apiFetch('/api/email/access-requests'); if(r.ok) rows = await r.json(); } catch(e) {}
+  if(emailReqShowLog && currentRole==='Admin') { try { const r = await apiFetch('/api/email/blocked-log'); if(r.ok) log = await r.json(); } catch(e) {} }
+  const pend = rows.filter(r=>r.status==='Pending'), done = rows.filter(r=>r.status!=='Pending').slice(0,5);
+  box.innerHTML = `<div class="card" style="margin:0 28px 14px;padding:16px 20px;border:1px solid var(--border);border-radius:16px;background:var(--surface);">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;"><div style="font-weight:700;">Email access requests</div>
+      <span class="status s-pending">${pend.length} waiting</span><div style="flex:1"></div>
+      ${currentRole==='Admin'?`<button class="btn btn-ghost btn-sm" onclick="emailReqShowLog=!emailReqShowLog;loadEmailRequests()">${emailReqShowLog?'Hide':'Show'} blocked attempts</button>`:''}</div>
+    ${pend.length?pend.map(r=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--border);flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;"><b>${esc(r.requested_by)}</b> wants to email <b>${esc(r.company_name)}</b><div style="font-size:11px;color:var(--text-faint);">${esc(new Date(r.requested_at).toLocaleString())}</div></div>
+      <select id="erDays${r.request_id}" class="field-select" style="width:105px;"><option value="1">1 day</option><option value="3">3 days</option><option value="7" selected>7 days</option><option value="14">14 days</option><option value="30">30 days</option></select>
+      <button class="btn btn-primary btn-sm" onclick="emailRequestDecide(${r.request_id},true)">Approve</button>
+      <button class="btn btn-ghost btn-sm" onclick="emailRequestDecide(${r.request_id},false)">Decline</button></div>`).join('')
+      : '<div style="font-size:12.5px;color:var(--text-faint);padding:6px 0;">No requests waiting.</div>'}
+    ${done.length?`<div style="font-size:11px;color:var(--text-faint);margin-top:8px;">Recent: ${done.map(r=>`${esc(r.requested_by)} → ${esc(r.company_name)} (${esc(r.status)}${r.days_granted?', '+r.days_granted+'d':''})`).join(' · ')}</div>`:''}
+    ${emailReqShowLog?`<div style="margin-top:10px;font-weight:700;font-size:12.5px;">Blocked attempts (latest)</div>${log.length?log.slice(0,25).map(l=>`<div style="font-size:12px;padding:4px 0;border-top:1px solid var(--border);">${esc(new Date(l.attempted_at).toLocaleString())} · <b>${esc(l.person)}</b> tried to email ${esc(l.company||'?')} (${esc(l.recipient||'')})</div>`).join(''):'<div style="font-size:12px;color:var(--text-faint);">None yet.</div>'}`:''}
+  </div>`;
+}
+async function emailRequestDecide(id, approve) {
+  const days = approve ? +(document.getElementById('erDays'+id)||{value:7}).value : null;
+  try {
+    const res = await apiFetch('/api/email/access-requests/'+id+'/decide', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({approve, days}) });
+    if(!res.ok) throw new Error((await res.json().catch(()=>({}))).error || ('Error '+res.status));
+    showToast(approve ? 'Access approved.' : 'Request declined.'); loadEmailRequests();
+  } catch(e) { showToast('Could not save: '+e.message); }
+}
+// ══ end EMAIL ACCESS ═══════════════════════════════════════════════
+
 // Client-side mirror of the real, server-side permission check in
 // companies.js's sendCompanyEmail — this is only here so the UI can show
 // a clear reason and skip the round trip; the backend enforces it for
@@ -9934,7 +10086,7 @@ function updateMailboxButton() {
 // Ownership-based, not status-based: applies the same way to a Prospect
 // or an Active Customer — a Sales Rep can email their own accounts of
 // either kind, just not anyone else's.
-function canEmailCompany(c) {
+function canEmailCompanyByRole(c) {
   if(!c || !realUser) return false;
   if(currentRole==='Admin' || currentRole==='Customer Compliance') return true;
   // A Compliance-approved co-owner (Lead Claims workflow) works the account
@@ -10140,7 +10292,7 @@ async function runTurvoSyncModal() {
 // Real company statuses (from ref_customer_statuses) → the CSS class the
 // prototype's status pill already knows how to render.
 const STATUS_CLASS_MAP = {
-  'Active':'s-active', 'Active — limited credit':'s-limited', 'Approved — prepaid only':'s-limited',
+  'Active':'s-active', 'Open':'s-check', 'Active — limited credit':'s-limited', 'Approved — prepaid only':'s-limited',
   'Pending — eligibility':'s-pending', 'Prospect':'s-prospect', 'On hold — credit review':'s-pending',
   'Blacklisted':'s-rejected',
 };
@@ -10183,6 +10335,7 @@ function mapCompany(c) {
     prospectDays: c.prospect_days == null ? null : c.prospect_days,
     extStatus: c.ext_status || null, extRoute: c.ext_route || null,
     assignedByRole: c.assigned_by_role || null, releasedAt: c.released_at || null,
+    emailGrantUntil: c.my_email_grant_until || null,
   };
 }
 // Converts one row from GET /api/users into the shape the prototype's old
