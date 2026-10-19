@@ -2775,6 +2775,14 @@ function setRole(role, btn) {
 // Admin can switch Carrier Compliance off for a person in User Management
 // (Module Access). Off = no nav item, no dashboard queue, and the server
 // refuses the data too. Admin is never locked out.
+// Module Access ticks from User Management. Admin always on; an old server
+// that doesn't send them yet means "everything on" so nobody is locked out.
+function modOn(key) {
+  if(!realUser) return true;
+  if(currentRole==='Admin') return true;
+  const m = realUser.moduleAccess;
+  return !m || m[key] !== false;
+}
 function carrierAccessOn() {
   if(!realUser) return true;
   if(currentRole==='Admin') return true;
@@ -2814,7 +2822,10 @@ function updateSidebarForRole() {
   // Customer Compliance nav: hide for Carrier Compliance only — a Sales
   // Rep can see it too, scoped (by the server) to just the cases they
   // personally submitted, so they can track a prospect they sent in.
-  show('navCustomerComp', !isCarrCC);
+  show('navCustomerComp', !isCarrCC && modOn('custCompliance'));
+  // Prospect Companies / Active Customers / Contacts: only if Admin ticked them for this user
+  { const q = v => document.querySelector('.nav-item[data-view="'+v+'"]'); 
+    [['deals','prospects'],['companies','customers'],['contacts','contacts']].forEach(([v,k])=>{ const el=q(v); if(el) el.style.display = modOn(k) ? '' : 'none'; }); }
   // User Management + Admin section: Admin only
   show('navUserMgmt',    isAdmin);
   show('navManageLists', isAdmin);
@@ -2840,7 +2851,10 @@ function updateSidebarForRole() {
     'view-user-management': !isAdmin,
     'view-manage-lists': !isAdmin,
     'view-carrier-compliance': isCC || !carrierAccessOn(),
-    'view-customer-compliance': isCarrCC,
+    'view-customer-compliance': isCarrCC || !modOn('custCompliance'),
+    'view-deals': !modOn('prospects'),
+    'view-companies': !modOn('customers'),
+    'view-contacts': !modOn('contacts'),
     'view-reports': isSalesRep || isCC || isCarrCC,
     'view-bulk-email': !(realUser && (isAdmin || realUser.canBulkEmail === true)),
   };
@@ -10328,6 +10342,7 @@ async function finishLogin() {
       teamIds: me.teamIds || [],
       carrierAccess: me.carrierAccess !== false,
       canBulkEmail: me.canBulkEmail === true,
+      moduleAccess: me.moduleAccess || null, // Admin's Module Access ticks (null = old server, treat as all on)
     };
     applyRealUser(realUser);
     // Wipe every piece of demo data before real data loads (the demo roster
