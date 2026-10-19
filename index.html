@@ -1011,9 +1011,14 @@ thead th.cb-th{width:36px;padding:0 10px;}
           <label style="font-size:12px;">People per send<br><input id="bsMax" type="number" min="1" max="200" style="width:110px;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"></label>
           <label style="font-size:12px;">Minutes between sends<br><input id="bsGap" type="number" min="0" max="1440" style="width:110px;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"></label>
           <label style="font-size:12px;">Default daily limit per person<br><input id="bsDaily" type="number" min="1" max="100000" style="width:130px;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"></label>
-          <button class="btn btn-primary" onclick="bulkSaveSettings()">Save limits</button>
         </div>
-        <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">Admin only. Applies to everyone straight away. To give one person a different daily limit, use User Management.</div>
+        <div style="margin-top:12px;">
+          <label style="font-size:12px;">Archive / catch-all email address (gets a hidden copy of every bulk email)<br>
+            <input id="bsCatch" type="email" placeholder="e.g. crm-archive@nlius.com — leave blank for no copy" style="width:100%;max-width:420px;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"></label>
+          <div style="font-size:11px;color:var(--text-faint);margin-top:4px;">Change this whenever your catch-all mailbox changes. Recipients never see it (it is a BCC). One copy arrives per recipient.</div>
+        </div>
+        <div style="margin-top:10px;"><button class="btn btn-primary" onclick="bulkSaveSettings()">Save settings</button></div>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">Admin only. Applies to everyone straight away (one common setting, not per person). To give one person a different daily limit, use User Management.</div>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,1fr);gap:18px;max-width:1100px;">
@@ -8997,7 +9002,7 @@ function renderMailList() {
       <div class="ol-qa">
         <button title="${e.unread?'Mark as read':'Mark as unread'}" onclick="mailToggleRead('${e.id}',event)">${e.unread?'✉':'✓'}</button>
         <button title="${e.flagged?'Remove flag':'Flag'}" onclick="mailToggleFlag('${e.id}',event)" style="${e.flagged?'color:#c50f1f':''}">⚑</button>
-        <button title="Delete" onclick="mailDelete('${e.id}',event)">🗑</button>
+        ${currentRole==='Admin' ? `<button title="Delete" onclick="mailDelete('${e.id}',event)">🗑</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -9030,7 +9035,7 @@ function openMailEmail(id) {
       <span class="ol-grow"></span>
       <button class="ol-tb ${email.flagged?'on':''}" onclick="mailToggleFlag('${id}',event)">${ic('<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>')} ${email.flagged?'Unflag':'Flag'}</button>
       <button class="ol-tb" onclick="mailToggleRead('${id}',event)">${ic('<path d="M4 4h16v16H4z"/><polyline points="22,6 12,13 2,6"/>')} Mark as unread</button>
-      <button class="ol-tb danger" onclick="mailDelete('${id}',event)">${ic('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>')} Delete</button>
+      ${currentRole==='Admin' ? `<button class="ol-tb danger" onclick="mailDelete('${id}',event)">${ic('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>')} Delete</button>` : ''}
     </div>
     ${isUnknownSender ? `
     <div class="mail-unknown-banner" style="margin:12px 24px 0;">
@@ -9116,6 +9121,8 @@ function mailClearReading() {
 }
 async function mailDelete(id, ev) {
   if(ev) ev.stopPropagation();
+  // Company policy: only Admin can delete emails from the CRM mailbox.
+  if(currentRole !== 'Admin') { showToast('Deleting emails is turned off. Ask an Admin if something needs to be removed.'); return; }
   const email = getMailbox().find(e=>e.id===id); if(!email) return;
   const permanent = email.folder === 'deleted';
   if(permanent && !confirm('Delete this message forever? This cannot be undone.')) return;
@@ -10295,6 +10302,7 @@ function bulkRenderSettings() {
     document.getElementById('bsMax').value = bulkSettings.maxPerSend;
     document.getElementById('bsGap').value = bulkSettings.cooldownMinutes;
     document.getElementById('bsDaily').value = bulkSettings.dailyCap;
+    document.getElementById('bsCatch').value = bulkSettings.catchAllAddress || '';
   }
 }
 async function bulkLoadSettings() {
@@ -10309,6 +10317,7 @@ async function bulkSaveSettings() {
     maxPerSend: document.getElementById('bsMax').value,
     cooldownMinutes: document.getElementById('bsGap').value,
     dailyCap: document.getElementById('bsDaily').value,
+    catchAllAddress: document.getElementById('bsCatch').value.trim(),
   };
   try {
     const res = await apiFetch('/api/bulk-email/settings', { method:'PUT', body: JSON.stringify(body) });
@@ -10316,7 +10325,7 @@ async function bulkSaveSettings() {
     if(!res.ok) { showToast(j.error || 'Could not save the limits.'); return; }
     bulkSettings = Object.assign(bulkSettings, j);
     bulkRenderSettings(); bulkShowInfo();
-    showToast('Bulk email limits saved.');
+    showToast('Bulk email settings saved.');
   } catch(e) { showToast('Could not save the limits.'); }
 }
 let bulkList = []; // [{email, firstName, company}]
