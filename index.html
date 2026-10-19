@@ -4711,7 +4711,7 @@ function runCheck(v){
       const out=await serverCompanyCheck(v.trim(), nsCity, nsState);
       if(seq!==_checkSeq) return; // a newer keystroke superseded this
       if(!out){ r.style.display='block'; r.className='modal-result taken-result'; r.innerHTML='Could not check right now — please try again.'; return; }
-      renderCheckResult(out.exists ? (out.kind||'active') : null);
+      renderCheckResult(out.exists ? (out.kind||'active') : null, out);
     },400);
     return;
   }
@@ -4723,11 +4723,27 @@ function runCheck(v){
   );
   renderCheckResult(domainMatch ? 'active' : null);
 }
-function renderCheckResult(kind){
+function checkOpenRecord(id){
+  closeCheck();
+  const el=document.querySelector('[data-view="companies"]');
+  nav(el,'companies','Companies');
+  setTimeout(()=>openCustomerDrawer(id),200);
+}
+function renderCheckResult(kind, info){
   const r=document.getElementById('checkResult');
   r.style.display='block';
   const taken = !!kind;
   r.className='modal-result '+(taken?'taken-result':'open-result');
+  if(kind && info && info.canView){
+    // The caller owns / co-owns / may see this account: show details, not the "someone else has it" warning.
+    const mine = info.isMine;
+    const what = kind==='active' ? 'an active customer' : kind==='open' ? 'an open prospect' : 'a prospect';
+    r.className='modal-result open-result';
+    r.innerHTML = `<strong>${mine?'✓ This is your company':'✓ This company is already in the CRM'}</strong> — ${esc(info.name||'')} is ${what}${mine?' that you already have':' you have access to'}.
+      <div class="modal-result-sub">${info.domain?esc(info.domain)+' · ':''}${info.status?esc(info.status)+' · ':''}${info.ownerName?'Owner: '+esc(info.ownerName):''}<br>It doesn't need to be added again.</div>
+      <div style="margin-top:10px;"><button class="btn btn-primary btn-sm" onclick="checkOpenRecord(${Number(info.companyId)})">Open record</button></div>`;
+    return;
+  }
   if(kind==='active') {
     r.innerHTML = `<strong>⚠ Already active</strong> — this account is owned by another broker or team.<div class="modal-result-sub">You will not see who owns it. Click "Raise a Query" if you have a live load opportunity and need access.</div>
        <div style="margin-top:10px;"><button class="btn btn-ghost btn-sm" onclick="showToast('Query raised — routed to your team leader.');closeCheck();">Raise a Query</button></div>`;
