@@ -998,6 +998,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <button class="btn btn-ghost" onclick="openAddContactModal(null,'prospect')">+ Add Contact</button>
       <button class="btn btn-ghost" id="btnExportProspects" onclick="exportProspects()">Export</button>
       <button class="btn btn-ghost" onclick="openCsvImport()">Import CSV</button>
+      <button class="btn btn-ghost" id="btnHubspotImport" style="display:none;" onclick="openHubspotImport()">Import HubSpot file</button>
       <button class="btn btn-primary" onclick="openAddCo()">+ Add Prospect</button>
     </div>
   </div>
@@ -1323,6 +1324,24 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <p style="margin-bottom:6px;">These prospects are close to the end of their working window, are waiting on an extension decision, or have no owner.</p>
     <div id="prospectAlertBody" style="max-height:340px;overflow:auto;"></div>
     <div class="modal-actions"><button class="btn btn-primary" onclick="closeProspectAlerts()">Got it</button></div>
+  </div>
+</div>
+
+<!-- HUBSPOT IMPORT MODAL (C-023) -->
+<div class="modal-overlay" id="hubspotModal">
+  <div class="modal" style="max-width:560px;max-height:92vh;overflow-y:auto;">
+    <h3 style="margin-bottom:4px;">Import HubSpot file</h3>
+    <p style="font-size:12px;color:var(--text-faint);margin-bottom:12px;line-height:1.6;">Choose the <b>HubSpot_Import.csv</b> file prepared for you. Records go to their HubSpot owner as Prospects (90-day window); owners that are not CRM users go to the Open Pool. Websites already in the CRM are skipped, so re-running the same file is safe.</p>
+    <input type="file" id="hsFile" accept=".csv" onchange="hsFile(this)" style="margin-bottom:10px;">
+    <div id="hsSummary" style="font-size:13px;margin-bottom:10px;"></div>
+    <div style="height:10px;background:var(--surface-3);border-radius:9px;overflow:hidden;margin-bottom:6px;"><div id="hsBar" style="height:100%;width:0;background:linear-gradient(90deg,#fb923c,#f43f8e);transition:width .2s;"></div></div>
+    <div id="hsStatus" style="font-size:12px;color:var(--text-muted);margin-bottom:10px;min-height:18px;"></div>
+    <div id="hsReport" style="font-size:12.5px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="hsStop" onclick="hsStopNow()" style="display:none;">Stop</button>
+      <button class="btn btn-ghost" onclick="closeHubspotImport()">Close</button>
+      <button class="btn btn-primary" id="hsStart" onclick="hsStartImport()" disabled>Start import</button>
+    </div>
   </div>
 </div>
 
@@ -5795,6 +5814,7 @@ function setProspectFilter(el, f) {
 }
 
 function renderProspectsView() {
+  { const hb=document.getElementById('btnHubspotImport'); if(hb) hb.style.display=(realUser && currentRole==='Admin')?'':'none'; }
   const search = (document.getElementById('prospectSearch')||{value:''}).value.toLowerCase();
   const thead = document.getElementById('prospectThead');
   const tbody = document.getElementById('prospectTbody');
@@ -9946,6 +9966,77 @@ function updateMailboxButton() {
   btn.onclick = mailboxConnected ? null : connectMailbox;
 }
 
+
+
+// ══ HUBSPOT IMPORT (C-023) — Admin only ═════════════════════════════
+let hsRows = null, hsBusy = false, hsCancel = false;
+function openHubspotImport() {
+  if(!realUser || currentRole!=='Admin') { showToast('Only Admin can run the HubSpot import.'); return; }
+  hsRows = null; document.getElementById('hsFile').value=''; document.getElementById('hsSummary').textContent='';
+  document.getElementById('hsStatus').textContent=''; document.getElementById('hsReport').innerHTML=''; document.getElementById('hsBar').style.width='0';
+  document.getElementById('hsStart').disabled = true;
+  document.getElementById('hubspotModal').classList.add('open');
+}
+function closeHubspotImport() { if(hsBusy && !confirm('The import is still running. Stop it and close?')) return; hsCancel = true; document.getElementById('hubspotModal').classList.remove('open'); }
+function hsStopNow() { hsCancel = true; document.getElementById('hsStatus').textContent = 'Stopping after this batch…'; }
+function hsFile(input) {
+  const f = input.files && input.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    const rows = parseCsv(e.target.result);
+    if(rows.length < 2) { showToast('That file has no data rows.'); return; }
+    const h = rows[0].map(x=>x.trim().toLowerCase());
+    const ix = k => h.indexOf(k);
+    if(ix('name')<0 || ix('domain')<0 || ix('contacts_json')<0) { showToast('This is not the prepared HubSpot_Import.csv file.'); return; }
+    hsRows = rows.slice(1).map(c=>({ name:c[ix('name')], domain:c[ix('domain')], owner:c[ix('owner')]||'', remarks:c[ix('remarks')]||'', city:c[ix('city')]||'', state:c[ix('state')]||'', contacts:c[ix('contacts_json')]||'[]' }));
+    let nc = 0; hsRows.forEach(x=>{ try{ nc += JSON.parse(x.contacts).length; }catch(e){} });
+    document.getElementById('hsSummary').innerHTML = `<b>${hsRows.length.toLocaleString()}</b> companies and <b>${nc.toLocaleString()}</b> contacts ready.`;
+    document.getElementById('hsStart').disabled = false;
+  };
+  r.readAsText(f);
+}
+async function hsStartImport() {
+  if(!hsRows || hsBusy) return;
+  if(!confirm('Import '+hsRows.length.toLocaleString()+' companies into the CRM now? This can take several minutes — keep this window open.')) return;
+  hsBusy = true; hsCancel = false;
+  document.getElementById('hsStart').disabled = true; document.getElementById('hsStop').style.display='';
+  const tot = {created:0, owned:0, openPool:0, contacts:0}, skipped = [], missing = {};
+  const SIZE = 100; let done = 0, failed = 0;
+  for(let i=0; i<hsRows.length && !hsCancel; i+=SIZE) {
+    const batch = hsRows.slice(i, i+SIZE);
+    let ok = false, lastErr = '';
+    for(let attempt=0; attempt<2 && !ok; attempt++) {
+      try {
+        const res = await apiFetch('/api/companies/import-hubspot', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({rows: batch}) });
+        if(!res.ok) throw new Error((await res.json().catch(()=>({}))).error || ('Error '+res.status));
+        const r = await res.json();
+        tot.created += r.created; tot.owned += r.owned; tot.openPool += r.openPool; tot.contacts += r.contacts;
+        skipped.push(...r.skipped); Object.entries(r.missingOwners||{}).forEach(([k,v])=>missing[k]=(missing[k]||0)+v);
+        ok = true;
+      } catch(e) { lastErr = e.message; }
+    }
+    if(!ok) { failed++; document.getElementById('hsStatus').textContent = 'A batch failed ('+lastErr+'). Stopped — you can run the same file again and it will continue where it left off.'; hsCancel = true; break; }
+    done = Math.min(hsRows.length, i+SIZE);
+    document.getElementById('hsBar').style.width = (done/hsRows.length*100)+'%';
+    document.getElementById('hsStatus').textContent = done.toLocaleString()+' of '+hsRows.length.toLocaleString()+' processed · '+tot.created.toLocaleString()+' created';
+  }
+  hsBusy = false; document.getElementById('hsStop').style.display='none'; document.getElementById('hsStart').disabled = false;
+  const mo = Object.entries(missing).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('hsReport').innerHTML = `<div style="border-top:1px solid var(--border);padding-top:10px;">
+    <b>${tot.created.toLocaleString()}</b> companies created (<b>${tot.owned.toLocaleString()}</b> assigned to an owner, <b>${tot.openPool.toLocaleString()}</b> in the Open Pool) with <b>${tot.contacts.toLocaleString()}</b> contacts.<br>
+    <b>${skipped.length.toLocaleString()}</b> skipped${skipped.length?' (already in the CRM or missing data)':''}.
+    ${mo.length?`<div style="margin-top:8px;"><b>Owners not found as CRM users</b> (their records went to the Open Pool):<br>${mo.map(([k,v])=>esc(k)+' — '+v).join('<br>')}</div>`:''}
+    ${skipped.length?`<button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="hsDownloadSkipped()">⬇ Download skipped list</button>`:''}</div>`;
+  window._hsSkipped = skipped;
+  try { await loadRealCompanies(); renderProspectsView(); } catch(e) {}
+  if(!failed && !hsCancel) showToast('HubSpot import finished.');
+}
+function hsDownloadSkipped() {
+  const rows = [['name','website','reason']].concat((window._hsSkipped||[]).map(s=>[s.name,s.domain,s.reason]));
+  const csv = rows.map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download = 'hubspot_skipped.csv'; a.click();
+}
+// ══ end HUBSPOT IMPORT ═══════════════════════════════════════════════
 
 // ══ EMAIL ACCESS (C-022) ═══════════════════════════════════════════
 // Who may email a company: the owner / co-owner, their managers, Customer
