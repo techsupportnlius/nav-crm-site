@@ -1161,22 +1161,19 @@ thead th.cb-th{width:36px;padding:0 10px;}
     </div>
     <div class="role-note" id="umRoleNote">Admin access only</div>
   </div>
+  <div id="umBulk"></div>
   <div class="um-table-wrap">
     <table>
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Email / CRM ID</th>
+          <th style="width:34px;"><input type="checkbox" id="umAll" title="Select all shown" onchange="umToggleAll(this.checked)" style="accent-color:var(--accent);cursor:pointer;"></th>
+          <th>User</th>
           <th>Role</th>
-          <th>Location</th>
-          <th>Sub-team</th>
-          <th>Assigned Locations <span style="font-size:10px;color:var(--accent);font-weight:400;">(CC only)</span></th>
-          <th>View Restrictions <span style="font-size:10px;color:var(--accent);font-weight:400;">(CC only)</span></th>
-          <th>Module Access</th>
-          <th>Type</th>
+          <th>Location / Team</th>
+          <th>Access</th>
           <th>Status</th>
           <th>Last Login</th>
-          <th style="width:80px;">Actions</th>
+          <th style="width:70px;"></th>
         </tr>
       </thead>
       <tbody id="umTbody"></tbody>
@@ -6285,100 +6282,156 @@ function renderUserManagement() {
     const former = usersDB.filter(u=>u.status==='Former Employee').length;
     sub.textContent = `${usersDB.length} total · ${active} active · ${former} former · ${LOCATIONS.length} locations`;
   }
+  umVisible = users.filter(u=>u.status!=='Former Employee').map(u=>u.id);
   if(!users.length) {
-    tbody.innerHTML = `<tr><td colspan="11" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">No users match filters.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">No users match filters.</td></tr>`;
+    umRenderBulk();
     return;
   }
   tbody.innerHTML = users.map(u => {
     const statusCls = u.status==='Active'?'ustatus-active':u.status==='Inactive'?'ustatus-inactive':'ustatus-former';
     const typeCls = u.type==='SSO'?'utype-sso':'utype-manual';
     const isGlobal = GLOBAL_ROLES.includes(u.role);
-    const isCCUser = u.role==='Carrier Compliance';
-    const canHaveLocs = ['Carrier Compliance','Operations Head','Operations Manager','Location Head'].includes(u.role);
-    const emailDisplay = u.status==='Former Employee'
-      ? `<span style="font-family:var(--mono);font-size:11px;color:var(--text-faint);text-decoration:line-through">${u.originalEmail||'—'}</span><br><span class="crm-email-chip" style="font-size:10px;margin-top:0;">${u.crmEmail}</span>`
-      : `<span style="font-family:var(--mono);font-size:11.5px;">${u.email}</span>`;
-    const tempBadge = u.tempExpiry ? `<br><span style="font-family:var(--mono);font-size:9.5px;color:var(--amber);">exp ${u.tempExpiry}</span>` : '';
-    const subTeamDisplay = isGlobal
-      ? `<span style="font-size:11px;color:var(--text-faint);font-style:italic;">Global</span>`
-      : (u.subTeam||[]).filter(t=>t!=='—').join(', ') || '—';
-    const locationDisplay = isGlobal
-      ? `<span style="font-size:11px;color:var(--text-faint);font-style:italic;">All</span>`
-      : ((u.assignedLocations||[]).length ? esc(u.assignedLocations.map(locationName).join(', ')) : (u.role==='Operations Head' ? '<span style="font-size:11px;color:var(--text-faint);font-style:italic;">All</span>' : esc(locationName(u.location))));
-    const actions = u.status==='Former Employee'
-      ? `<button class="btn btn-ghost btn-sm" style="opacity:0.5;cursor:default;" disabled>Archived</button>`
-      : `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openUserDrawer('${u.id}')">Edit</button>`;
-
-    // Assigned Locations column — CC users only, Admin-editable chips
-    const assignedLocsHtml = canHaveLocs
-      ? `<div style="display:flex;flex-wrap:wrap;gap:4px;min-width:140px;" onclick="event.stopPropagation();">
-          ${(u.assignedLocations||[]).map(loc=>`
-            <span style="background:rgba(212,98,26,0.12);border:1px solid rgba(212,98,26,0.3);border-radius:3px;padding:2px 7px;font-size:11px;color:var(--accent);display:inline-flex;align-items:center;gap:4px;">
-              ${esc(locationName(loc))}
-              <span style="cursor:pointer;opacity:0.6;font-size:13px;" onclick="removeAssignedLoc('${u.id}','${esc(loc)}')">×</span>
-            </span>`).join('')}
-          <select onchange="addAssignedLoc('${u.id}',this.value);this.value=''"
-            style="border:1px dashed var(--border);border-radius:3px;padding:2px 5px;font-size:11px;background:transparent;color:var(--text-faint);cursor:pointer;max-width:90px;">
-            <option value="">+ Loc</option>
-            ${LOCATIONS.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')}
-          </select>
-        </div>`
-      : `<span style="font-size:11.5px;color:var(--text-faint);">—</span>`;
-
-    // View Restrictions column — CC users only
-    const vr = u.viewRestrictions || {};
-    const viewRestrictHtml = isCCUser
-      ? `<div style="display:flex;flex-direction:column;gap:4px;font-size:11px;" onclick="event.stopPropagation();">
-          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text-faint);">
-            <input type="checkbox" ${vr.hideActiveCustomers?'checked':''} style="accent-color:var(--accent);"
-              onchange="toggleViewRestriction('${u.id}','hideActiveCustomers',this.checked)">
-            Hide Active Customers
-          </label>
-          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text-faint);">
-            <input type="checkbox" ${vr.hideProspects?'checked':''} style="accent-color:var(--accent);"
-              onchange="toggleViewRestriction('${u.id}','hideProspects',this.checked)">
-            Hide Prospects
-          </label>
-        </div>`
-      : `<span style="font-size:11.5px;color:var(--text-faint);">—</span>`;
-
-    // Module Access summary chips
-    const ma = Object.assign({carrierCompliance:true,bulkEmail:false}, u.moduleAccess || {prospects:true,customers:true,contacts:true,custCompliance:true});
-    const modLabels = {prospects:'Prospects',customers:'Customers',contacts:'Contacts',custCompliance:'Cust. Compliance',carrierCompliance:'Carrier Compliance'};
-    const enabledCount = Object.values(ma).filter(Boolean).length;
-    const moduleAccessSummary = u.status === 'Former Employee'
+    const former = u.status==='Former Employee';
+    const emailDisplay = former
+      ? `<span style="font-family:var(--mono);font-size:11px;color:var(--text-faint);text-decoration:line-through">${esc(u.originalEmail||'—')}</span>`
+      : `<span style="font-family:var(--mono);font-size:11.5px;color:var(--text-muted);">${esc(u.email)}</span>`;
+    const tempBadge = u.tempExpiry ? ` <span style="font-family:var(--mono);font-size:9.5px;color:var(--amber);">exp ${esc(u.tempExpiry)}</span>` : '';
+    const teamTxt = isGlobal ? '' : (u.subTeam||[]).filter(t=>t!=='—').join(', ');
+    const locMain = isGlobal
+      ? `<span style="color:var(--text-faint);font-style:italic;">All locations</span>`
+      : ((u.assignedLocations||[]).length ? esc(u.assignedLocations.map(locationName).join(', ')) : (u.role==='Operations Head' ? '<span style="color:var(--text-faint);font-style:italic;">All locations</span>' : esc(locationName(u.location))));
+    const ma = umAccess(u);
+    const on = UM_MODS.filter(m=>ma[m.key]);
+    const accessHtml = former
       ? `<span style="font-size:11px;color:var(--text-faint);">Archived</span>`
-      : `<div style="display:flex;flex-wrap:wrap;gap:3px;">
-          ${Object.entries(ma).map(([k,v])=>`
-            <span style="font-size:9.5px;padding:2px 6px;border-radius:3px;font-family:var(--mono);
-              background:${v?'rgba(34,197,94,0.1)':'rgba(239,68,68,0.08)'};
-              color:${v?'var(--green)':'var(--red)'};
-              border:1px solid ${v?'rgba(34,197,94,0.25)':'rgba(239,68,68,0.2)'};">
-              ${v?'✓':'✗'} ${modLabels[k]}
-            </span>`).join('')}
-        </div>`;
-
-    return `<tr onclick="openUserDrawer('${u.id}')">
+      : `<div style="font-weight:600;font-size:12.5px;">${on.length} of ${UM_MODS.length} enabled</div>
+         <div style="font-size:11px;color:var(--text-faint);max-width:300px;line-height:1.4;">${on.length ? esc(on.map(m=>m.label).join(', ')) : 'None'}</div>`;
+    const checked = umSel.has(u.id) ? 'checked' : '';
+    return `<tr onclick="openUserDrawer('${u.id}')"${umSel.has(u.id)?' style="background:rgba(212,98,26,0.06);"':''}>
+      <td onclick="event.stopPropagation();"><input type="checkbox" ${checked} ${former?'disabled':''} onchange="umToggle('${u.id}',this.checked)" style="accent-color:var(--accent);cursor:pointer;"></td>
       <td class="primary">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <div class="u-avatar" style="width:28px;height:28px;font-size:11px;${u.status==='Former Employee'?'opacity:0.4;':''}">${u.initials}</div>
-          <span${u.status==='Former Employee'?' style="color:var(--text-faint);text-decoration:line-through;"':''}>${u.name}</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="u-avatar" style="width:32px;height:32px;font-size:12px;${former?'opacity:0.4;':''}">${esc(u.initials)}</div>
+          <div>
+            <div${former?' style="color:var(--text-faint);text-decoration:line-through;"':' style="font-weight:600;"'}>${esc(u.name)}</div>
+            <div>${emailDisplay}${tempBadge}</div>
+          </div>
         </div>
       </td>
-      <td>${emailDisplay}${tempBadge}<br><span style="font-family:var(--mono);font-size:9.5px;color:var(--text-faint);">${u.crmId}</span></td>
-      <td style="font-size:12.5px;">${u.role}</td>
-      <td style="font-size:12px;">${locationDisplay}</td>
-      <td style="font-size:12px;color:var(--text-muted);">${subTeamDisplay}</td>
-      <td>${assignedLocsHtml}</td>
-      <td>${viewRestrictHtml}</td>
-      <td>${moduleAccessSummary}</td>
-      <td><span class="user-type-chip ${typeCls}">${u.type}</span></td>
-      <td><span class="user-type-chip ${statusCls}">${u.status}</span></td>
-      <td style="font-family:var(--mono);font-size:11px;color:var(--text-faint);">${u.lastLogin}</td>
-      <td>${actions}</td>
+      <td><span style="font-size:11.5px;padding:2px 9px;border-radius:99px;background:var(--surface-2);border:1px solid var(--border);white-space:nowrap;">${esc(u.role)}</span></td>
+      <td style="font-size:12.5px;">${locMain}${teamTxt?`<div style="font-size:11px;color:var(--text-faint);">${esc(teamTxt)}</div>`:''}</td>
+      <td>${accessHtml}</td>
+      <td><span class="user-type-chip ${statusCls}">${esc(u.status)}</span> <span class="user-type-chip ${typeCls}" style="margin-left:3px;">${esc(u.type)}</span></td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--text-faint);">${esc(u.lastLogin)}</td>
+      <td>${former?`<span style="font-size:11px;color:var(--text-faint);">Archived</span>`:`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openUserDrawer('${u.id}')">Edit</button>`}</td>
     </tr>`;
   }).join('');
+  umRenderBulk();
 }
+
+// ── User Management: selection, presets and bulk actions ──────────
+const UM_MODS = [
+  {key:'prospects',label:'Prospect Companies'},
+  {key:'customers',label:'Active Customers'},
+  {key:'contacts',label:'Contacts'},
+  {key:'custCompliance',label:'Customer Compliance'},
+  {key:'carrierCompliance',label:'Carrier Compliance'},
+  {key:'bulkEmail',label:'Bulk Email'},
+];
+const UM_PRESETS = {
+  'Sales basics':       {prospects:1,customers:1,contacts:1,custCompliance:0,carrierCompliance:0,bulkEmail:0},
+  'Sales + Bulk Email': {prospects:1,customers:1,contacts:1,custCompliance:0,carrierCompliance:0,bulkEmail:1},
+  'Manager':            {prospects:1,customers:1,contacts:1,custCompliance:0,carrierCompliance:1,bulkEmail:1},
+  'Compliance':         {prospects:0,customers:0,contacts:0,custCompliance:1,carrierCompliance:1,bulkEmail:0},
+};
+const umSel = new Set();
+let umVisible = [];
+function umAccess(u) {
+  return Object.assign({prospects:true,customers:true,contacts:true,custCompliance:true,carrierCompliance:true,bulkEmail:false}, u.moduleAccess || {});
+}
+function umToggle(id, on) { if(on) umSel.add(id); else umSel.delete(id); renderUserManagement(); }
+function umToggleAll(on) { umVisible.forEach(id=>{ if(on) umSel.add(id); else umSel.delete(id); }); renderUserManagement(); }
+function umClear() { umSel.clear(); renderUserManagement(); }
+function umRenderBulk() {
+  const box = document.getElementById('umBulk');
+  const all = document.getElementById('umAll');
+  if(all) { const n = umVisible.filter(id=>umSel.has(id)).length; all.checked = umVisible.length>0 && n===umVisible.length; all.indeterminate = n>0 && n<umVisible.length; }
+  if(!box) return;
+  if(!umSel.size) { box.innerHTML = ''; return; }
+  const selStyle = 'padding:5px 8px;border-radius:6px;border:1px solid #3a4155;background:#262c3e;color:#fff;font-size:12px;';
+  box.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 14px;background:#161a26;color:#fff;border-radius:8px;margin:0 0 10px;">
+    <strong style="margin-right:4px;">${umSel.size} selected</strong>
+    <select style="${selStyle}background:#d4621a;border-color:#d4621a;font-weight:600;" onchange="umBulkDo('preset',this.value);this.value=''">
+      <option value="">Apply access preset…</option>
+      ${Object.keys(UM_PRESETS).map(p=>`<option>${esc(p)}</option>`).join('')}
+    </select>
+    <select style="${selStyle}" onchange="umBulkDo('role',this.value);this.value=''"><option value="">Set role…</option>${ROLES.map(r=>`<option>${esc(r)}</option>`).join('')}</select>
+    <select style="${selStyle}" onchange="umBulkDo('location',this.value);this.value=''"><option value="">Set location…</option>${LOCATIONS.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')}</select>
+    <select style="${selStyle}" onchange="umBulkDo('modOn',this.value);this.value=''"><option value="">Turn module ON…</option>${UM_MODS.map(m=>`<option value="${m.key}">${esc(m.label)}</option>`).join('')}</select>
+    <select style="${selStyle}" onchange="umBulkDo('modOff',this.value);this.value=''"><option value="">Turn module OFF…</option>${UM_MODS.map(m=>`<option value="${m.key}">${esc(m.label)}</option>`).join('')}</select>
+    <button class="btn btn-sm" style="background:transparent;border:1px solid #3a4155;color:#fff;" onclick="umBulkDo('deactivate','1')">Deactivate</button>
+    <button class="btn btn-sm" style="background:transparent;border:none;color:#9098b0;margin-left:auto;" onclick="umClear()">Clear selection</button>
+  </div>`;
+}
+// Runs the normal single-user save for each picked person, but shows ONE
+// summary message at the end instead of one toast per person.
+function umQuiet(fn) {
+  const orig = window.showToast;
+  window.showToast = function(){};
+  try { fn(); } finally { window.showToast = orig; }
+}
+function umApplyPreset(ids, name) {
+  const p = UM_PRESETS[name];
+  if(!p) return 0;
+  let changes = 0;
+  umQuiet(()=>{
+    ids.forEach(id=>{
+      const u = usersDB.find(x=>x.id===id);
+      if(!u || u.status==='Former Employee') return;
+      const cur = umAccess(u);
+      UM_MODS.forEach(m=>{
+        const want = !!p[m.key];
+        if(!!cur[m.key]!==want){ setUserModuleAccess(id, m.key, want); changes++; }
+      });
+    });
+  });
+  return changes;
+}
+function umBulkDo(kind, val) {
+  if(!val) return;
+  const ids = Array.from(umSel).filter(id=>{ const u=usersDB.find(x=>x.id===id); return u && u.status!=='Former Employee'; });
+  if(!ids.length) return;
+  const n = ids.length;
+  if(kind==='preset') {
+    if(!confirm(`Apply "${val}" to ${n} user(s)? This replaces their current module access.`)) return;
+    umApplyPreset(ids, val);
+    showToast(`"${val}" applied to ${n} user(s).`);
+  } else if(kind==='role') {
+    if(!confirm(`Change role to "${val}" for ${n} user(s)?`)) return;
+    umQuiet(()=>ids.forEach(id=>updateUserRole(id,val)));
+    showToast(`Role set to ${val} for ${n} user(s).`);
+  } else if(kind==='location') {
+    if(!confirm(`Move ${n} user(s) to ${locationName(val)}?`)) return;
+    umQuiet(()=>ids.forEach(id=>{ const u=usersDB.find(x=>x.id===id); if(u && !GLOBAL_ROLES.includes(u.role)) updateUserLocation(id,val); }));
+    showToast(`Location set to ${locationName(val)} (global roles were skipped).`);
+  } else if(kind==='modOn' || kind==='modOff') {
+    const on = kind==='modOn';
+    const lbl = (UM_MODS.find(m=>m.key===val)||{}).label || val;
+    umQuiet(()=>ids.forEach(id=>{ const u=usersDB.find(x=>x.id===id); if(u && !!umAccess(u)[val]!==on) setUserModuleAccess(id,val,on); }));
+    showToast(`${lbl} turned ${on?'ON':'OFF'} for ${n} user(s).`);
+  } else if(kind==='deactivate') {
+    if(!confirm(`Deactivate ${n} user(s)? They will not be able to use the CRM. You can set them back to Active at any time.`)) return;
+    umQuiet(()=>ids.forEach(id=>updateUserStatus(id,'Inactive')));
+    showToast(`${n} user(s) deactivated.`);
+  }
+  umSel.clear();
+  renderUserManagement();
+}
+// Drawer helpers (re-open the drawer so it shows the new state)
+function umDrawerPreset(id, name) { if(!name) return; umApplyPreset([id], name); showToast(`"${name}" applied.`); openUserDrawer(id); }
+function umDrawerAddLoc(id, loc) { addAssignedLoc(id, loc); openUserDrawer(id); }
+function umDrawerRemoveLoc(id, loc) { removeAssignedLoc(id, loc); openUserDrawer(id); }
 
 function openUserDrawer(userId) {
   activeUserId = userId;
@@ -6483,6 +6536,28 @@ function openUserDrawer(userId) {
       ${u.tempExpiry?`<div style="margin-top:8px;padding:8px 12px;background:var(--amber-dim);border:1px solid rgba(245,158,11,0.3);border-radius:5px;font-size:12px;color:var(--amber);">⏱ Temporary access — expires ${u.tempExpiry}</div>`:''}
     </div>` : '';
 
+
+  // Assigned locations + view restrictions (moved here from the table)
+  const canHaveLocs = ['Carrier Compliance','Operations Head','Operations Manager','Location Head'].includes(u.role);
+  const vr = u.viewRestrictions || {};
+  const locViewSection = (currentRole==='Admin' && u.status!=='Former Employee' && (canHaveLocs || u.role==='Carrier Compliance')) ? `
+    <div class="d-sec">
+      <div class="d-sec-label">Assigned Locations ${u.role==='Carrier Compliance'?'':''}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;">
+        ${(u.assignedLocations||[]).map(loc=>`<span style="background:rgba(212,98,26,0.12);border:1px solid rgba(212,98,26,0.3);border-radius:3px;padding:2px 7px;font-size:11px;color:var(--accent);display:inline-flex;align-items:center;gap:4px;">${esc(locationName(loc))}<span style="cursor:pointer;opacity:0.6;font-size:13px;" onclick="umDrawerRemoveLoc('${u.id}','${esc(loc)}')">×</span></span>`).join('') || '<span style="font-size:11px;color:var(--text-faint);">None yet</span>'}
+        <select onchange="umDrawerAddLoc('${u.id}',this.value)" style="border:1px dashed var(--border);border-radius:3px;padding:2px 5px;font-size:11px;background:transparent;color:var(--text-faint);cursor:pointer;">
+          <option value="">+ Location</option>
+          ${LOCATIONS.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')}
+        </select>
+      </div>
+      ${u.role==='Carrier Compliance' ? `
+      <div class="d-sec-label" style="margin-top:14px;">View Restrictions</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12.5px;">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;"><input type="checkbox" ${vr.hideActiveCustomers?'checked':''} style="accent-color:var(--accent);" onchange="toggleViewRestriction('${u.id}','hideActiveCustomers',this.checked)"> Hide Active Customers</label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;"><input type="checkbox" ${vr.hideProspects?'checked':''} style="accent-color:var(--accent);" onchange="toggleViewRestriction('${u.id}','hideProspects',this.checked)"> Hide Prospects</label>
+      </div>` : ''}
+    </div>` : '';
+
   const auditHtml = (u.auditLog||[]).slice().reverse().map(e=>`
     <div class="audit-row">
       <div class="audit-ts">${e.ts}</div>
@@ -6498,6 +6573,10 @@ function openUserDrawer(userId) {
       <div style="font-size:11.5px;color:var(--text-faint);margin:6px 0 10px;line-height:1.5;">
         Control which CRM modules this user can access. Changes take effect immediately.
       </div>
+      <select onchange="umDrawerPreset('${u.id}',this.value)" style="margin-bottom:10px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:12.5px;">
+        <option value="">Apply an access preset…</option>
+        ${Object.keys(UM_PRESETS).map(p=>`<option>${esc(p)}</option>`).join('')}
+      </select>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;">
         ${[
           {key:'prospects',label:'Prospect Companies',icon:'🏢'},
@@ -6553,6 +6632,7 @@ function openUserDrawer(userId) {
 
     ${roleSection}
     ${moduleAccessSection}
+    ${locViewSection}
     ${offboardSection}
 
     <div class="d-sec">
