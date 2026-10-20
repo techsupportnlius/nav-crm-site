@@ -1825,12 +1825,13 @@ thead th.cb-th{width:36px;padding:0 10px;}
 <!-- CREDIT CAP MODAL -->
 <div class="modal-overlay" id="creditCapModal">
   <div class="modal" style="max-width:400px;">
-    <h3 style="margin-bottom:4px;">Set Credit Cap</h3>
+    <h3 style="margin-bottom:4px;" id="creditCapTitle">Set Credit Limit</h3>
     <p style="font-size:12px;color:var(--text-faint);margin-bottom:16px;" id="creditCapSubhead"></p>
     <div class="addco-field">
       <label>Credit Limit (USD)</label>
       <input id="cc-cap-amount" type="text" placeholder="25,000" style="font-family:var(--mono);">
-      <div id="cc-cap-err" style="display:none;font-size:11px;color:var(--red);margin-top:5px;">Enter a valid amount greater than zero.</div>
+      <div id="cc-cap-err" style="display:none;font-size:11px;color:var(--red);margin-top:5px;">Enter the credit limit as a number.</div>
+      <div id="cc-cap-hint" style="font-size:11px;color:var(--text-faint);margin-top:5px;"></div>
     </div>
     <div class="addco-field">
       <label>Reason / Note</label>
@@ -1838,7 +1839,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeCreditCapModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitCreditCap()">Apply Cap</button>
+      <button class="btn btn-primary" id="cc-cap-btn" onclick="submitCreditCap()">Apply</button>
     </div>
   </div>
 </div>
@@ -3458,6 +3459,10 @@ function renderCustomerDetails(id) {
             : `<div class="field-val">${c.paycat}</div>`}
           ${(!canEditPaycat && canSeePaycat) ? `<div style="font-size:10px;color:var(--text-faint);margin-top:3px;">Set by Compliance Team</div>` : ''}
         </div>` : ''}
+        ${(!isProspect(c) && (c.creditLimit!=null || (realUser && (currentRole==='Customer Compliance'||currentRole==='Admin')))) ? `<div class="field-box"><div class="field-label">Credit Limit</div>
+          <div class="field-val">${c.creditLimit!=null ? '$'+Number(c.creditLimit).toLocaleString('en-US') : '<span class="muted">Not set</span>'}</div>
+          ${(realUser && (currentRole==='Customer Compliance'||currentRole==='Admin')) ? `<button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="openCreditEdit(${c.id})">${c.creditLimit!=null?'Change limit':'Set limit'}</button>` : ''}
+        </div>` : ''}
         <div class="field-box"><div class="field-label">Owner (Sales Rep)</div><div class="field-val ${ownerLabelFor(c)==='—'?'muted':''}">${ownerLabelFor(c)}</div></div>
         ${canReassign ? `<div class="field-box"><div class="field-label">Reassign To</div>
           <select class="field-select" onchange="reassignSingle(${c.id},this.value);this.value=''">
@@ -4287,6 +4292,7 @@ function setCompFilter(f, el) {
 
 // ── CARRIER COMPLIANCE VIEW ───────────────────────────────────
 function renderCCView() {
+  ccShowSettingsBtn();
   const isSalesRep = currentRole==='Sales Rep';
   const isCarrierComp = currentRole==='Carrier Compliance';
   const isCoiSpec = currentRole==='COI Specialist';
@@ -4584,6 +4590,17 @@ function openCompCase(id) {
     </div>`;
   }
 
+  // "Start working" (Compliance / Admin) and the update-the-rep box (C-031)
+  const canWork = (isCustComp||isAdmin) && !isResolved;
+  const notStarted = /^(New|Awaiting Info|On Hold)/i.test(c.status);
+  const startHtml = (canWork && notStarted) ? `<div class="d-sec"><div class="d-sec-label">Pick this up</div>
+      <div style="font-size:12px;color:var(--text-faint);margin-bottom:8px;">Moves the case to <strong>In Review</strong> and tells the rep and their Team Leader you are working on it.</div>
+      <button class="btn btn-primary btn-sm" onclick="compStartWorking('${c.id}')">▶ Start working</button></div>` : '';
+  const msgHtml = `<div class="d-sec"><div class="d-sec-label">Updates for the sales rep</div>
+      ${canWork ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${COMP_PRESETS.map((p,i)=>`<span class="fchip" style="cursor:pointer;font-size:11.5px;" onclick="compPickPreset(${i})">${esc(p.length>34?p.slice(0,34)+'…':p)}</span>`).join('')}</div>
+      <textarea id="compMsgText" placeholder="Write a status or timing update for the rep…" style="width:100%;min-height:70px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;"></textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin:6px 0 10px;"><button class="btn btn-primary btn-sm" id="compMsgBtn" onclick="compSendMessage('${c.id}')">Send to rep</button><span style="font-size:11px;color:var(--text-faint);">Rep and Team Leader get a notification in the CRM.</span></div>` : ''}
+      <div id="compMsgList"></div></div>`;
   document.getElementById('dTitle').textContent=c.co;
   renderDrawerTabs('none');
   document.getElementById('dBody').innerHTML=`
@@ -4595,14 +4612,19 @@ function openCompCase(id) {
         <div class="field-box"><div class="field-label">SLA</div><div class="field-val sla ${c.slaCls}">${c.sla}</div></div>
         <div class="field-box"><div class="field-label">Assigned To</div><div class="field-val">${c.assigned}</div></div>
         <div class="field-box"><div class="field-label">Raised By</div><div class="field-val">${c.by}</div></div>
+        ${c.pickedUpBy ? `<div class="field-box"><div class="field-label">Working on it</div><div class="field-val">${esc(c.pickedUpBy)}<div style="font-size:10.5px;color:var(--text-faint);">since ${esc(c.pickedUpAt)}</div></div></div>` : ''}
+        ${c.creditLimit!=null ? `<div class="field-box"><div class="field-label">Credit Limit</div><div class="field-val">$${Number(c.creditLimit).toLocaleString('en-US')}</div></div>` : ''}
       </div>
     </div>
+    ${startHtml}
     ${reassignHtml}
+    ${msgHtml}
     <div class="d-sec"><div class="d-sec-label">Activity</div>
       <div class="tl-item"><div class="tl-kind">OPEN</div><div class="tl-text">Case opened — routed to ${c.assigned}<div class="tl-time">Today</div></div></div>
       <div class="tl-item"><div class="tl-kind">RAISE</div><div class="tl-text">Submitted by ${c.by} via account check<div class="tl-time">Today</div></div></div>
     </div>`;
   openDrawer();
+  compLoadMessages(c.id);
 }
 
 // Every one of these goes through resolveComplianceCase(), which PATCHes
@@ -4611,25 +4633,33 @@ function openCompCase(id) {
 // transaction — then reloads real data so every screen reflects it. None
 // of these touch a local array any more; there's nothing left to revert
 // on refresh.
-async function compApproveCustomer(caseId, status) {
-  const c = realComplianceCases.find(x=>x.id===caseId);
-  const ok = await resolveComplianceCase(caseId, status, {});
-  if(ok) {
-    showToast(`${c?.co||'Company'} approved (${status}).`);
-    closeDrawer();
-  }
-}
-
-// ── CREDIT CAP (modal) ────────────────────────────────────────
+// Every approval now needs a credit limit (C-031). Prepaid Only can be 0.
 let creditCapCtx = null;
-function compApproveLimited(caseId) {
+function compApproveCustomer(caseId, status, afterReassign) {
   const c = realComplianceCases.find(x=>x.id===caseId);
   if(!c) return;
-  creditCapCtx = { caseId };
-  document.getElementById('creditCapSubhead').textContent = `${c.co} — limited credit approval.`;
-  document.getElementById('cc-cap-amount').value = '25,000';
+  creditCapCtx = { caseId, status, mode:'case' };
+  const label = status==='Approved' ? 'Full Credit' : status==='Approved - Prepaid Only' ? 'Prepaid Only' : 'Limited Credit';
+  document.getElementById('creditCapTitle').textContent = 'Credit limit — ' + label;
+  document.getElementById('creditCapSubhead').textContent = `${c.co} — approval. The limit is saved on the company and shown to the sales rep.`;
+  document.getElementById('cc-cap-amount').value = status==='Approved - Prepaid Only' ? '0' : '';
   document.getElementById('cc-cap-note').value = '';
   document.getElementById('cc-cap-err').style.display = 'none';
+  document.getElementById('cc-cap-hint').textContent = status==='Approved - Prepaid Only' ? 'Enter 0 if no credit is given.' : 'Required. Must be more than 0.';
+  document.getElementById('cc-cap-btn').textContent = 'Approve';
+  document.getElementById('creditCapModal').classList.add('open');
+}
+function compApproveLimited(caseId) { compApproveCustomer(caseId, 'Approved - Limited Credit'); }
+function openCreditEdit(companyId) {
+  const co = customers.find(c=>c.id===companyId); if(!co) return;
+  creditCapCtx = { companyId, mode:'company' };
+  document.getElementById('creditCapTitle').textContent = 'Credit limit';
+  document.getElementById('creditCapSubhead').textContent = `${co.name} — current limit: ${co.creditLimit!=null?'$'+Number(co.creditLimit).toLocaleString('en-US'):'not set'}.`;
+  document.getElementById('cc-cap-amount').value = co.creditLimit!=null ? Number(co.creditLimit).toLocaleString('en-US') : '';
+  document.getElementById('cc-cap-note').value = '';
+  document.getElementById('cc-cap-err').style.display = 'none';
+  document.getElementById('cc-cap-hint').textContent = 'The sales rep is notified of the change.';
+  document.getElementById('cc-cap-btn').textContent = 'Save limit';
   document.getElementById('creditCapModal').classList.add('open');
 }
 function closeCreditCapModal() {
@@ -4640,11 +4670,64 @@ async function submitCreditCap() {
   if(!creditCapCtx) return;
   const raw = document.getElementById('cc-cap-amount').value.replace(/[^0-9.]/g,'');
   const amt = parseFloat(raw);
-  if(!amt || amt <= 0) { document.getElementById('cc-cap-err').style.display='block'; return; }
-  const { caseId } = creditCapCtx;
+  const ctx = creditCapCtx;
+  const zeroOk = ctx.mode==='company' || ctx.status==='Approved - Prepaid Only';
+  if(raw==='' || !isFinite(amt) || amt < 0 || (!zeroOk && amt <= 0)) { document.getElementById('cc-cap-err').style.display='block'; return; }
   closeCreditCapModal();
-  const ok = await resolveComplianceCase(caseId, 'Approved - Limited Credit', { creditCap: amt });
-  if(ok) { showToast(`Approved with a $${amt.toLocaleString('en-US')} credit cap.`); closeDrawer(); }
+  if(ctx.mode==='company') {
+    try {
+      const res = await apiFetch(`/api/companies/${ctx.companyId}/credit-limit`, { method:'PATCH', body: JSON.stringify({ creditLimit: amt }) });
+      const j = await res.json().catch(()=>({}));
+      if(!res.ok) { showToast(j.error || 'Could not save the credit limit.'); return; }
+      await loadRealCompanies(); showToast(`Credit limit saved: $${amt.toLocaleString('en-US')}.`);
+      if(openCompanyId===ctx.companyId) openCustomerDrawer(ctx.companyId);
+    } catch(e) { showToast('Could not save the credit limit.'); }
+    return;
+  }
+  const ok = await resolveComplianceCase(ctx.caseId, ctx.status, { creditLimit: amt, afterReassign:!!ctx.afterReassign });
+  if(ok) { showToast(`Approved with a $${amt.toLocaleString('en-US')} credit limit.`); closeDrawer(); }
+}
+
+// "Start working" + messages to the rep (C-031)
+async function compStartWorking(caseId) {
+  try {
+    const res = await apiFetch(`/api/compliance-cases/${encodeURIComponent(caseId)}/start`, { method:'PATCH' });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not start the case.'); return; }
+    await loadRealComplianceCases(); showToast('Picked up. The rep has been notified.'); openCompCase(caseId);
+  } catch(e) { showToast('Could not start the case.'); }
+}
+const COMP_PRESETS = [
+  'Working on it — you will have an answer within 1 business day.',
+  'Waiting on documents from the customer. Please ask them to send the credit application and W-9.',
+  'Credit check is in progress. Expect an update by end of day.',
+  'Need more information — please call the customer and confirm billing details.',
+];
+async function compLoadMessages(caseId) {
+  const box = document.getElementById('compMsgList'); if(!box) return;
+  try {
+    const res = await apiFetch(`/api/compliance-cases/${encodeURIComponent(caseId)}/messages`);
+    if(!res.ok) { box.innerHTML = ''; return; }
+    compRenderMessages(await res.json());
+  } catch(e) { box.innerHTML = ''; }
+}
+function compRenderMessages(rows) {
+  const box = document.getElementById('compMsgList'); if(!box) return;
+  box.innerHTML = rows.length ? rows.map(m=>`<div class="tl-item"><div class="tl-kind">MSG</div><div class="tl-text">${esc(m.message_text)}<div class="tl-time">${esc(m.from_name||'Compliance')} · ${new Date(m.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</div></div></div>`).join('')
+    : `<div style="font-size:12px;color:var(--text-faint);padding:6px 0;">No updates sent yet.</div>`;
+}
+function compPickPreset(i) { const t=document.getElementById('compMsgText'); if(t){ t.value = COMP_PRESETS[i]; t.focus(); } }
+async function compSendMessage(caseId) {
+  const t = document.getElementById('compMsgText'); const text = (t.value||'').trim();
+  if(!text) { showToast('Type a message first.'); return; }
+  const btn = document.getElementById('compMsgBtn'); btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const res = await apiFetch(`/api/compliance-cases/${encodeURIComponent(caseId)}/messages`, { method:'POST', body: JSON.stringify({ text }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not send.'); return; }
+    t.value=''; compRenderMessages(j); showToast('Sent to the rep and their Team Leader.');
+  } catch(e) { showToast('Could not send.'); }
+  finally { btn.disabled = false; btn.textContent = 'Send to rep'; }
 }
 
 async function compHoldCase(caseId, reason) {
@@ -4685,11 +4768,8 @@ async function compReassignAndApprove(coId, caseId) {
     });
     if(!res.ok) { showToast('Could not reassign the account — please try again.'); return; }
   }
-  const ok = await resolveComplianceCase(caseId, 'Approved', {});
-  if(ok) {
-    showToast(newRepId ? 'Reassigned and approved.' : 'Approved.');
-    closeDrawer();
-  }
+  if(newRepId) { await loadRealCompanies(); showToast('Account reassigned. Now enter the credit limit to approve.'); }
+  compApproveCustomer(caseId, 'Approved');
 }
 
 async function compRejectCase(caseId) {
@@ -10343,7 +10423,7 @@ async function loadEmailRequests() {
       <button class="btn btn-ghost btn-sm" onclick="emailRequestDecide(${r.request_id},false)">Decline</button></div>`).join('')
       : '<div style="font-size:12.5px;color:var(--text-faint);padding:6px 0;">No requests waiting.</div>'}
     ${done.length?`<div style="font-size:11px;color:var(--text-faint);margin-top:8px;">Recent: ${done.map(r=>`${esc(r.requested_by)} → ${esc(r.company_name)} (${esc(r.status)}${r.days_granted?', '+r.days_granted+'d':''})`).join(' · ')}</div>`:''}
-    ${emailReqShowLog?`<div style="margin-top:10px;font-weight:700;font-size:12.5px;">Blocked attempts (latest)</div>${log.length?log.slice(0,25).map(l=>`<div style="font-size:12px;padding:4px 0;border-top:1px solid var(--border);">${esc(new Date(l.attempted_at).toLocaleString())} · <b>${esc(l.person)}</b> tried to email ${esc(l.company||'?')} (${esc(l.recipient||'')})</div>`).join(''):'<div style="font-size:12px;color:var(--text-faint);">None yet.</div>'}`:''}
+    ${(emailReqShowLog && currentRole==='Admin')?`<div style="margin-top:10px;font-weight:700;font-size:12.5px;">Blocked attempts (latest)</div>${log.length?log.slice(0,25).map(l=>`<div style="font-size:12px;padding:4px 0;border-top:1px solid var(--border);">${esc(new Date(l.attempted_at).toLocaleString())} · <b>${esc(l.person)}</b> tried to email ${esc(l.company||'?')} (${esc(l.recipient||'')})</div>`).join(''):'<div style="font-size:12px;color:var(--text-faint);">None yet.</div>'}`:''}
   </div>`;
 }
 async function emailRequestDecide(id, approve) {
@@ -10613,6 +10693,7 @@ function mapCompany(c) {
     extStatus: c.ext_status || null, extRoute: c.ext_route || null,
     assignedByRole: c.assigned_by_role || null, releasedAt: c.released_at || null,
     emailGrantUntil: c.my_email_grant_until || null,
+    creditLimit: (c.credit_limit === undefined || c.credit_limit === null) ? null : Number(c.credit_limit),
   };
 }
 // Converts one row from GET /api/users into the shape the prototype's old
@@ -10760,6 +10841,8 @@ function mapComplianceCase(r) {
     by: r.raised_by_name || '—',
     resolvedAt: r.resolved_at ? new Date(r.resolved_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : null,
     creditCap: r.credit_cap, blacklistReason: r.blacklist_reason,
+    pickedUpBy: r.picked_up_by_name || '', pickedUpAt: r.picked_up_at ? new Date(r.picked_up_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '',
+    creditLimit: (r.company_credit_limit !== undefined && r.company_credit_limit !== null) ? Number(r.company_credit_limit) : (r.credit_cap != null ? Number(r.credit_cap) : null),
   };
 }
 async function loadRealComplianceCases() {
@@ -10851,17 +10934,34 @@ function mapCarrierCheck(r) {
   };
 }
 let ccMail = { mailboxes:[], offices:[], team:[], mine:{operations:null,coi:null}, canEdit:false };
+let ccMailLoadFailed = false;
 const ccBox = id => ccMail.mailboxes.find(m=>m.id===id) || null;
 async function loadCcSettings() {
   try {
     const res = await apiFetch('/api/carrier-mailboxes');
-    if(!res.ok) { if(realUser) console.warn('Carrier mailboxes not available yet (run add_carrier_mailboxes.sql and deploy):', res.status); return; }
-    ccMail = await res.json();
-    const bt = document.getElementById('ccSettingsBtn');
-    if(bt) bt.style.display = ccMail.canEdit ? '' : 'none';
-  } catch(e) { console.error('Loading carrier mailboxes failed:', e); }
+    if(!res.ok) { ccMailLoadFailed = true; console.warn('Carrier mailboxes not available yet (run add_carrier_mailboxes.sql and deploy):', res.status); ccShowSettingsBtn(); return; }
+    ccMail = await res.json(); ccMailLoadFailed = false;
+  } catch(e) { ccMailLoadFailed = true; console.error('Loading carrier mailboxes failed:', e); }
+  ccShowSettingsBtn();
 }
-function openCcSettings() { cmbRender(); document.getElementById('ccSettingsModal').classList.add('open'); }
+function ccShowSettingsBtn(){
+  const bt = document.getElementById('ccSettingsBtn');
+  if(bt) bt.style.display = (currentRole==='Admin' || currentRole==='Carrier Compliance') ? '' : 'none';
+}
+function openCcSettings() {
+  document.getElementById('ccSettingsModal').classList.add('open');
+  if(ccMailLoadFailed) {
+    const m = document.querySelector('#ccSettingsModal .modal');
+    const old = document.getElementById('ccNotReady'); if(old) old.remove();
+    const d = document.createElement('div'); d.id='ccNotReady';
+    d.style.cssText='background:#fff4e5;border:1px solid #f0b36b;color:#7a4a00;padding:12px;border-radius:8px;margin:10px 0;font-size:13px;';
+    d.innerHTML='<b>Not set up on the server yet.</b> Run <code>add_carrier_mailboxes.sql</code> in Azure SQL, then deploy <code>carrierCompliance.js</code> to the Function App. After that, close this and reopen it.';
+    m.insertBefore(d, m.firstChild);
+    return;
+  }
+  const old = document.getElementById('ccNotReady'); if(old) old.remove();
+  cmbRender();
+}
 function closeCcSettings() { document.getElementById('ccSettingsModal').classList.remove('open'); }
 const cmbOfficeName = id => (ccMail.offices.find(o=>o.id===id)||{}).name || id;
 const cmbPersonName = id => (ccMail.team.find(t=>t.id===id)||{}).name || id;
