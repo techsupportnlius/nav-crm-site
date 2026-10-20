@@ -1095,7 +1095,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
 <div class="view" id="view-customer-compliance">
   <div class="view-header">
     <div><div class="view-title">Customer Compliance</div><div class="view-subtitle">Customer eligibility checks and account-conflict queries</div></div>
-    <div class="view-header-right" id="custCompHeaderBtns"></div>
+    <div class="view-header-right"><button class="btn btn-ghost btn-sm" id="custMbBtn" style="display:none;" onclick="openCcSettings('customer')">✉ Email settings</button><span id="custCompHeaderBtns" style="display:contents;"></span></div>
   </div>
   <div id="emailReqBox"></div>
   <div class="filter-bar">
@@ -1399,8 +1399,8 @@ thead th.cb-th{width:36px;padding:0 10px;}
 <div class="modal-overlay" id="ccSettingsModal">
   <div class="modal" style="max-width:1040px;width:95vw;max-height:90vh;overflow-y:auto;">
     <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
-      <div><h3 style="margin:0;">Carrier email settings</h3>
-      <p style="font-size:12.5px;color:var(--text-muted);margin:4px 0 0;">Shared mailboxes that carrier onboarding and COI emails go out from. Admin and Carrier Compliance can change these.</p></div>
+      <div><h3 style="margin:0;" id="ccSetTitle">Carrier email settings</h3>
+      <p style="font-size:12.5px;color:var(--text-muted);margin:4px 0 0;" id="ccSetSub">Shared mailboxes that carrier onboarding and COI emails go out from. Admin and Carrier Compliance can change these.</p></div>
       <div style="margin-left:auto;display:flex;gap:8px;"><button class="btn btn-primary btn-sm" onclick="cmbOpen(null)">+ Add mailbox</button><button class="btn btn-ghost btn-sm" onclick="closeCcSettings()">Close</button></div>
     </div>
     <div class="cmb-grid">
@@ -4453,6 +4453,7 @@ function renderCustCompView() {
   const isOpsMgr = currentRole==='Operations Manager';
   const note = document.getElementById('custCompRoleNote');
   const hdr = document.getElementById('custCompHeaderBtns');
+  ccShowSettingsBtn();
   const search = ((document.getElementById('compSearch')||{}).value||'').toLowerCase();
 
   // realComplianceCases already comes back from the server pre-scoped to
@@ -4596,6 +4597,9 @@ function openCompCase(id) {
   const startHtml = (canWork && notStarted) ? `<div class="d-sec"><div class="d-sec-label">Pick this up</div>
       <div style="font-size:12px;color:var(--text-faint);margin-bottom:8px;">Moves the case to <strong>In Review</strong> and tells the rep and their Team Leader you are working on it.</div>
       <button class="btn btn-primary btn-sm" onclick="compStartWorking('${c.id}')">▶ Start working</button></div>` : '';
+  const emailCustHtml = ((isCustComp||isAdmin) && c.companyId) ? `<div class="d-sec"><div class="d-sec-label">Email the customer</div>
+      <div style="font-size:12px;color:var(--text-faint);margin-bottom:8px;">Goes out from the shared customer mailbox, not your own address.</div>
+      <button class="btn btn-ghost btn-sm" onclick="openCustomerEmail(${c.companyId}, '${c.id}')">✉ Email customer</button></div>` : '';
   const msgHtml = `<div class="d-sec"><div class="d-sec-label">Updates for the sales rep</div>
       ${canWork ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${COMP_PRESETS.map((p,i)=>`<span class="fchip" style="cursor:pointer;font-size:11.5px;" onclick="compPickPreset(${i})">${esc(p.length>34?p.slice(0,34)+'…':p)}</span>`).join('')}</div>
       <textarea id="compMsgText" placeholder="Write a status or timing update for the rep…" style="width:100%;min-height:70px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;"></textarea>
@@ -4618,6 +4622,7 @@ function openCompCase(id) {
     </div>
     ${startHtml}
     ${reassignHtml}
+    ${emailCustHtml}
     ${msgHtml}
     <div class="d-sec"><div class="d-sec-label">Activity</div>
       <div class="tl-item"><div class="tl-kind">OPEN</div><div class="tl-text">Case opened — routed to ${c.assigned}<div class="tl-time">Today</div></div></div>
@@ -8572,6 +8577,7 @@ async function saveCCCoiNote(mc) {
 let emailComposeContext = null; // {type:'ops'|'coi', mc:'...'}
 
 function openEmailCompose(type, mc, opts) {
+  { const fi=document.getElementById('ec-from'); if(fi) fi.readOnly=true; }
   // opts: {to, subject, body, title, subhead, from, showCc, cc} for general/sales emails
   emailComposeContext = {type, mc: mc||null, companyId: (opts && opts.companyId!=null) ? opts.companyId : null};
   emailAttachments = [];
@@ -8580,7 +8586,7 @@ function openEmailCompose(type, mc, opts) {
   const sig = currentUserSignature();
   setTimeout(renderEmailAttachList, 0);
 
-  if(type==='sales' && opts) {
+  if((type==='sales' || type==='custcomp') && opts) {
     document.getElementById('emailComposeTitle').textContent = opts.title||'Send Email';
     document.getElementById('emailComposeSubhead').textContent = opts.subhead||'Review and edit before sending.';
     document.getElementById('ec-from').value = opts.from||(currentUserEmail()||'nav@nlius.com');
@@ -8591,6 +8597,7 @@ function openEmailCompose(type, mc, opts) {
     document.getElementById('ec-subject').value = opts.subject||'';
     document.getElementById('ec-body').value = (opts.body||'') + '\n\n' + sig;
     { const rw = document.getElementById('ec-remind-wrap'); if(rw) { rw.style.display = (realUser && opts.companyId!=null) ? 'block' : 'none'; document.getElementById('ec-remind').value=''; } }
+    if(type==='custcomp') ccApplyCustomerMailbox(sig);
     olLoadRich();
     modal.classList.add('open');
     return;
@@ -8911,6 +8918,21 @@ async function doSendEmail() {
   const attachments = (emailAttachments||[]).slice();
 
   if(!toAddr) { showToast('Add at least one recipient.'); return; }
+
+  // ── CUSTOMER COMPLIANCE EMAIL (C-033): always from the shared customer mailbox ──
+  if(type === 'custcomp') {
+    if(!realUser) { closeEmailCompose(); showToast('Email sent (demo).'); return; }
+    const okToSend = await guardRecipients(toAddr, ccAddr);
+    if(!okToSend) return;
+    const ccClean = [...new Set((String(ccAddr||'') + ',' + String((emailComposeContext&&emailComposeContext.alwaysCc)||'')).split(/[,;]+/).map(a=>a.trim()).filter(a=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)))].join(', ');
+    window.__lastSendFallback = '';
+    const fromAddr = emailComposeContext && emailComposeContext.fromAddr;
+    const sentOk = await sendRealGenericEmail(toAddr, ccClean, subject, body, 'cu-'+Date.now(), attachments, true, fromAddr);
+    if(!sentOk) return;
+    closeEmailCompose();
+    showToast(window.__lastSendFallback ? 'Sent from YOUR mailbox — no Send-As permission on '+window.__lastSendFallback+' yet. Replies still go to '+window.__lastSendFallback+'.' : 'Email sent from '+fromAddr+'.');
+    return;
+  }
 
   // ── SALES / CUSTOMER & PROSPECT EMAILS ──
   if(type === 'sales') {
@@ -10846,6 +10868,7 @@ function mapComplianceCase(r) {
   };
 }
 async function loadRealComplianceCases() {
+  if(currentRole==='Admin' || currentRole==='Customer Compliance') loadCcSettings();
   try {
     const res = await apiFetch('/api/compliance-cases');
     if(!res.ok) { console.error('Loading compliance cases failed:', res.status, await res.text()); return; }
@@ -10933,8 +10956,11 @@ function mapCarrierCheck(r) {
     _reassignedTo: r.reassigned_to_user_id || null,
   };
 }
-let ccMail = { mailboxes:[], offices:[], team:[], mine:{operations:null,coi:null}, canEdit:false };
+let ccMail = { mailboxes:[], offices:[], team:[], customerTeam:[], mine:{operations:null,coi:null,customer:null}, canEdit:false };
 let ccMailLoadFailed = false;
+let cmbScope = 'carrier';
+const cmbTypes = () => cmbScope==='customer' ? ['Customer'] : ['Operations','COI'];
+const cmbShown = () => ccMail.mailboxes.filter(m=>cmbTypes().includes(m.type));
 const ccBox = id => ccMail.mailboxes.find(m=>m.id===id) || null;
 async function loadCcSettings() {
   try {
@@ -10947,15 +10973,22 @@ async function loadCcSettings() {
 function ccShowSettingsBtn(){
   const bt = document.getElementById('ccSettingsBtn');
   if(bt) bt.style.display = (currentRole==='Admin' || currentRole==='Carrier Compliance') ? '' : 'none';
+  const cb = document.getElementById('custMbBtn');
+  if(cb) cb.style.display = (currentRole==='Admin' || currentRole==='Customer Compliance') ? '' : 'none';
 }
-function openCcSettings() {
+function openCcSettings(scope) {
+  cmbScope = scope==='customer' ? 'customer' : 'carrier';
+  document.getElementById('ccSetTitle').textContent = cmbScope==='customer' ? 'Customer email settings' : 'Carrier email settings';
+  document.getElementById('ccSetSub').textContent = cmbScope==='customer'
+    ? 'Shared mailbox that Customer Compliance emails customers from (e.g. ops.customer@nlius.com). Admin and Customer Compliance can change these.'
+    : 'Shared mailboxes that carrier onboarding and COI emails go out from. Admin and Carrier Compliance can change these.';
   document.getElementById('ccSettingsModal').classList.add('open');
   if(ccMailLoadFailed) {
     const m = document.querySelector('#ccSettingsModal .modal');
     const old = document.getElementById('ccNotReady'); if(old) old.remove();
     const d = document.createElement('div'); d.id='ccNotReady';
     d.style.cssText='background:#fff4e5;border:1px solid #f0b36b;color:#7a4a00;padding:12px;border-radius:8px;margin:10px 0;font-size:13px;';
-    d.innerHTML='<b>Not set up on the server yet.</b> Run <code>add_carrier_mailboxes.sql</code> in Azure SQL, then deploy <code>carrierCompliance.js</code> to the Function App. After that, close this and reopen it.';
+    d.innerHTML='<b>Not set up on the server yet.</b> Run <code>add_carrier_mailboxes.sql</code> (and <code>add_customer_mailbox.sql</code>) in Azure SQL, then deploy <code>carrierCompliance.js</code> to the Function App. After that, close this and reopen it.';
     m.insertBefore(d, m.firstChild);
     return;
   }
@@ -10964,23 +10997,24 @@ function openCcSettings() {
 }
 function closeCcSettings() { document.getElementById('ccSettingsModal').classList.remove('open'); }
 const cmbOfficeName = id => (ccMail.offices.find(o=>o.id===id)||{}).name || id;
-const cmbPersonName = id => (ccMail.team.find(t=>t.id===id)||{}).name || id;
+const cmbPersonName = id => (ccMail.team.find(t=>t.id===id)||ccMail.customerTeam.find(t=>t.id===id)||{}).name || id;
 function cmbPills(arr,none,fn){ return arr.length ? arr.map(x=>`<span class="cmb-pill">${esc(fn(x))}</span>`).join('') : `<span class="cmb-pill">${none}</span>`; }
 function cmbRender(){
   const tb = document.getElementById('cmbTb'); if(!tb) return;
-  tb.innerHTML = ccMail.mailboxes.length ? ccMail.mailboxes.map(m=>`<tr onclick="cmbOpen(${m.id})"><td><div class="cmb-nm">${esc(m.name)} ${m.isDefault?'<span class="cmb-pill def">Default</span>':''}</div><div class="cmb-em">${esc(m.email)}</div></td>
+  tb.innerHTML = cmbShown().length ? cmbShown().map(m=>`<tr onclick="cmbOpen(${m.id})"><td><div class="cmb-nm">${esc(m.name)} ${m.isDefault?'<span class="cmb-pill def">Default</span>':''}</div><div class="cmb-em">${esc(m.email)}</div></td>
     <td><span class="cmb-pill ${m.type==='COI'?'coi':'ops'}">${m.type}</span></td>
     <td>${m.type==='COI'?'<span class="cmb-pill">All offices</span>':cmbPills(m.offices,m.isDefault?'Everyone else':'—',cmbOfficeName)}</td>
     <td>${m.type==='COI'?'<span class="cmb-pill">Everyone</span>':cmbPills(m.people,'Anyone in those offices',cmbPersonName)}</td>
     <td onclick="event.stopPropagation()"><span class="cmb-sw ${m.isActive?'on':''}" onclick="cmbToggle(${m.id})"></span></td></tr>`).join('')
     : `<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--text-faint);">No mailboxes yet. If this stays empty, run add_carrier_mailboxes.sql in the database, then reload.</td></tr>`;
   const su=document.getElementById('cmbSimU'), so=document.getElementById('cmbSimO');
-  if(su && !su.options.length) su.innerHTML = ccMail.team.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
-  if(so && !so.options.length) so.innerHTML = ccMail.offices.map(o=>`<option value="${esc(o.id)}">${esc(o.name)}</option>`).join('');
+  const simTeam = cmbScope==='customer' ? ccMail.customerTeam : ccMail.team;
+  if(su) su.innerHTML = simTeam.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+  if(so) so.innerHTML = ccMail.offices.map(o=>`<option value="${esc(o.id)}">${esc(o.name)}</option>`).join('');
   cmbSim();
 }
 function cmbPick(userId, officeId){
-  const ops = ccMail.mailboxes.filter(m=>m.isActive && m.type==='Operations');
+  const ops = ccMail.mailboxes.filter(m=>m.isActive && m.type===(cmbScope==='customer'?'Customer':'Operations'));
   let m = ops.find(x=>x.people.includes(userId)); if(m) return [m,'① that person is personally assigned to this mailbox'];
   m = ops.find(x=>x.offices.includes(officeId)); if(m) return [m,'② it is the mailbox for that office'];
   m = ops.find(x=>x.isDefault); return m ? [m,'③ nothing matched, so the Default mailbox is used'] : [null,'No active Default mailbox — the email would go out from the sender\'s own mailbox'];
@@ -10989,6 +11023,7 @@ function cmbSim(){
   const r = document.getElementById('cmbSimR'); if(!r) return;
   const [m,why] = cmbPick(document.getElementById('cmbSimU').value, document.getElementById('cmbSimO').value);
   const c = ccMail.mailboxes.find(x=>x.isActive && x.type==='COI' && x.isDefault) || ccMail.mailboxes.find(x=>x.isActive && x.type==='COI');
+  if(cmbScope==='customer'){ r.innerHTML = m ? `Customer emails go from<br><b>${esc(m.email)}</b><br><span style="color:var(--text-muted)">${why}.</span>` : `<span style="color:#e0594a;">${why}. Customer emails are blocked until a customer mailbox is set up.</span>`; return; }
   r.innerHTML = (m ? `Onboarding email goes from<br><b>${esc(m.email)}</b><br><span style="color:var(--text-muted)">${why}.</span>` : `<span style="color:#e0594a;">${why}.</span>`)
     + (c ? `<hr style="border:0;border-top:1px solid var(--border-2);margin:10px 0">COI request always goes from<br><b>${esc(c.email)}</b>` : '');
 }
@@ -11003,22 +11038,23 @@ async function cmbSave(body, id){
 async function cmbToggle(id){ const m=ccBox(id); if(!m) return; await cmbSave({...m, isActive:!m.isActive}, id); }
 let cmbCur = null;
 function cmbOpen(id){
-  cmbCur = id ? JSON.parse(JSON.stringify(ccBox(id))) : {id:0,name:'',email:'',type:'Operations',offices:[],people:[],isDefault:false,isActive:true,signature:'',ccAddress:''};
+  cmbCur = id ? JSON.parse(JSON.stringify(ccBox(id))) : {id:0,name:'',email:'',type:(cmbScope==='customer'?'Customer':'Operations'),offices:[],people:[],isDefault:false,isActive:true,signature:'',ccAddress:''};
   cmbDraw(); document.getElementById('cmbEditor').classList.add('open');
 }
 function cmbClose(){ document.getElementById('cmbEditor').classList.remove('open'); }
 function cmbTgl(k,v){ const a=cmbCur[k], i=a.indexOf(v); i>=0?a.splice(i,1):a.push(v); cmbDraw(); }
 function cmbChips(items,sel,key){ return `<div class="cmb-chips">${items.map(x=>`<span class="cmb-chip ${sel.includes(x.id)?'on':''}" onclick="cmbTgl('${key}','${String(x.id).replace(/'/g,"\\'")}')">${esc(x.name)}</span>`).join('')}</div>`; }
 function cmbDraw(){
-  const c=cmbCur, isCoi=c.type==='COI';
+  const c=cmbCur, isCoi=c.type==='COI', isCust=c.type==='Customer';
+  const peopleList = isCust ? ccMail.customerTeam : ccMail.team;
   document.getElementById('cmbDr').innerHTML = `<h2 style="margin:0 0 2px;font-size:18px;">${c.id?'Edit mailbox':'Add mailbox'}</h2><div class="cmb-hint">Changes apply to the next email sent.</div>
   <label class="cmb-l">Name</label><input type="text" value="${esc(c.name)}" oninput="cmbCur.name=this.value" placeholder="e.g. Carrier Ops – Ganganagar">
   <label class="cmb-l">Email address</label><input type="email" value="${esc(c.email)}" oninput="cmbCur.email=this.value" placeholder="ops.something@nlius.com">
   <div class="cmb-hint">Must be a real shared mailbox in Microsoft 365. The team needs “Send As” permission on it.</div>
-  <label class="cmb-l">Type</label><select onchange="cmbCur.type=this.value;cmbDraw()"><option ${!isCoi?'selected':''}>Operations</option><option ${isCoi?'selected':''}>COI</option></select>
+  <label class="cmb-l">Type</label><select onchange="cmbCur.type=this.value;cmbDraw()">${cmbTypes().map(t=>`<option ${c.type===t?'selected':''}>${t}</option>`).join('')}</select>
   ${isCoi?'<div class="cmb-hint">COI mailboxes are used for every COI request, for every office and person.</div>':`
   <label class="cmb-l">Offices it serves</label>${cmbChips(ccMail.offices,c.offices,'offices')}
-  <label class="cmb-l">People assigned (carrier compliance team)</label>${cmbChips(ccMail.team,c.people,'people')}
+  <label class="cmb-l">People assigned (${isCust?'customer':'carrier'} compliance team)</label>${cmbChips(peopleList,c.people,'people')}
   <div class="cmb-hint">Leave people empty to cover everyone in the chosen offices.</div>`}
   <label class="cmb-l">Signature added to emails</label><textarea oninput="cmbCur.signature=this.value">${esc(c.signature)}</textarea>
   <label class="cmb-l">Always send a copy to (optional)</label><input type="email" value="${esc(c.ccAddress)}" oninput="cmbCur.ccAddress=this.value" placeholder="cr.compliance@nlius.com">
@@ -11065,6 +11101,38 @@ function ccApplyMailbox(type){
   }
   ctx.mbId = mb ? mb.id : null; ctx.fromAddr = mb ? mb.email : ''; ctx.alwaysCc = mb ? (mb.ccAddress||'') : ''; ctx.mbSig = ccSigOf(mb);
   const ta=document.getElementById('ec-body'); if(ta && ctx.mbSig){ ta.value = ta.value.replace(/\s+$/,'') + ctx.mbSig; olLoadRich(); }
+}
+function ccApplyCustomerMailbox(userSig){
+  const ctx = emailComposeContext; if(!ctx) return;
+  const mb = ccBox(ccMail.mine.customer);
+  const fromInp = document.getElementById('ec-from'), sel = document.getElementById('ec-from-sel');
+  if(sel) sel.style.display='none'; fromInp.style.display=''; fromInp.readOnly=true;
+  fromInp.value = mb ? mb.email : '';
+  ctx.mbId = mb ? mb.id : null; ctx.fromAddr = mb ? mb.email : ''; ctx.alwaysCc = mb ? (mb.ccAddress||'') : ''; ctx.mbSig = ccSigOf(mb);
+  if(mb && mb.signature){
+    const ta=document.getElementById('ec-body'), tail='\n\n'+userSig;
+    if(userSig && ta.value.endsWith(tail)) ta.value = ta.value.slice(0, ta.value.length-tail.length);
+    ta.value = ta.value.replace(/\s+$/,'') + ctx.mbSig;
+  }
+  if(mb && mb.ccAddress){ document.getElementById('ec-cc-wrap').style.display='flex'; }
+}
+function openCustomerEmail(companyId, caseId){
+  const c = customers.find(x=>x.id===companyId);
+  if(!c) { showToast('Could not find that company.'); return; }
+  if(realUser && !ccBox(ccMail.mine.customer)) {
+    showToast('No customer mailbox is set up yet. Click "✉ Email settings" at the top of this screen and add one (e.g. ops.customer@nlius.com).');
+    return;
+  }
+  const first = (contactsDB[companyId]||[])[0];
+  openEmailCompose('custcomp', null, {
+    companyId: c.id,
+    title: `Email customer — ${c.name}`,
+    subhead: 'Sends from the shared customer mailbox. Review before sending.',
+    to: first?.email || (c.domain ? `contact@${c.domain}` : ''),
+    cc: '', showCc: true,
+    subject: `${c.name} — NAV Logistics credit review`,
+    body: `Hi ${first?.name?.split(' ')[0]||'there'},\n\n`,
+  });
 }
 function ccFromChanged(){
   const ctx = emailComposeContext; if(!ctx) return;
