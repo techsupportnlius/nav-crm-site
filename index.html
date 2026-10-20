@@ -2280,6 +2280,7 @@ async function loadRealActivity(companyId) {
       kind: r.kind, text: r.text_html,
       by: r.created_by_name || resolveUserName(r.created_by_user_id),
       time: r.created_at ? new Date(r.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '',
+      ts: r.created_at || 0,
       reminder: r.reminder_at || null,
     }));
     realActivityLoaded.add(companyId);
@@ -4599,10 +4600,6 @@ function openCompCase(id) {
   const startHtml = (canWork && notStarted) ? `<div class="d-sec"><div class="d-sec-label">Pick this up</div>
       <div style="font-size:12px;color:var(--text-faint);margin-bottom:8px;">Moves the case to <strong>In Review</strong> and tells the rep and their Team Leader you are working on it.</div>
       <button class="btn btn-primary btn-sm" onclick="compStartWorking('${c.id}')">▶ Start working</button></div>` : '';
-  const emailCustHtml = ((isCustComp||isAdmin) && c.companyId) ? `<div class="d-sec"><div class="d-sec-label">Email the customer</div>
-      <div style="font-size:12px;color:var(--text-faint);margin-bottom:8px;">Goes out from the shared customer mailbox, not your own address.</div>
-      <button class="btn btn-ghost btn-sm" onclick="openCustomerEmail(${c.companyId}, '${c.id}')">✉ Email customer</button>
-      <div id="custEmailLog" style="margin-top:10px;"></div></div>` : '';
   const msgHtml = `<div class="d-sec"><div class="d-sec-label">Updates for the sales rep</div>
       ${canWork ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${COMP_PRESETS.map((p,i)=>`<span class="fchip" style="cursor:pointer;font-size:11.5px;" onclick="compPickPreset(${i})">${esc(p.length>34?p.slice(0,34)+'…':p)}</span>`).join('')}</div>
       <textarea id="compMsgText" placeholder="Write a status or timing update for the rep…" style="width:100%;min-height:70px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;"></textarea>
@@ -4610,7 +4607,7 @@ function openCompCase(id) {
       <div id="compMsgList"></div></div>`;
   document.getElementById('dTitle').textContent=c.co;
   renderDrawerTabs('none');
-  document.getElementById('dBody').innerHTML=`
+  const caseHtml = `
     <div class="d-sec"><div class="d-sec-label">Case Details</div>
       <div class="field-grid">
         <div class="field-box"><div class="field-label">Case ID</div><div class="field-val">${c.id}</div></div>
@@ -4620,20 +4617,55 @@ function openCompCase(id) {
         <div class="field-box"><div class="field-label">Assigned To</div><div class="field-val">${c.assigned}</div></div>
         <div class="field-box"><div class="field-label">Raised By</div><div class="field-val">${c.by}</div></div>
         ${c.pickedUpBy ? `<div class="field-box"><div class="field-label">Working on it</div><div class="field-val">${esc(c.pickedUpBy)}<div style="font-size:10.5px;color:var(--text-faint);">since ${esc(c.pickedUpAt)}</div></div></div>` : ''}
-        ${c.creditLimit!=null ? `<div class="field-box"><div class="field-label">Credit Limit</div><div class="field-val">$${Number(c.creditLimit).toLocaleString('en-US')}</div></div>` : ''}
+        ${(()=>{ const cl = (relatedCo && relatedCo.creditLimit!=null) ? relatedCo.creditLimit : c.creditLimit; const canEdit=(isCustComp||isAdmin)&&c.companyId&&relatedCo; return (cl!=null||canEdit) ? `<div class="field-box"><div class="field-label">Credit Limit</div><div class="field-val">${cl!=null?'$'+Number(cl).toLocaleString('en-US'):'<span style="color:var(--text-faint);">Not set</span>'}${canEdit?` <a style="font-size:11.5px;color:var(--accent);cursor:pointer;margin-left:6px;" onclick="openCreditEdit(${c.companyId})">${cl!=null?'Change':'Set'}</a>`:''}</div></div>` : ''; })()}
       </div>
     </div>
     ${startHtml}
     ${reassignHtml}
-    ${emailCustHtml}
     ${msgHtml}
     <div class="d-sec"><div class="d-sec-label">Activity</div>
       <div class="tl-item"><div class="tl-kind">OPEN</div><div class="tl-text">Case opened — routed to ${c.assigned}<div class="tl-time">Today</div></div></div>
       <div class="tl-item"><div class="tl-kind">RAISE</div><div class="tl-text">Submitted by ${c.by} via account check<div class="tl-time">Today</div></div></div>
     </div>`;
+  compDrawer = { caseId:c.id, companyId:c.companyId, name:c.co, caseHtml, showTabs:(isCustComp||isAdmin)&&!!c.companyId };
+  compShowTab('case');
   openDrawer();
-  compLoadMessages(c.id);
-  if(emailCustHtml) custLoadEmailLog(c.id);
+}
+let compDrawer = null;
+function compTabsBar(active){
+  const t=(k,l)=>`<div class="dtab${active===k?' active':''}" onclick="compShowTab('${k}')">${l}</div>`;
+  document.getElementById('drawerTabsBar').innerHTML = t('case','Case')+t('emails','Emails')+t('activity','Activity');
+}
+function compShowTab(tab){
+  const d = compDrawer; if(!d) return;
+  const body = document.getElementById('dBody');
+  if(d.showTabs) compTabsBar(tab); else document.getElementById('drawerTabsBar').innerHTML='';
+  d.tab = tab;
+  if(tab==='case'){ body.innerHTML = d.caseHtml; compLoadMessages(d.caseId); return; }
+  if(tab==='emails'){
+    body.innerHTML = `<div class="d-sec"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
+      <div class="d-sec-label" style="margin:0;">Emails to ${esc(d.name)}</div>
+      <button class="btn btn-primary btn-sm" onclick="openCustomerEmail(${d.companyId}, '${d.caseId}')">✉ Email customer</button></div>
+      <div style="font-size:12px;color:var(--text-faint);margin-bottom:10px;">Sent from the shared customer mailbox. Only Admin and Customer Compliance can see this list.</div>
+      <div id="custEmailLog">Loading…</div></div>`;
+    custLoadEmailLog(d.caseId); return;
+  }
+  body.innerHTML = '<div class="d-sec"><div class="d-sec-label">Activity</div><div id="compActList">Loading…</div></div>';
+  compLoadActivity(d);
+}
+async function compLoadActivity(d){
+  const box = document.getElementById('compActList');
+  let items = [];
+  try { if(realUser) await loadRealActivity(d.companyId); } catch(e){}
+  (activityDB[d.companyId]||[]).forEach(e=>items.push({ts:e.ts||0, kind:e.kind, html:e.text, by:e.by, time:e.time}));
+  try {
+    const res = realUser ? await apiFetch('/api/compliance-cases/'+encodeURIComponent(d.caseId)+'/email-log') : null;
+    if(res && res.ok) (await res.json()).forEach(r=>items.push({ts:r.sent_at, kind:'EMAIL', by:r.full_name||'', time:new Date(r.sent_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}),
+      html:'Emailed customer ('+esc(r.to_address||'')+') from '+esc(r.from_address||'')+' — <strong>'+esc(r.subject||'(no subject)')+'</strong> · '+(r.email_kind==='documents'?'documents, broker NOT copied':(r.broker_copied?'broker copied':'broker not copied'))}));
+  } catch(e){}
+  if(!compDrawer || compDrawer.caseId!==d.caseId || compDrawer.tab!=='activity') return;
+  items.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+  box.innerHTML = items.length ? items.map(e=>`<div class="tl-item"><div class="tl-kind">${esc(e.kind)}</div><div class="tl-text">${e.html}<div class="tl-time">${esc(e.by||'')}${e.by&&e.time?' · ':''}${esc(e.time||'')}</div></div></div>`).join('') : '<div style="color:var(--text-faint);font-size:13px;">No activity yet.</div>';
 }
 
 // Every one of these goes through resolveComplianceCase(), which PATCHes
@@ -8946,6 +8978,7 @@ async function doSendEmail() {
       const caseId = emailComposeContext && emailComposeContext.caseId;
       if(caseId) apiFetch('/api/compliance-cases/'+encodeURIComponent(caseId)+'/email-log', { method:'POST', body: JSON.stringify({ fromAddr, to: toAddr, cc: ccClean, subject, docs: visDocs, brokerCopied: brokerSeen }) }).catch(()=>{});
     } catch(e) {}
+    if(compDrawer && compDrawer.tab==='emails') setTimeout(()=>{ if(compDrawer && compDrawer.tab==='emails') custLoadEmailLog(compDrawer.caseId); }, 900);
     closeEmailCompose();
     showToast(window.__lastSendFallback ? 'Sent from YOUR mailbox — no Send-As permission on '+window.__lastSendFallback+' yet. Replies still go to '+window.__lastSendFallback+'.' : 'Email sent from '+fromAddr+'.');
     return;
