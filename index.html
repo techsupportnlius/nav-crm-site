@@ -4768,7 +4768,7 @@ function collectProspectAlerts() {
   const out = [];
   customers.forEach(c=>{
     if(!prospectAlertRelevant(c)) return;
-    if(c.prospectStatus==='Open') { if(canSeeWindow()) out.push({c, type:'open'}); return; }
+    if(c.prospectStatus==='Open') return; // Open Pool is shown as one summary line, not one row each (C-025)
     if(['Lost','Ready to Convert'].includes(c.prospectStatus)) return;
     if(c.extStatus==='Pending') { if(canDecideExtension(c)) out.push({c, type:'ext'}); return; }
     const left = prospectDaysLeft(c);
@@ -4779,7 +4779,8 @@ function collectProspectAlerts() {
 function showProspectAlerts(force) {
   if(!realUser) return;
   const items = collectProspectAlerts();
-  const sig = items.map(i=>i.type+i.c.id+(i.left!==undefined?':'+i.left:'')).join('|');
+  const openCount = canSeeWindow() ? customers.filter(c=>isProspect(c) && c.prospectStatus==='Open').length : 0;
+  const sig = openCount+'#'+items.map(i=>i.type+i.c.id+(i.left!==undefined?':'+i.left:'')).join('|');
   if(!items.length) { prospectAlertSig=''; return; }
   if(!force && sig===prospectAlertSig) return;
   prospectAlertSig = sig;
@@ -4792,7 +4793,7 @@ function showProspectAlerts(force) {
       <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;color:var(--text);">${esc(i.c.name)}</div>
       <div style="font-size:11.5px;color:${col};margin-top:2px;">${label[i.type]} · ${detail}</div></div>
       <button class="btn btn-ghost btn-sm" onclick="openProspectFromAlert(${i.c.id})">Open →</button></div>`;
-  }).join('') + (items.length>12?`<div style="padding-top:8px;font-size:11.5px;color:var(--text-faint);">…and ${items.length-12} more in Prospect Companies.</div>`:'');
+  }).join('') + (openCount?`<div style="padding-top:10px;font-size:12px;color:var(--blue);">${openCount.toLocaleString()} prospects are in the Open Pool (no owner). Filter Prospect Companies by Open to see them.</div>`:'') + (items.length>12?`<div style="padding-top:8px;font-size:11.5px;color:var(--text-faint);">…and ${items.length-12} more in Prospect Companies.</div>`:'');
   document.getElementById('prospectAlertBody').innerHTML = body;
   document.getElementById('prospectAlertModal').classList.add('open');
 }
