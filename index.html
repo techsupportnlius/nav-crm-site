@@ -726,6 +726,23 @@ thead th.cb-th{width:36px;padding:0 10px;}
 .um-table-wrap{flex:0 1 auto;margin:0 28px 24px;background:var(--surface);border:1px solid var(--border);border-radius:20px}
 :root:not([data-theme="light"]) .tb-logo-img{background:#fff;border-radius:9px;padding:3px 7px;height:38px}
 @media(max-width:1100px){.kpi-grid{grid-template-columns:repeat(3,1fr)}}
+
+/* GLOBAL SEARCH (C-028) */
+.gs-wrap{position:relative;flex:1 1 280px;max-width:460px;min-width:160px;margin-left:18px;}
+.gs-wrap input{width:100%;padding:9px 14px 9px 36px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2,var(--surface));color:var(--text);font-size:13px;outline:none;font-family:inherit;}
+.gs-wrap input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(240,112,32,0.15);}
+.gs-ico{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--text-faint);pointer-events:none;}
+.gs-results{display:none;position:absolute;top:calc(100% + 8px);left:0;width:min(560px,92vw);max-height:70vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,0.28);z-index:650;padding:6px;}
+.gs-results.open{display:block;}
+.gs-h{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);padding:8px 10px 4px;}
+.gs-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;cursor:pointer;}
+.gs-row:hover,.gs-row.sel{background:var(--surface-2,rgba(0,0,0,0.05));}
+.gs-main{flex:1;min-width:0;}
+.gs-t{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.gs-s{font-size:11.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.gs-tag{font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);color:var(--text-muted);flex-shrink:0;}
+.gs-none{padding:16px;text-align:center;font-size:12.5px;color:var(--text-faint);}
+@media (max-width:900px){.gs-wrap{flex-basis:140px;margin-left:8px;}}
 </style>
 </head>
 
@@ -769,6 +786,11 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <div class="tb-logo-sub" style="white-space:nowrap;">CRM · Internal</div>
   </div>
   <div class="tb-breadcrumb" id="tbBread"><span>Dashboard</span></div>
+  <div class="gs-wrap" id="gsWrap">
+    <svg class="gs-ico" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input id="gsInput" type="text" autocomplete="off" placeholder="Search companies, contacts, people…  ( / )" oninput="gsOnInput()" onkeydown="gsKey(event)" onfocus="gsOnInput()">
+    <div class="gs-results" id="gsResults"></div>
+  </div>
   <button class="btn btn-ghost btn-sm" id="tbConnectMailbox" onclick="connectMailbox()" title="Grant the CRM permission to send email as you, through your own Outlook mailbox" style="margin-left:auto;margin-right:12px;flex-shrink:0;display:none;align-items:center;gap:5px;">📧 Connect Mailbox</button>
   <button class="btn btn-check btn-sm" id="tbCompanyCheck" onclick="openCheck()" style="margin-right:12px;flex-shrink:0;display:flex;align-items:center;gap:5px;"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Company Check</button>
   <div class="tb-role-switcher" id="tbRoleSwitcher">
@@ -4821,6 +4843,68 @@ function openProspectFromAlert(id) {
 }
 setInterval(()=>{ try{ showProspectAlerts(false); }catch(e){} }, 30*60*1000);
 
+
+// ── GLOBAL SEARCH (C-028) ─────────────────────────────────────
+let gsTimer=null, gsSeq=0, gsItems=[], gsSel=-1;
+function gsEsc(t){ return esc(String(t==null?'':t)); }
+function gsOnInput(){
+  const q=(document.getElementById('gsInput').value||'').trim();
+  clearTimeout(gsTimer);
+  if(q.length<2){ gsClose(); return; }
+  gsTimer=setTimeout(()=>gsRun(q),230);
+}
+function gsClose(){ const r=document.getElementById('gsResults'); if(r) r.classList.remove('open'); gsItems=[]; gsSel=-1; }
+function gsLocal(q){
+  const s=q.toLowerCase(), has=v=>String(v||'').toLowerCase().includes(s);
+  const companies=customers.filter(c=>has(c.name)||has(c.domain)||has(c.website)).slice(0,8)
+    .map(c=>({id:c.id,name:c.name,domain:c.domain||c.website||'',owner:c.owner||'',prospect:isProspect(c),status:c.prospectStatus||c.status}));
+  const contacts=[];
+  customers.forEach(co=>(contactsDB[co.id]||[]).forEach(ct=>{ if(contacts.length<8&&(has(ct.name)||has(ct.email)||has(ct.phone)||has(ct.title))) contacts.push({name:ct.name,title:ct.title,email:ct.email,phone:ct.phone,company:co.name,companyId:co.id}); }));
+  const users=(currentRole==='Admin'?usersDB.filter(u=>has(u.name)||has(u.email)).slice(0,8):[]).map(u=>({id:u.id,name:u.name,email:u.email,role:u.role,status:u.status}));
+  return {companies,contacts,users};
+}
+async function gsRun(q){
+  const my=++gsSeq; let data;
+  if(realUser){
+    try{
+      const res=await apiFetch('/api/search?q='+encodeURIComponent(q));
+      if(!res.ok) throw new Error(res.status);
+      const j=await res.json();
+      data={
+        companies:(j.companies||[]).map(c=>({id:c.company_id,name:c.name,domain:c.domain||'',owner:c.owner_name||'',prospect:/prospect|pending/i.test(c.status_id||''),status:c.prospect_status_id||c.status_id})),
+        contacts:(j.contacts||[]).map(c=>({name:c.full_name,title:c.title,email:c.email,phone:c.phone,company:c.company_name,companyId:c.company_id})),
+        users:(j.users||[]).map(u=>({id:u.user_id,name:u.full_name,email:u.email,role:u.role,status:u.status})),
+      };
+    }catch(e){ data=gsLocal(q); }
+  } else data=gsLocal(q);
+  if(my!==gsSeq) return; // a newer search is already running
+  gsRender(data,q);
+}
+function gsRender(d,q){
+  const box=document.getElementById('gsResults'); gsItems=[]; gsSel=-1; let h='';
+  const add=(title,rows,fn)=>{ if(!rows.length) return; h+=`<div class="gs-h">${title}</div>`; rows.forEach(r=>{ const o=fn(r); gsItems.push(o.go); h+=`<div class="gs-row" data-i="${gsItems.length-1}" onclick="gsGo(${gsItems.length-1})"><div class="gs-main"><div class="gs-t">${o.t}</div><div class="gs-s">${o.s}</div></div><span class="gs-tag">${o.tag}</span></div>`; }); };
+  add('Companies',d.companies,c=>({t:gsEsc(c.name),s:gsEsc([c.domain,c.owner?('Owner: '+c.owner):'Open / no owner'].filter(Boolean).join(' · ')),tag:c.prospect?'Prospect':'Customer',go:()=>{ gsOpenCompany(c.id,c.prospect); }}));
+  add('Contacts',d.contacts,c=>({t:gsEsc(c.name),s:gsEsc([c.title&&c.title!=='—'?c.title:'',c.email,c.company].filter(Boolean).join(' · ')),tag:'Contact',go:()=>{ gsOpenCompany(c.companyId,null); }}));
+  add('People',d.users,u=>({t:gsEsc(u.name),s:gsEsc([u.email,u.role].filter(Boolean).join(' · ')),tag:gsEsc(u.status||'User'),go:()=>{ nav(document.querySelector('[data-view="user-management"]'),'user-management','User Management'); setTimeout(()=>{ try{ openUserDrawer(u.id); }catch(e){} },150); }}));
+  if(!gsItems.length) h=`<div class="gs-none">Nothing found for “${gsEsc(q)}”. Only records you have access to are searched.</div>`;
+  box.innerHTML=h; box.classList.add('open');
+}
+function gsOpenCompany(id,prospect){
+  const co=customers.find(c=>c.id===id);
+  const isP = co ? isProspect(co) : !!prospect;
+  nav(document.querySelector(`[data-view="${isP?'deals':'companies'}"]`), isP?'deals':'companies', isP?'Prospect Companies':'Active Customers');
+  setTimeout(()=>{ try{ openCustomerDrawer(id); }catch(e){} },150);
+}
+function gsGo(i){ const f=gsItems[i]; gsClose(); const inp=document.getElementById('gsInput'); if(inp) inp.blur(); if(f) f(); }
+function gsKey(e){
+  const rows=[...document.querySelectorAll('#gsResults .gs-row')];
+  if(e.key==='Escape'){ gsClose(); e.target.blur(); return; }
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){ if(!rows.length) return; e.preventDefault(); gsSel=(gsSel+(e.key==='ArrowDown'?1:-1)+rows.length)%rows.length; rows.forEach((r,i)=>r.classList.toggle('sel',i===gsSel)); rows[gsSel].scrollIntoView({block:'nearest'}); return; }
+  if(e.key==='Enter'){ e.preventDefault(); if(gsItems.length) gsGo(gsSel>=0?gsSel:0); }
+}
+document.addEventListener('keydown',e=>{ if(e.key==='/'&&!/INPUT|TEXTAREA|SELECT/.test((document.activeElement||{}).tagName)&&!(document.activeElement||{}).isContentEditable){ const i=document.getElementById('gsInput'); if(i){ e.preventDefault(); i.focus(); } } });
+document.addEventListener('click',e=>{ if(!e.target.closest('#gsWrap')) gsClose(); });
+
 // ── COMPANY CHECK MODAL ───────────────────────────────────────
 
 let checkNoSite = false;
@@ -5973,6 +6057,20 @@ async function submitForCompliance(id) {
 }
 
 // ── AGGREGATED CONTACTS VIEW ──────────────────────────────────
+let ctServer = {q:'',rows:[]}, ctTimer=null;
+function ctSchedule(q){
+  clearTimeout(ctTimer);
+  ctTimer=setTimeout(async()=>{
+    try{
+      const res=await apiFetch('/api/search?only=contacts&limit=200&q='+encodeURIComponent(q));
+      if(!res.ok) return;
+      const j=await res.json();
+      ctServer={q, rows:(j.contacts||[]).map(c=>({name:c.full_name,title:c.title||'—',phone:c.phone||'—',email:c.email||'',company:c.company_name,companyId:c.company_id,
+        addedAt:c.created_at?new Date(c.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}))};
+      if(((document.getElementById('ctSearch')||{}).value||'').toLowerCase()===q && document.getElementById('view-contacts').classList.contains('active')) renderContactsView();
+    }catch(e){ console.error('Contact search failed', e); }
+  },250);
+}
 function renderContactsView() {
   const tbody = document.getElementById('ctTbody');
   const subtitle = document.getElementById('ctSubtitle');
@@ -5996,7 +6094,8 @@ function renderContactsView() {
 
   // For a real login, fetch any visible company's contacts we haven't
   // loaded yet, then re-render once they land.
-  if(realUser) {
+  const ctBig = realUser && visibleCos.length > 300;
+  if(realUser && !ctBig) {
     const pending = visibleCos.filter(co=>!realContactsLoaded.has(co.id));
     if(pending.length) {
       Promise.all(pending.map(co=>loadRealContacts(co.id))).then(()=>{
@@ -6007,16 +6106,24 @@ function renderContactsView() {
 
   // Flatten contacts
   let allContacts = [];
+  if(ctBig) {
+    // Thousands of companies: don't download every company's contacts. Ask the server instead.
+    if(search.length>=2) {
+      if(ctServer.q===search) allContacts = ctServer.rows.slice();
+      else ctSchedule(search);
+    }
+  } else {
   visibleCos.forEach(co=>{
     const contacts = contactsDB[co.id]||[];
     contacts.forEach(ct=>{
       allContacts.push({...ct, company:co.name, companyId:co.id});
     });
   });
+  }
 
   const ctBase = allContacts;
   allContacts = ddApply('ct', allContacts, CT_DD);
-  if(search) allContacts = allContacts.filter(ct=>
+  if(search && !ctBig) allContacts = allContacts.filter(ct=>
     (ct.name&&ct.name.toLowerCase().includes(search))||
     (ct.title&&ct.title.toLowerCase().includes(search))||
     (ct.company&&ct.company.toLowerCase().includes(search))||
@@ -6024,10 +6131,10 @@ function renderContactsView() {
   );
 
   ddRender('ct', 'ctDD', ctBase, CT_DD, renderContactsView, allContacts.length);
-  if(subtitle) subtitle.textContent = `${allContacts.length} contact${allContacts.length!==1?'s':''} across ${visibleCos.length} accounts`;
+  if(subtitle) subtitle.textContent = ctBig ? (search.length>=2 ? `${allContacts.length} contact${allContacts.length!==1?'s':''} found${allContacts.length>=200?' (first 200 — type more to narrow)':''}` : `Search across all ${visibleCos.length.toLocaleString()} accounts`) : `${allContacts.length} contact${allContacts.length!==1?'s':''} across ${visibleCos.length} accounts`;
 
   if(!allContacts.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">${search?'No contacts match your search.':'No contacts on file yet.'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">${ctBig&&search.length<2?'Type a name, email, phone or company in the search box to find contacts.':(ctBig&&ctServer.q!==search?'Searching…':(search?'No contacts match your search.':'No contacts on file yet.'))}</td></tr>`;
     return;
   }
 
