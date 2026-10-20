@@ -1022,7 +1022,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
 <div class="view" id="view-carrier-compliance">
   <div class="view-header">
     <div><div class="view-title">Carrier Compliance</div><div class="view-subtitle" id="ccSubtitle">MC verification queue · all teams visible</div></div>
-    <div class="view-header-right" id="ccHeaderBtns"><button class="btn btn-primary" onclick="openSubmitMC()">+ Submit MC</button></div>
+    <div class="view-header-right"><button class="btn btn-ghost btn-sm" id="ccSettingsBtn" style="display:none;" onclick="openCcSettings()">✉ Email settings</button><span id="ccHeaderBtns" style="display:contents;"><button class="btn btn-primary" onclick="openSubmitMC()">+ Submit MC</button></span></div>
   </div>
   <div class="filter-bar">
     <div class="search-box">
@@ -1346,12 +1346,27 @@ thead th.cb-th{width:36px;padding:0 10px;}
 </div>
 
 <!-- EMAIL BLOCKED MODAL (C-022) -->
-<div class="modal-overlay" id="emailBlockedModal">
+<div class="modal-overlay" id="emailBlockedModal" style="z-index:700;">
   <div class="modal" style="max-width:460px;">
     <h3>This email can’t be sent</h3>
     <p id="ebMsg" style="margin-bottom:10px;"></p>
     <div id="ebList"></div>
     <div class="modal-actions"><button class="btn btn-primary" onclick="closeEmailBlocked()">OK</button></div>
+  </div>
+</div>
+
+<!-- CARRIER EMAIL SETTINGS MODAL (C-027) -->
+<div class="modal-overlay" id="ccSettingsModal">
+  <div class="modal" style="max-width:520px;">
+    <h3>Carrier email settings</h3>
+    <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px;">Carrier emails are sent through each person's own signed-in mailbox. These two shared addresses are shown as the sender and set as the reply address, so carrier and insurer replies reach the whole team.</p>
+    <div class="form-group"><label>Operations email (onboarding emails)</label>
+      <input id="ccsOps" type="email" placeholder="e.g. ops.carrier@nlius.com — leave blank to use each person's own mailbox">
+      <div style="font-size:11px;color:var(--text-faint);margin-top:3px;">Can be filled in later. Needs "Send As" permission for the team on that mailbox in Microsoft 365.</div></div>
+    <div class="form-group" style="margin-top:10px;"><label>COI email (same for every case)</label>
+      <input id="ccsCoi" type="email" placeholder="coi@nlius.com">
+      <div style="font-size:11px;color:var(--text-faint);margin-top:3px;">Used on every COI verification request. Replies go to this address and your distribution list passes them to the team.</div></div>
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeCcSettings()">Cancel</button><button class="btn btn-primary" id="ccsSave" onclick="saveCcSettings()">Save</button></div>
   </div>
 </div>
 
@@ -7164,6 +7179,7 @@ function submitNewUser() {
   const m365Group = isGlobalRole
     ? `crm-${roleSlug}`
     : `crm-${roleSlug}-${locSlug}`;
+  const finishNewUser = () => {
   usersDB.push({
     id:newId, crmId, name, initials, email, crmEmail:null,
     role, type:addUserMode==='sso'?'SSO':'Manual',
@@ -7177,27 +7193,35 @@ function submitNewUser() {
     auditLog:[{ts:nowDateOnly(),action:`Account created (${addUserMode==='sso'?'SSO provision':'Manual'})`,by:currentUserName()}]
   });
 
-  // If a real Azure AD user is signed in, provision this person for real
-  // too — they'll be automatically linked to this row the first time
-  // they actually sign in with that email.
+    closeUserModal();
+    showToast(`${name} added as ${role}${isGlobalRole?'':(locations.length?', '+locations.map(locationName).join(' + '):', all locations')}.`);
+    renderUserManagement();
+  };
+
+  // A real signed-in Admin: save to the real database FIRST. Only show
+  // "added" once the server has confirmed it (C-026).
   if(realUser && addUserMode==='sso') {
+    const btn = document.querySelector('#addUserModal .btn-primary');
+    if(btn) { btn.disabled = true; btn.dataset.t = btn.textContent; btn.textContent = 'Saving…'; }
+    const resetBtn = () => { if(btn) { btn.disabled = false; btn.textContent = btn.dataset.t || 'Add user'; } };
     apiFetch('/api/users', {
       method:'POST',
       body: JSON.stringify({ fullName:name, email, role, location: isGlobalRole?null:location, locations: isGlobalRole?[]:locations, department }),
     }).then(async res => {
       if(!res.ok) {
         const body = await res.json().catch(()=>({}));
-        showToast('Could not save this person to the real database: ' + (body.error || res.status));
+        resetBtn();
+        showToast('NOT saved: ' + (body.error || ('server error ' + res.status)));
         console.error('Create user on server failed', res.status, body);
-      } else {
-        loadRealUsers();
+        return;
       }
-    }).catch(err => console.error('Create user on server failed', err));
+      resetBtn();
+      finishNewUser();
+      loadRealUsers();
+    }).catch(err => { resetBtn(); showToast('NOT saved — could not reach the server. Try again.'); console.error('Create user on server failed', err); });
+    return;
   }
-
-  closeUserModal();
-  showToast(`${name} added as ${role}${isGlobalRole?'':(locations.length?', '+locations.map(locationName).join(' + '):', all locations')}.`);
-  renderUserManagement();
+  finishNewUser();
 }
 
 // ── CO FIELD UPDATER ─────────────────────────────────────────
@@ -8365,7 +8389,8 @@ function openEmailCompose(type, mc, opts) {
   if(type==='ops') {
     document.getElementById('emailComposeTitle').textContent = 'Carrier Onboarding Email';
     document.getElementById('emailComposeSubhead').textContent = 'Review and edit before sending. Broker will be CC\'d automatically.';
-    document.getElementById('ec-from').value = u?.email||'ops.carrier@nlius.com';
+    document.getElementById('ec-from').value = ccSettings.opsAddress || currentUserEmail() || u?.email || 'ops.carrier@nlius.com';
+    emailComposeContext.fromAddr = ccSettings.opsAddress || '';
     document.getElementById('ec-to').value = c.dispEmail||'dispatcher@carrier.com';
     document.getElementById('ec-cc').value = c.brokerEmail||(c.broker+' (broker)');
     document.getElementById('ec-cc-wrap').style.display='flex';
@@ -8394,7 +8419,8 @@ ${sig}`;
   } else {
     document.getElementById('emailComposeTitle').textContent = 'COI Verification Request';
     document.getElementById('emailComposeSubhead').textContent = 'Sent directly to the carrier\'s insurance company. Broker is NOT CC\'d.';
-    document.getElementById('ec-from').value = u?.email||'coi@nlius.com';
+    document.getElementById('ec-from').value = ccSettings.coiAddress || 'coi@nlius.com';
+    emailComposeContext.fromAddr = ccSettings.coiAddress || 'coi@nlius.com';
     document.getElementById('ec-to').value = c.coiInsEmail||'insurance@carrier-insurer.com';
     document.getElementById('ec-cc').value = '';
     document.getElementById('ec-cc-wrap').style.display='none';
@@ -8544,7 +8570,7 @@ async function sendRealCompanyEmail(co, toAddr, ccAddr, subject, body, attachmen
 // company means no sending rule to enforce, so this goes straight to Graph
 // from the browser — there's nothing for companies.js to arbitrate, exactly
 // like reading the inbox needs no server-side permission check either.
-async function sendRealGenericEmail(toAddr, ccAddr, subject, body, emailId, attachments) {
+async function sendRealGenericEmail(toAddr, ccAddr, subject, body, emailId, attachments, quiet, fromAddr) {
   const sendBtn = document.querySelector('#emailComposeModal .btn-primary');
   if(sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
 
@@ -8552,39 +8578,56 @@ async function sendRealGenericEmail(toAddr, ccAddr, subject, body, emailId, atta
   if(!graphToken) {
     if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '➤ Send'; }
     showToast('Your mailbox isn\'t connected yet — click "Connect Mailbox" at the top, then try again.');
-    return;
+    return false;
   }
 
   const toRecipients = String(toAddr).split(',').map(a=>a.trim()).filter(Boolean).map(address=>({ emailAddress: { address } }));
   const ccRecipients = (ccAddr ? String(ccAddr).split(',') : []).map(a=>a.trim()).filter(Boolean).map(address=>({ emailAddress: { address } }));
 
+  const msg = { subject: subject || '(no subject)', body: emailComposeHtml ? { contentType: 'HTML', content: emailComposeHtml } : { contentType: 'Text', content: body || '' }, toRecipients, ccRecipients, attachments: emailAttachPayload(attachments).map(f=>({ '@odata.type':'#microsoft.graph.fileAttachment', name:f.name, contentType:f.type, contentBytes:f.contentBase64 })) };
+  const sendAs = fromAddr && String(fromAddr).toLowerCase() !== String(currentUserEmail()||'').toLowerCase() ? String(fromAddr).trim() : '';
+  const post = (message) => fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + graphToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, saveToSentItems: true }),
+  });
   try {
-    const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + graphToken, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: { subject: subject || '(no subject)', body: emailComposeHtml ? { contentType: 'HTML', content: emailComposeHtml } : { contentType: 'Text', content: body || '' }, toRecipients, ccRecipients, attachments: emailAttachPayload(attachments).map(f=>({ '@odata.type':'#microsoft.graph.fileAttachment', name:f.name, contentType:f.type, contentBytes:f.contentBase64 })) },
-        saveToSentItems: true,
-      }),
-    });
+    let usedFallback = false;
+    let res;
+    if(sendAs) {
+      // 1st try: really send AS the shared address (needs Send As permission in Microsoft 365).
+      res = await post({ ...msg, from: { emailAddress: { address: sendAs } } });
+      if(!res.ok) {
+        // 2nd try: no permission yet -> send from the person's own mailbox, replies still go to the shared address.
+        console.warn('Send-as ' + sendAs + ' refused (' + res.status + '), falling back to own mailbox.');
+        usedFallback = true;
+        res = await post({ ...msg, replyTo: [{ emailAddress: { address: sendAs } }] });
+      }
+    } else {
+      res = await post(msg);
+    }
     if(!res.ok) {
       console.error('Graph sendMail failed:', res.status, await res.text().catch(()=> ''));
       showToast('That email did not send — please try again.');
       if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '➤ Send'; }
-      return;
+      return false;
     }
+    if(usedFallback) { window.__lastSendFallback = sendAs; }
+    else { window.__lastSendFallback = ''; }
   } catch(e) {
     console.error('Real send failed:', e);
     showToast('That email did not send — please try again.');
     if(sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '➤ Send'; }
-    return;
+    return false;
   }
 
+  if(quiet) return true;
   closeEmailCompose();
   showToast('Email sent.');
   // Not tied to any CRM company record, so there's no Activity/Emails tab
   // to log it to — it'll show up in the Mail sidebar's Sent folder on the
   // next refresh, same as anything else sent from the real mailbox.
+  return true;
 }
 
 // ── Rich-text compose helpers ─────────────────────────────────
@@ -8631,6 +8674,7 @@ function olSyncFromRich() {
 
 function closeEmailCompose() {
   document.getElementById('emailComposeModal').classList.remove('open');
+  { const sb = document.querySelector('#emailComposeModal .btn-primary'); if(sb) { sb.disabled = false; sb.textContent = '➤ Send'; } }
   emailComposeContext = null;
   emailAttachments = [];
   renderEmailAttachList();
@@ -8721,16 +8765,24 @@ async function doSendEmail() {
   // comment for why.
   const c = realCarrierChecks.find(x=>x.mc===mc);
   if(!c) { showToast('Could not find that case.'); return; }
+  // C-026: really send it (from the signed-in person's own mailbox, with the
+  // broker on CC as filled in) BEFORE marking it sent. If the send fails the
+  // case stays "not sent" so nobody thinks the carrier got it.
+  if(realUser) {
+    const ccClean = String(ccAddr||'').split(',').map(a=>a.trim()).filter(a=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)).join(', ');
+    const sentOk = await sendRealGenericEmail(toAddr, ccClean, subject, body, 'cc-'+Date.now(), attachments, true, emailComposeContext && emailComposeContext.fromAddr);
+    if(!sentOk) return;
+  }
   if(type==='ops') {
-    const noteText = `Onboarding email sent from ${u?.email||'ops.carrier@nlius.com'} to ${toAddr}. Broker CC'd: ${c.broker}. Subject: "${subject}"`;
+    const noteText = `Onboarding email sent from ${(window.__lastSendFallback ? '' : (emailComposeContext&&emailComposeContext.fromAddr)) || u?.email||'ops.carrier@nlius.com'} to ${toAddr}. Broker CC'd: ${c.broker}. Subject: "${subject}"`;
     const ok = await patchCarrierCheck(c.checkId, '/ops-email', { to: toAddr, subject, noteText });
-    if(!ok) return;
-    showToast('Carrier onboarding email sent.');
+    if(!ok) { showToast('The email was sent, but the case could not be marked as sent. Refresh and check the notes.'); closeEmailCompose(); return; }
+    showToast(window.__lastSendFallback ? 'Sent from YOUR mailbox — no Send-As permission on '+window.__lastSendFallback+' yet. Replies still go to '+window.__lastSendFallback+'.' : 'Carrier onboarding email sent.');
   } else {
-    const noteText = `COI request sent from ${u?.email||'coi@nlius.com'} to ${toAddr}. Subject: "${subject}" — Commodity: ${c.commodity}, Value: ${c.value}.`;
+    const noteText = `COI request sent from ${(window.__lastSendFallback ? '' : (emailComposeContext&&emailComposeContext.fromAddr)) || u?.email||'coi@nlius.com'} to ${toAddr}. Subject: "${subject}" — Commodity: ${c.commodity}, Value: ${c.value}.`;
     const ok = await patchCarrierCheck(c.checkId, '/coi-email', { to: toAddr, subject, noteText });
-    if(!ok) return;
-    showToast('COI verification request sent.');
+    if(!ok) { showToast('The email was sent, but the case could not be marked as sent. Refresh and check the notes.'); closeEmailCompose(); return; }
+    showToast(window.__lastSendFallback ? 'Sent from YOUR mailbox — no Send-As permission on '+window.__lastSendFallback+' yet. Replies still go to '+window.__lastSendFallback+'.' : 'COI verification request sent.');
   }
   closeEmailCompose();
   openCCCase(mc, currentCCActiveTab);
@@ -10665,7 +10717,37 @@ function mapCarrierCheck(r) {
     _reassignedTo: r.reassigned_to_user_id || null,
   };
 }
+let ccSettings = { opsAddress:'', coiAddress:'coi@nlius.com', canEdit:false };
+async function loadCcSettings() {
+  try {
+    const res = await apiFetch('/api/carrier-settings');
+    if(!res.ok) return;
+    ccSettings = await res.json();
+    const b = document.getElementById('ccSettingsBtn');
+    if(b) b.style.display = ccSettings.canEdit ? '' : 'none';
+  } catch(e) { console.error('Loading carrier settings failed:', e); }
+}
+function openCcSettings() {
+  document.getElementById('ccsOps').value = ccSettings.opsAddress||'';
+  document.getElementById('ccsCoi').value = ccSettings.coiAddress||'coi@nlius.com';
+  document.getElementById('ccSettingsModal').classList.add('open');
+}
+function closeCcSettings() { document.getElementById('ccSettingsModal').classList.remove('open'); }
+async function saveCcSettings() {
+  const btn = document.getElementById('ccsSave');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const res = await apiFetch('/api/carrier-settings', { method:'PUT', body: JSON.stringify({
+      opsAddress: document.getElementById('ccsOps').value.trim(),
+      coiAddress: document.getElementById('ccsCoi').value.trim() }) });
+    const body = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast('NOT saved: ' + (body.error || res.status)); return; }
+    ccSettings = body; closeCcSettings(); showToast('Carrier email settings saved.');
+  } catch(e) { showToast('NOT saved — could not reach the server.'); }
+  finally { btn.disabled = false; btn.textContent = 'Save'; }
+}
 async function loadRealCarrierChecks() {
+  loadCcSettings();
   try {
     const res = await apiFetch('/api/carrier-checks');
     if(!res.ok) { console.error('Loading carrier checks failed:', res.status, await res.text()); return; }
