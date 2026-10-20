@@ -743,6 +743,24 @@ thead th.cb-th{width:36px;padding:0 10px;}
 .gs-tag{font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);color:var(--text-muted);flex-shrink:0;}
 .gs-none{padding:16px;text-align:center;font-size:12.5px;color:var(--text-faint);}
 @media (max-width:900px){.gs-wrap{flex-basis:140px;margin-left:8px;}}
+
+/* CARRIER MAILBOXES (C-030) */
+.cmb-grid{display:grid;grid-template-columns:1fr 300px;gap:16px;margin-top:14px;}@media(max-width:900px){.cmb-grid{grid-template-columns:1fr;}}
+.cmb-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;}.cmb-side{padding:14px 16px 16px;overflow:visible;}
+.cmb-t{width:100%;border-collapse:collapse;}.cmb-t th{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);font-weight:600;}
+.cmb-t td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:top;}.cmb-t tr:last-child td{border-bottom:0}.cmb-t tbody tr{cursor:pointer}.cmb-t tbody tr:hover{background:var(--surface-2)}
+.cmb-nm{font-weight:700;font-size:13px}.cmb-em{font-family:var(--mono);font-size:11.5px;color:var(--text-muted);margin-top:2px}
+.cmb-pill{display:inline-block;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:600;margin:0 4px 4px 0;background:var(--surface-3);color:var(--text-muted)}
+.cmb-pill.coi{background:rgba(37,99,235,.14);color:#4f7fe8}.cmb-pill.ops,.cmb-pill.def{background:var(--accent-dim);color:var(--accent)}.cmb-pill.def{background:var(--accent);color:#fff}
+.cmb-sw{width:34px;height:20px;border-radius:99px;background:var(--border-2);position:relative;display:inline-block;cursor:pointer;vertical-align:middle;transition:.15s}.cmb-sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.15s}.cmb-sw.on{background:#1f8a4c}.cmb-sw.on::after{left:16px}
+.cmb-l{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-faint);font-weight:600;margin:12px 0 5px}
+.cmb-hint{font-size:11.5px;color:var(--text-faint);margin-top:4px;line-height:1.45}
+.cmb-res{margin-top:12px;padding:12px;border-radius:12px;background:var(--surface-2);font-size:12.5px;line-height:1.5}.cmb-res b{color:var(--accent)}
+.cmb-dr{width:min(520px,100%);background:var(--surface);height:100%;overflow-y:auto;padding:22px 24px 30px;box-shadow:-10px 0 40px rgba(0,0,0,.3);}
+.cmb-dr input,.cmb-dr select,.cmb-dr textarea,.cmb-side select{width:100%;padding:9px 11px;border:1px solid var(--border-2);border-radius:10px;background:var(--surface);color:var(--text);font-family:inherit;font-size:13px}
+.cmb-dr textarea{min-height:64px;resize:vertical}
+.cmb-chips{display:flex;flex-wrap:wrap;gap:7px}.cmb-chip{border:1px solid var(--border-2);border-radius:99px;padding:5px 12px;font-size:12.5px;cursor:pointer;background:var(--surface);user-select:none}.cmb-chip.on{background:var(--accent-dim);color:var(--accent);border-color:transparent;font-weight:700}
+.cmb-test{margin-top:10px;font-size:12.5px;padding:10px 12px;border-radius:10px;display:none}.cmb-test.ok{display:block;background:rgba(31,138,76,.14);color:#2fa968}.cmb-test.warn{display:block;background:rgba(180,35,24,.14);color:#e0594a}
 </style>
 </head>
 
@@ -1377,19 +1395,27 @@ thead th.cb-th{width:36px;padding:0 10px;}
   </div>
 </div>
 
-<!-- CARRIER EMAIL SETTINGS MODAL (C-027) -->
+<!-- CARRIER EMAIL MAILBOXES (C-030) -->
 <div class="modal-overlay" id="ccSettingsModal">
-  <div class="modal" style="max-width:520px;">
-    <h3>Carrier email settings</h3>
-    <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px;">Carrier emails are sent through each person's own signed-in mailbox. These two shared addresses are shown as the sender and set as the reply address, so carrier and insurer replies reach the whole team.</p>
-    <div class="form-group"><label>Operations email (onboarding emails)</label>
-      <input id="ccsOps" type="email" placeholder="e.g. ops.carrier@nlius.com — leave blank to use each person's own mailbox">
-      <div style="font-size:11px;color:var(--text-faint);margin-top:3px;">Can be filled in later. Needs "Send As" permission for the team on that mailbox in Microsoft 365.</div></div>
-    <div class="form-group" style="margin-top:10px;"><label>COI email (same for every case)</label>
-      <input id="ccsCoi" type="email" placeholder="coi@nlius.com">
-      <div style="font-size:11px;color:var(--text-faint);margin-top:3px;">Used on every COI verification request. Replies go to this address and your distribution list passes them to the team.</div></div>
-    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeCcSettings()">Cancel</button><button class="btn btn-primary" id="ccsSave" onclick="saveCcSettings()">Save</button></div>
+  <div class="modal" style="max-width:1040px;width:95vw;max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+      <div><h3 style="margin:0;">Carrier email settings</h3>
+      <p style="font-size:12.5px;color:var(--text-muted);margin:4px 0 0;">Shared mailboxes that carrier onboarding and COI emails go out from. Admin and Carrier Compliance can change these.</p></div>
+      <div style="margin-left:auto;display:flex;gap:8px;"><button class="btn btn-primary btn-sm" onclick="cmbOpen(null)">+ Add mailbox</button><button class="btn btn-ghost btn-sm" onclick="closeCcSettings()">Close</button></div>
+    </div>
+    <div class="cmb-grid">
+      <div class="cmb-card"><table class="cmb-t"><thead><tr><th>Mailbox</th><th>Type</th><th>Offices</th><th>People</th><th>On</th></tr></thead><tbody id="cmbTb"></tbody></table></div>
+      <div class="cmb-card cmb-side"><div style="font-weight:700;font-size:13.5px;margin-bottom:6px;">Which mailbox will be used?</div>
+        <div class="cmb-hint">Pick a sender and office to check.</div>
+        <label class="cmb-l">Sender</label><select id="cmbSimU" onchange="cmbSim()"></select>
+        <label class="cmb-l">Sender's office</label><select id="cmbSimO" onchange="cmbSim()"></select>
+        <div class="cmb-res" id="cmbSimR"></div>
+        <div class="cmb-hint">Order: ① a mailbox the sender is personally assigned to → ② the mailbox for the sender's office → ③ the Default mailbox. The sender can still change it in the From box of the email window.</div></div>
+    </div>
   </div>
+</div>
+<div class="modal-overlay" id="cmbEditor" style="z-index:260;justify-content:flex-end;align-items:stretch;" onclick="if(event.target===this)cmbClose()">
+  <div class="cmb-dr" id="cmbDr"></div>
 </div>
 
 <!-- COMPANY CHECK MODAL -->
@@ -1708,7 +1734,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <button class="ol-c-tb" onclick="closeEmailCompose()">🗑 Discard</button>
     </div>
     <p class="ol-c-sub" id="emailComposeSubhead">Review and edit before sending.</p>
-    <div class="ol-c-row"><label>From</label><input id="ec-from" readonly></div>
+    <div class="ol-c-row"><label>From</label><input id="ec-from" readonly><select id="ec-from-sel" style="display:none;flex:1;background:transparent;border:0;color:inherit;font:inherit;padding:6px 4px;" onchange="ccFromChanged()"></select></div>
     <div class="ol-c-row"><label>To</label><input id="ec-to" placeholder="Separate several addresses with commas"></div>
     <div class="ol-c-row" id="ec-cc-wrap"><label>Cc</label><input id="ec-cc"></div>
     <div class="ol-c-row"><label>Subject</label><input id="ec-subject" placeholder="Add a subject"></div>
@@ -8478,6 +8504,7 @@ function openEmailCompose(type, mc, opts) {
     document.getElementById('emailComposeTitle').textContent = opts.title||'Send Email';
     document.getElementById('emailComposeSubhead').textContent = opts.subhead||'Review and edit before sending.';
     document.getElementById('ec-from').value = opts.from||(currentUserEmail()||'nav@nlius.com');
+    { const fs=document.getElementById('ec-from-sel'); if(fs) fs.style.display='none'; document.getElementById('ec-from').style.display=''; }
     document.getElementById('ec-to').value = opts.to||'';
     document.getElementById('ec-cc').value = opts.cc||'';
     document.getElementById('ec-cc-wrap').style.display = opts.showCc ? 'flex' : 'none';
@@ -8496,8 +8523,7 @@ function openEmailCompose(type, mc, opts) {
   if(type==='ops') {
     document.getElementById('emailComposeTitle').textContent = 'Carrier Onboarding Email';
     document.getElementById('emailComposeSubhead').textContent = 'Review and edit before sending. Broker will be CC\'d automatically.';
-    document.getElementById('ec-from').value = ccSettings.opsAddress || currentUserEmail() || u?.email || 'ops.carrier@nlius.com';
-    emailComposeContext.fromAddr = ccSettings.opsAddress || '';
+    document.getElementById('ec-from').value = currentUserEmail() || u?.email || 'ops.carrier@nlius.com';
     document.getElementById('ec-to').value = c.dispEmail||'dispatcher@carrier.com';
     document.getElementById('ec-cc').value = c.brokerEmail||(c.broker+' (broker)');
     document.getElementById('ec-cc-wrap').style.display='flex';
@@ -8526,8 +8552,7 @@ ${sig}`;
   } else {
     document.getElementById('emailComposeTitle').textContent = 'COI Verification Request';
     document.getElementById('emailComposeSubhead').textContent = 'Sent directly to the carrier\'s insurance company. Broker is NOT CC\'d.';
-    document.getElementById('ec-from').value = ccSettings.coiAddress || 'coi@nlius.com';
-    emailComposeContext.fromAddr = ccSettings.coiAddress || 'coi@nlius.com';
+    document.getElementById('ec-from').value = 'coi@nlius.com';
     document.getElementById('ec-to').value = c.coiInsEmail||'insurance@carrier-insurer.com';
     document.getElementById('ec-cc').value = '';
     document.getElementById('ec-cc-wrap').style.display='none';
@@ -8556,6 +8581,7 @@ Please reply directly to this email. Do not include the carrier or their represe
 ${sig}`;
   }
   olLoadRich();
+  ccApplyMailbox(type);
   modal.classList.add('open');
 }
 
@@ -8876,7 +8902,7 @@ async function doSendEmail() {
   // broker on CC as filled in) BEFORE marking it sent. If the send fails the
   // case stays "not sent" so nobody thinks the carrier got it.
   if(realUser) {
-    const ccClean = String(ccAddr||'').split(',').map(a=>a.trim()).filter(a=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)).join(', ');
+    const ccClean = [...new Set((String(ccAddr||'') + ',' + String((emailComposeContext&&emailComposeContext.alwaysCc)||'')).split(',').map(a=>a.trim()).filter(a=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)))].join(', ');
     const sentOk = await sendRealGenericEmail(toAddr, ccClean, subject, body, 'cc-'+Date.now(), attachments, true, emailComposeContext && emailComposeContext.fromAddr);
     if(!sentOk) return;
   }
@@ -10824,34 +10850,131 @@ function mapCarrierCheck(r) {
     _reassignedTo: r.reassigned_to_user_id || null,
   };
 }
-let ccSettings = { opsAddress:'', coiAddress:'coi@nlius.com', canEdit:false };
+let ccMail = { mailboxes:[], offices:[], team:[], mine:{operations:null,coi:null}, canEdit:false };
+const ccBox = id => ccMail.mailboxes.find(m=>m.id===id) || null;
 async function loadCcSettings() {
   try {
-    const res = await apiFetch('/api/carrier-settings');
-    if(!res.ok) return;
-    ccSettings = await res.json();
-    const b = document.getElementById('ccSettingsBtn');
-    if(b) b.style.display = ccSettings.canEdit ? '' : 'none';
-  } catch(e) { console.error('Loading carrier settings failed:', e); }
+    const res = await apiFetch('/api/carrier-mailboxes');
+    if(!res.ok) { if(realUser) console.warn('Carrier mailboxes not available yet (run add_carrier_mailboxes.sql and deploy):', res.status); return; }
+    ccMail = await res.json();
+    const bt = document.getElementById('ccSettingsBtn');
+    if(bt) bt.style.display = ccMail.canEdit ? '' : 'none';
+  } catch(e) { console.error('Loading carrier mailboxes failed:', e); }
 }
-function openCcSettings() {
-  document.getElementById('ccsOps').value = ccSettings.opsAddress||'';
-  document.getElementById('ccsCoi').value = ccSettings.coiAddress||'coi@nlius.com';
-  document.getElementById('ccSettingsModal').classList.add('open');
-}
+function openCcSettings() { cmbRender(); document.getElementById('ccSettingsModal').classList.add('open'); }
 function closeCcSettings() { document.getElementById('ccSettingsModal').classList.remove('open'); }
-async function saveCcSettings() {
-  const btn = document.getElementById('ccsSave');
-  btn.disabled = true; btn.textContent = 'Saving…';
-  try {
-    const res = await apiFetch('/api/carrier-settings', { method:'PUT', body: JSON.stringify({
-      opsAddress: document.getElementById('ccsOps').value.trim(),
-      coiAddress: document.getElementById('ccsCoi').value.trim() }) });
-    const body = await res.json().catch(()=>({}));
-    if(!res.ok) { showToast('NOT saved: ' + (body.error || res.status)); return; }
-    ccSettings = body; closeCcSettings(); showToast('Carrier email settings saved.');
-  } catch(e) { showToast('NOT saved — could not reach the server.'); }
-  finally { btn.disabled = false; btn.textContent = 'Save'; }
+const cmbOfficeName = id => (ccMail.offices.find(o=>o.id===id)||{}).name || id;
+const cmbPersonName = id => (ccMail.team.find(t=>t.id===id)||{}).name || id;
+function cmbPills(arr,none,fn){ return arr.length ? arr.map(x=>`<span class="cmb-pill">${esc(fn(x))}</span>`).join('') : `<span class="cmb-pill">${none}</span>`; }
+function cmbRender(){
+  const tb = document.getElementById('cmbTb'); if(!tb) return;
+  tb.innerHTML = ccMail.mailboxes.length ? ccMail.mailboxes.map(m=>`<tr onclick="cmbOpen(${m.id})"><td><div class="cmb-nm">${esc(m.name)} ${m.isDefault?'<span class="cmb-pill def">Default</span>':''}</div><div class="cmb-em">${esc(m.email)}</div></td>
+    <td><span class="cmb-pill ${m.type==='COI'?'coi':'ops'}">${m.type}</span></td>
+    <td>${m.type==='COI'?'<span class="cmb-pill">All offices</span>':cmbPills(m.offices,m.isDefault?'Everyone else':'—',cmbOfficeName)}</td>
+    <td>${m.type==='COI'?'<span class="cmb-pill">Everyone</span>':cmbPills(m.people,'Anyone in those offices',cmbPersonName)}</td>
+    <td onclick="event.stopPropagation()"><span class="cmb-sw ${m.isActive?'on':''}" onclick="cmbToggle(${m.id})"></span></td></tr>`).join('')
+    : `<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--text-faint);">No mailboxes yet. If this stays empty, run add_carrier_mailboxes.sql in the database, then reload.</td></tr>`;
+  const su=document.getElementById('cmbSimU'), so=document.getElementById('cmbSimO');
+  if(su && !su.options.length) su.innerHTML = ccMail.team.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+  if(so && !so.options.length) so.innerHTML = ccMail.offices.map(o=>`<option value="${esc(o.id)}">${esc(o.name)}</option>`).join('');
+  cmbSim();
+}
+function cmbPick(userId, officeId){
+  const ops = ccMail.mailboxes.filter(m=>m.isActive && m.type==='Operations');
+  let m = ops.find(x=>x.people.includes(userId)); if(m) return [m,'① that person is personally assigned to this mailbox'];
+  m = ops.find(x=>x.offices.includes(officeId)); if(m) return [m,'② it is the mailbox for that office'];
+  m = ops.find(x=>x.isDefault); return m ? [m,'③ nothing matched, so the Default mailbox is used'] : [null,'No active Default mailbox — the email would go out from the sender\'s own mailbox'];
+}
+function cmbSim(){
+  const r = document.getElementById('cmbSimR'); if(!r) return;
+  const [m,why] = cmbPick(document.getElementById('cmbSimU').value, document.getElementById('cmbSimO').value);
+  const c = ccMail.mailboxes.find(x=>x.isActive && x.type==='COI' && x.isDefault) || ccMail.mailboxes.find(x=>x.isActive && x.type==='COI');
+  r.innerHTML = (m ? `Onboarding email goes from<br><b>${esc(m.email)}</b><br><span style="color:var(--text-muted)">${why}.</span>` : `<span style="color:#e0594a;">${why}.</span>`)
+    + (c ? `<hr style="border:0;border-top:1px solid var(--border-2);margin:10px 0">COI request always goes from<br><b>${esc(c.email)}</b>` : '');
+}
+async function cmbSave(body, id){
+  try{
+    const res = await apiFetch(id ? `/api/carrier-mailboxes/${id}` : '/api/carrier-mailboxes', { method: id?'PUT':'POST', body: JSON.stringify(body) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok){ showToast('NOT saved: ' + (j.error || res.status)); return false; }
+    ccMail = j; cmbRender(); return true;
+  }catch(e){ showToast('NOT saved — could not reach the server.'); return false; }
+}
+async function cmbToggle(id){ const m=ccBox(id); if(!m) return; await cmbSave({...m, isActive:!m.isActive}, id); }
+let cmbCur = null;
+function cmbOpen(id){
+  cmbCur = id ? JSON.parse(JSON.stringify(ccBox(id))) : {id:0,name:'',email:'',type:'Operations',offices:[],people:[],isDefault:false,isActive:true,signature:'',ccAddress:''};
+  cmbDraw(); document.getElementById('cmbEditor').classList.add('open');
+}
+function cmbClose(){ document.getElementById('cmbEditor').classList.remove('open'); }
+function cmbTgl(k,v){ const a=cmbCur[k], i=a.indexOf(v); i>=0?a.splice(i,1):a.push(v); cmbDraw(); }
+function cmbChips(items,sel,key){ return `<div class="cmb-chips">${items.map(x=>`<span class="cmb-chip ${sel.includes(x.id)?'on':''}" onclick="cmbTgl('${key}','${String(x.id).replace(/'/g,"\\'")}')">${esc(x.name)}</span>`).join('')}</div>`; }
+function cmbDraw(){
+  const c=cmbCur, isCoi=c.type==='COI';
+  document.getElementById('cmbDr').innerHTML = `<h2 style="margin:0 0 2px;font-size:18px;">${c.id?'Edit mailbox':'Add mailbox'}</h2><div class="cmb-hint">Changes apply to the next email sent.</div>
+  <label class="cmb-l">Name</label><input type="text" value="${esc(c.name)}" oninput="cmbCur.name=this.value" placeholder="e.g. Carrier Ops – Ganganagar">
+  <label class="cmb-l">Email address</label><input type="email" value="${esc(c.email)}" oninput="cmbCur.email=this.value" placeholder="ops.something@nlius.com">
+  <div class="cmb-hint">Must be a real shared mailbox in Microsoft 365. The team needs “Send As” permission on it.</div>
+  <label class="cmb-l">Type</label><select onchange="cmbCur.type=this.value;cmbDraw()"><option ${!isCoi?'selected':''}>Operations</option><option ${isCoi?'selected':''}>COI</option></select>
+  ${isCoi?'<div class="cmb-hint">COI mailboxes are used for every COI request, for every office and person.</div>':`
+  <label class="cmb-l">Offices it serves</label>${cmbChips(ccMail.offices,c.offices,'offices')}
+  <label class="cmb-l">People assigned (carrier compliance team)</label>${cmbChips(ccMail.team,c.people,'people')}
+  <div class="cmb-hint">Leave people empty to cover everyone in the chosen offices.</div>`}
+  <label class="cmb-l">Signature added to emails</label><textarea oninput="cmbCur.signature=this.value">${esc(c.signature)}</textarea>
+  <label class="cmb-l">Always send a copy to (optional)</label><input type="email" value="${esc(c.ccAddress)}" oninput="cmbCur.ccAddress=this.value" placeholder="cr.compliance@nlius.com">
+  <div style="display:flex;gap:24px;margin-top:14px;align-items:center;"><div><span class="cmb-sw ${c.isDefault?'on':''}" onclick="cmbCur.isDefault=!cmbCur.isDefault;cmbDraw()"></span> &nbsp;Default mailbox</div><div><span class="cmb-sw ${c.isActive?'on':''}" onclick="cmbCur.isActive=!cmbCur.isActive;cmbDraw()"></span> &nbsp;Active</div></div>
+  <div class="cmb-test" id="cmbTst"></div>
+  <div style="display:flex;gap:10px;margin-top:22px;align-items:center;"><button class="btn btn-primary" id="cmbSaveBtn" onclick="cmbDoSave()">Save</button><button class="btn btn-ghost" onclick="cmbClose()">Cancel</button><button class="btn btn-ghost" style="margin-left:auto;" onclick="cmbTest()">✉ Send test to me</button></div>`;
+}
+async function cmbDoSave(){
+  const b=document.getElementById('cmbSaveBtn'); b.disabled=true; b.textContent='Saving…';
+  const ok = await cmbSave(cmbCur, cmbCur.id||null);
+  b.disabled=false; b.textContent='Save';
+  if(ok){ cmbClose(); showToast('Mailbox saved.'); }
+}
+async function cmbTest(){
+  const t=document.getElementById('cmbTst'), addr=(cmbCur.email||'').trim(), me=currentUserEmail();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)){ t.className='cmb-test warn'; t.textContent='Enter a valid email address first.'; return; }
+  if(!me){ t.className='cmb-test warn'; t.textContent='Sign in with your real account to send a test.'; return; }
+  t.className='cmb-test ok'; t.textContent='Sending test…';
+  window.__lastSendFallback='';
+  const ok = await sendRealGenericEmail(me,'','CRM test — sending as '+addr,'This is a test from the NAV CRM carrier email settings. If you see this, the CRM can send as '+addr+'.','cmb-test',[],true,addr);
+  if(!ok){ t.className='cmb-test warn'; t.textContent='The test could not be sent. Check that your mailbox is connected (top bar) and try again.'; return; }
+  if(window.__lastSendFallback){ t.className='cmb-test warn'; t.textContent='Sent from YOUR mailbox, not as '+addr+' — you do not have Send As permission on it yet. Ask your Microsoft 365 admin to add it.'; }
+  else { t.className='cmb-test ok'; t.textContent='Test email sent as '+addr+'. Check your inbox — Send As works.'; }
+}
+// Email window: pick the mailbox, set From / signature / copy-to
+function ccSigOf(m){ return m && m.signature ? '\n\n'+m.signature : ''; }
+function ccApplyMailbox(type){
+  const ctx = emailComposeContext; if(!ctx) return;
+  const sel = document.getElementById('ec-from-sel'), fromInp = document.getElementById('ec-from');
+  const own = currentUserEmail() || '';
+  let mb = null;
+  if(type==='coi'){
+    mb = ccBox(ccMail.mine.coi) || ccMail.mailboxes.find(m=>m.isActive&&m.type==='COI') || null;
+    sel.style.display='none'; fromInp.style.display='';
+    fromInp.value = mb ? mb.email : 'coi@nlius.com';
+  } else {
+    const opsList = ccMail.mailboxes.filter(m=>m.isActive && m.type==='Operations');
+    mb = ccBox(ccMail.mine.operations);
+    if(opsList.length){
+      sel.innerHTML = opsList.map(m=>`<option value="${m.id}">${esc(m.name)} — ${esc(m.email)}</option>`).join('') + `<option value="own">My own mailbox — ${esc(own)}</option>`;
+      sel.value = mb ? String(mb.id) : 'own';
+      sel.style.display=''; fromInp.style.display='none';
+    } else { sel.style.display='none'; fromInp.style.display=''; fromInp.value = own; }
+  }
+  ctx.mbId = mb ? mb.id : null; ctx.fromAddr = mb ? mb.email : ''; ctx.alwaysCc = mb ? (mb.ccAddress||'') : ''; ctx.mbSig = ccSigOf(mb);
+  const ta=document.getElementById('ec-body'); if(ta && ctx.mbSig){ ta.value = ta.value.replace(/\s+$/,'') + ctx.mbSig; olLoadRich(); }
+}
+function ccFromChanged(){
+  const ctx = emailComposeContext; if(!ctx) return;
+  const v = document.getElementById('ec-from-sel').value;
+  const mb = v==='own' ? null : ccBox(parseInt(v,10));
+  olSyncFromRich();
+  const ta=document.getElementById('ec-body'); let body = ta.value;
+  if(ctx.mbSig && body.endsWith(ctx.mbSig)) body = body.slice(0, body.length-ctx.mbSig.length);
+  ctx.mbId = mb ? mb.id : null; ctx.fromAddr = mb ? mb.email : ''; ctx.alwaysCc = mb ? (mb.ccAddress||'') : ''; ctx.mbSig = ccSigOf(mb);
+  ta.value = body + ctx.mbSig; olLoadRich();
 }
 async function loadRealCarrierChecks() {
   loadCcSettings();
