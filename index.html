@@ -1232,16 +1232,16 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <div class="view-title">User Management</div>
       <div class="view-subtitle" id="umSubtitle">CRM users, roles &amp; access</div>
     </div>
-    <div class="view-header-right">
+    <div class="search-box" style="flex:1 1 260px;max-width:460px;width:auto;min-width:180px;margin:0 24px;">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="umSearch" placeholder="Search users by name, email or role…" oninput="renderUserManagement()" style="width:100%;">
+    </div>
+    <div class="view-header-right" style="margin-left:0;">
       <button class="btn btn-ghost btn-sm" onclick="openUserModal('manual')">+ Add Manual User</button>
       <button class="btn btn-primary btn-sm" onclick="openUserModal('sso')">+ Provision SSO User</button>
     </div>
   </div>
   <div class="filter-bar">
-    <div class="search-box">
-      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" id="umSearch" placeholder="Search users…" oninput="renderUserManagement()">
-    </div>
     <div class="filter-chips" id="umStatusChips">
       <span class="fchip active" onclick="setUmFilter('All',this)">All</span>
       <span class="fchip" onclick="setUmFilter('Active',this)">Active</span>
