@@ -1736,7 +1736,9 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <p class="ol-c-sub" id="emailComposeSubhead">Review and edit before sending.</p>
     <div class="ol-c-row"><label>From</label><input id="ec-from" readonly><select id="ec-from-sel" style="display:none;flex:1;background:transparent;border:0;color:inherit;font:inherit;padding:6px 4px;" onchange="ccFromChanged()"></select></div>
     <div class="ol-c-row"><label>To</label><input id="ec-to" placeholder="Separate several addresses with commas"></div>
+    <div class="ol-c-row" id="ec-vis-wrap" style="display:none;"><label>Who sees</label><select id="ec-vis" onchange="custVisChanged()" style="flex:1;background:transparent;border:0;color:inherit;font:inherit;padding:6px 4px;"><option value="normal">Normal — broker / sales rep is copied</option><option value="docs">Documents — broker is NOT copied</option></select></div>
     <div class="ol-c-row" id="ec-cc-wrap"><label>Cc</label><input id="ec-cc"></div>
+    <div id="ec-vis-note" style="display:none;font-size:12px;padding:4px 10px;"></div>
     <div class="ol-c-row"><label>Subject</label><input id="ec-subject" placeholder="Add a subject"></div>
     <div class="ol-rt" id="ec-rt">
       <button type="button" class="ol-rb" title="Bold" onmousedown="event.preventDefault();olFmt('bold')"><b>B</b></button>
@@ -4599,7 +4601,8 @@ function openCompCase(id) {
       <button class="btn btn-primary btn-sm" onclick="compStartWorking('${c.id}')">▶ Start working</button></div>` : '';
   const emailCustHtml = ((isCustComp||isAdmin) && c.companyId) ? `<div class="d-sec"><div class="d-sec-label">Email the customer</div>
       <div style="font-size:12px;color:var(--text-faint);margin-bottom:8px;">Goes out from the shared customer mailbox, not your own address.</div>
-      <button class="btn btn-ghost btn-sm" onclick="openCustomerEmail(${c.companyId}, '${c.id}')">✉ Email customer</button></div>` : '';
+      <button class="btn btn-ghost btn-sm" onclick="openCustomerEmail(${c.companyId}, '${c.id}')">✉ Email customer</button>
+      <div id="custEmailLog" style="margin-top:10px;"></div></div>` : '';
   const msgHtml = `<div class="d-sec"><div class="d-sec-label">Updates for the sales rep</div>
       ${canWork ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${COMP_PRESETS.map((p,i)=>`<span class="fchip" style="cursor:pointer;font-size:11.5px;" onclick="compPickPreset(${i})">${esc(p.length>34?p.slice(0,34)+'…':p)}</span>`).join('')}</div>
       <textarea id="compMsgText" placeholder="Write a status or timing update for the rep…" style="width:100%;min-height:70px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;"></textarea>
@@ -4630,6 +4633,7 @@ function openCompCase(id) {
     </div>`;
   openDrawer();
   compLoadMessages(c.id);
+  if(emailCustHtml) custLoadEmailLog(c.id);
 }
 
 // Every one of these goes through resolveComplianceCase(), which PATCHes
@@ -8577,6 +8581,7 @@ async function saveCCCoiNote(mc) {
 let emailComposeContext = null; // {type:'ops'|'coi', mc:'...'}
 
 function openEmailCompose(type, mc, opts) {
+  { const vw=document.getElementById('ec-vis-wrap'), vn=document.getElementById('ec-vis-note'); if(vw) vw.style.display='none'; if(vn) vn.style.display='none'; }
   { const fi=document.getElementById('ec-from'); if(fi) fi.readOnly=true; }
   // opts: {to, subject, body, title, subhead, from, showCc, cc} for general/sales emails
   emailComposeContext = {type, mc: mc||null, companyId: (opts && opts.companyId!=null) ? opts.companyId : null};
@@ -8924,11 +8929,23 @@ async function doSendEmail() {
     if(!realUser) { closeEmailCompose(); showToast('Email sent (demo).'); return; }
     const okToSend = await guardRecipients(toAddr, ccAddr);
     if(!okToSend) return;
-    const ccClean = [...new Set((String(ccAddr||'') + ',' + String((emailComposeContext&&emailComposeContext.alwaysCc)||'')).split(/[,;]+/).map(a=>a.trim()).filter(a=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)))].join(', ');
+    const emailOk = a=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a);
+    const typedCc = String(ccAddr||'').split(/[,;]+/).map(a=>a.trim()).filter(Boolean);
+    const badCc = typedCc.filter(a=>!emailOk(a));
+    if(badCc.length) { showToast('Not sent — this Cc address does not look right: ' + badCc.join(', ')); return; }
+    const badTo = String(toAddr).split(/[,;]+/).map(a=>a.trim()).filter(a=>a && !emailOk(a));
+    if(badTo.length) { showToast('Not sent — this To address does not look right: ' + badTo.join(', ')); return; }
+    const ccClean = [...new Set(typedCc.concat(String((emailComposeContext&&emailComposeContext.alwaysCc)||'').split(/[,;]+/).map(a=>a.trim()).filter(emailOk)))].join(', ');
+    const visDocs = (document.getElementById('ec-vis')||{}).value==='docs';
+    const brokerSeen = !visDocs && !!(emailComposeContext.brokerEmail) && ccClean.toLowerCase().includes(emailComposeContext.brokerEmail.toLowerCase());
     window.__lastSendFallback = '';
     const fromAddr = emailComposeContext && emailComposeContext.fromAddr;
     const sentOk = await sendRealGenericEmail(toAddr, ccClean, subject, body, 'cu-'+Date.now(), attachments, true, fromAddr);
     if(!sentOk) return;
+    try {
+      const caseId = emailComposeContext && emailComposeContext.caseId;
+      if(caseId) apiFetch('/api/compliance-cases/'+encodeURIComponent(caseId)+'/email-log', { method:'POST', body: JSON.stringify({ fromAddr, to: toAddr, cc: ccClean, subject, docs: visDocs, brokerCopied: brokerSeen }) }).catch(()=>{});
+    } catch(e) {}
     closeEmailCompose();
     showToast(window.__lastSendFallback ? 'Sent from YOUR mailbox — no Send-As permission on '+window.__lastSendFallback+' yet. Replies still go to '+window.__lastSendFallback+'.' : 'Email sent from '+fromAddr+'.');
     return;
@@ -10722,7 +10739,7 @@ function mapCompany(c) {
 // ASSIGNABLE demo list already used, so the Assign Owner picker doesn't
 // need its own rendering logic — only where its data comes from.
 function mapUser(u) {
-  return { userId: u.user_id, name: u.full_name || u.short_name, fullName: u.full_name, role: u.role, location: u.location_id, teamIds: u.teamIds || [] };
+  return { userId: u.user_id, name: u.full_name || u.short_name, fullName: u.full_name, email: u.email||'', role: u.role, location: u.location_id, teamIds: u.teamIds || [] };
 }
 let realUsers = []; // populated from /api/users at boot — the real Assign Owner list
 async function loadRealUsers() {
@@ -11116,6 +11133,34 @@ function ccApplyCustomerMailbox(userSig){
   }
   if(mb && mb.ccAddress){ document.getElementById('ec-cc-wrap').style.display='flex'; }
 }
+async function custLoadEmailLog(caseId){
+  const box = document.getElementById('custEmailLog'); if(!box || !realUser) return;
+  try {
+    const res = await apiFetch('/api/compliance-cases/'+encodeURIComponent(caseId)+'/email-log'); if(!res.ok) return;
+    const rows = await res.json();
+    box.innerHTML = rows.length ? '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-faint);margin-bottom:4px;">Emails sent to customer</div>' + rows.map(r=>`<div style="font-size:12px;padding:5px 0;border-top:1px solid var(--border);"><b>${esc(r.subject||'(no subject)')}</b><br><span style="color:var(--text-muted);">${esc(new Date(r.sent_at).toLocaleString())} · ${esc(r.full_name||'')} · to ${esc(r.to_address||'')} · ${r.email_kind==='documents'?'<b style="color:#b45309;">documents — broker NOT copied</b>':(r.broker_copied?'broker copied':'broker not copied')}</span></div>`).join('') : '';
+  } catch(e) {}
+}
+function custBrokerEmail(companyId){
+  const c = customers.find(x=>x.id===companyId);
+  const o = c && (realUsers||[]).find(u=>u.userId===c.ownerUserId);
+  const e = o && o.email;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e||'') ? e : '';
+}
+function custVisChanged(){
+  const ctx = emailComposeContext; if(!ctx || ctx.type!=='custcomp') return;
+  const docs = document.getElementById('ec-vis').value==='docs';
+  const cc = document.getElementById('ec-cc'), br = ctx.brokerEmail||'';
+  let list = cc.value.split(/[,;]+/).map(x=>x.trim()).filter(Boolean);
+  list = list.filter(x=>x.toLowerCase()!==br.toLowerCase());
+  if(!docs && br) list.unshift(br);
+  cc.value = list.join(', ');
+  const note = document.getElementById('ec-vis-note');
+  note.style.display='block';
+  if(docs){ note.style.cssText='display:block;font-size:12px;padding:4px 10px;color:#b45309;font-weight:600;'; note.textContent='Broker / sales rep will NOT see this email.'; }
+  else if(br){ note.style.cssText='display:block;font-size:12px;padding:4px 10px;color:var(--text-muted);'; note.textContent='Broker / sales rep ('+br+') is copied.'; }
+  else { note.style.cssText='display:block;font-size:12px;padding:4px 10px;color:#b45309;'; note.textContent='No email found for the broker / sales rep on this company, so nobody is copied automatically. Add one in Cc if needed.'; }
+}
 function openCustomerEmail(companyId, caseId){
   const c = customers.find(x=>x.id===companyId);
   if(!c) { showToast('Could not find that company.'); return; }
@@ -11133,6 +11178,14 @@ function openCustomerEmail(companyId, caseId){
     subject: `${c.name} — NAV Logistics credit review`,
     body: `Hi ${first?.name?.split(' ')[0]||'there'},\n\n`,
   });
+  if(emailComposeContext && emailComposeContext.type==='custcomp'){
+    emailComposeContext.brokerEmail = custBrokerEmail(companyId);
+    emailComposeContext.caseId = caseId;
+    document.getElementById('ec-vis').value='normal';
+    document.getElementById('ec-vis-wrap').style.display='flex';
+    document.getElementById('ec-cc-wrap').style.display='flex';
+    custVisChanged();
+  }
 }
 function ccFromChanged(){
   const ctx = emailComposeContext; if(!ctx) return;
