@@ -4580,28 +4580,26 @@ function openCompCase(id) {
   if((isCustComp||isAdmin) && isEligibilityCase && relatedCo && !isResolved) {
     reassignHtml = `
     <div class="d-sec"><div class="d-sec-label">Compliance Decision</div>
-      <div style="margin-bottom:10px;font-size:12px;color:var(--text-faint);">Select an outcome — this updates the company record immediately.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;">
-        <button class="btn btn-sm" style="background:var(--green-dim);border:1px solid var(--green);color:var(--green);text-align:left;" onclick="compApproveCustomer('${c.id}','Approved')">
-          ✓ Approve — Full Credit
-        </button>
-        <button class="btn btn-sm" style="background:rgba(212,98,26,0.1);border:1px solid var(--accent);color:var(--accent);text-align:left;" onclick="compApproveCustomer('${c.id}','Approved - Prepaid Only')">
-          ✓ Approve — Prepaid Only
-        </button>
-        <button class="btn btn-sm" style="background:rgba(212,98,26,0.1);border:1px solid var(--accent);color:var(--accent);text-align:left;" onclick="compApproveLimited('${c.id}')">
-          ✓ Approve — Limited Credit
-        </button>
-        <button class="btn btn-sm" style="background:var(--amber-dim);border:1px solid var(--amber);color:var(--amber);text-align:left;" onclick="compHoldCase('${c.id}','Credit Review')">
-          ⏸ On Hold — Credit Review
-        </button>
-        <button class="btn btn-sm" style="background:var(--amber-dim);border:1px solid var(--amber);color:var(--amber);text-align:left;" onclick="compHoldCase('${c.id}','Documentation Needed')">
-          ⏸ On Hold — Docs Needed
-        </button>
-        <button class="btn btn-sm" style="background:var(--red-dim);border:1px solid var(--red);color:var(--red);text-align:left;" onclick="compRejectCase('${c.id}')">
-          ✗ Reject
-        </button>
+      <div style="margin-bottom:10px;font-size:12px;color:var(--text-faint);">Choose an outcome, then click Apply — this updates the company record immediately.</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <select id="compDecisionSel" style="flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:var(--text);font-size:13px;font-family:var(--sans);">
+          <option value="">— Choose outcome…</option>
+          <optgroup label="Approve">
+            <option value="full">✓ Approve — Full Credit</option>
+            <option value="prepaid">✓ Approve — Prepaid Only</option>
+            <option value="limited">✓ Approve — Limited Credit</option>
+          </optgroup>
+          <optgroup label="On hold">
+            <option value="hold-credit">⏸ On Hold — Credit Review</option>
+            <option value="hold-docs">⏸ On Hold — Docs Needed</option>
+          </optgroup>
+          <optgroup label="Decline">
+            <option value="reject">✗ Reject</option>
+            ${isAdmin ? '<option value="blacklist">⚑ Blacklist Company (Admin only)</option>' : ''}
+          </optgroup>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="compApplyDecision('${c.id}','${relatedCo.id}')">Apply</button>
       </div>
-      ${isAdmin ? `<button class="btn btn-sm btn-ghost" style="border-color:var(--red);color:var(--red);width:100%;margin-bottom:12px;" onclick="compBlacklistCase('${relatedCo.id}','${c.id}')">⚑ Blacklist Company (Admin only)</button>` : ''}
       <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px;">
         <div style="margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-faint);">Reassign account rep before approving:</div>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -4635,22 +4633,34 @@ function openCompCase(id) {
         <div class="field-box"><div class="field-label">Type</div><div class="field-val"><span class="status ${c.typeCls}">${c.type}</span></div></div>
         <div class="field-box"><div class="field-label">Status</div><div class="field-val"><span class="status ${c.sCls}">${c.status}</span></div></div>
         <div class="field-box"><div class="field-label">SLA</div><div class="field-val sla ${c.slaCls}">${c.sla}</div></div>
-        <div class="field-box"><div class="field-label">Assigned To</div><div class="field-val">${c.assigned}</div></div>
+        ${(isCustComp||isAdmin) ? `<div class="field-box"><div class="field-label">Assigned To</div><div class="field-val">${c.assigned}</div></div>` : ''}
         <div class="field-box"><div class="field-label">Raised By</div><div class="field-val">${c.by}</div></div>
-        ${c.pickedUpBy ? `<div class="field-box"><div class="field-label">Working on it</div><div class="field-val">${esc(c.pickedUpBy)}<div style="font-size:10.5px;color:var(--text-faint);">since ${esc(c.pickedUpAt)}</div></div></div>` : ''}
+        ${(c.pickedUpBy && (isCustComp||isAdmin)) ? `<div class="field-box"><div class="field-label">Working on it</div><div class="field-val">${esc(c.pickedUpBy)}<div style="font-size:10.5px;color:var(--text-faint);">since ${esc(c.pickedUpAt)}</div></div></div>` : ''}
         ${(()=>{ const cl = (relatedCo && relatedCo.creditLimit!=null) ? relatedCo.creditLimit : c.creditLimit; const canEdit=(isCustComp||isAdmin)&&c.companyId&&relatedCo; return (cl!=null||canEdit) ? `<div class="field-box"><div class="field-label">Credit Limit</div><div class="field-val">${cl!=null?'$'+Number(cl).toLocaleString('en-US'):'<span style="color:var(--text-faint);">Not set</span>'}${canEdit?` <a style="font-size:11.5px;color:var(--accent);cursor:pointer;margin-left:6px;" onclick="openCreditEdit(${c.companyId})">${cl!=null?'Change':'Set'}</a>`:''}</div></div>` : ''; })()}
       </div>
     </div>
     ${startHtml}
     ${reassignHtml}
     ${msgHtml}
-    <div class="d-sec"><div class="d-sec-label">Activity</div>
+    ${(isCustComp||isAdmin) ? `    <div class="d-sec"><div class="d-sec-label">Activity</div>
       <div class="tl-item"><div class="tl-kind">OPEN</div><div class="tl-text">Case opened — routed to ${c.assigned}<div class="tl-time">Today</div></div></div>
       <div class="tl-item"><div class="tl-kind">RAISE</div><div class="tl-text">Submitted by ${c.by} via account check<div class="tl-time">Today</div></div></div>
-    </div>`;
+    </div>` : ''}
+`;
   compDrawer = { caseId:c.id, companyId:c.companyId, name:c.co, caseHtml, showTabs:(isCustComp||isAdmin)&&!!c.companyId };
   compShowTab('case');
   openDrawer();
+}
+function compApplyDecision(caseId, companyId) {
+  const v = (document.getElementById('compDecisionSel')||{}).value;
+  if(!v) { showToast('Choose an outcome first.'); return; }
+  if(v==='full') return compApproveCustomer(caseId,'Approved');
+  if(v==='prepaid') return compApproveCustomer(caseId,'Approved - Prepaid Only');
+  if(v==='limited') return compApproveLimited(caseId);
+  if(v==='hold-credit') return compHoldCase(caseId,'Credit Review');
+  if(v==='hold-docs') return compHoldCase(caseId,'Documentation Needed');
+  if(v==='reject') return compRejectCase(caseId);
+  if(v==='blacklist') return compBlacklistCase(companyId, caseId);
 }
 let compDrawer = null;
 function compTabsBar(active){
