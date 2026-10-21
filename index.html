@@ -6180,6 +6180,24 @@ function resetProspectFilterToAll() {
   if(chips[0]) chips[0].classList.add('active'); // "All" is always the first chip
 }
 
+// C-042: send the "ticket raised" email from the signed-in person's OWN mailbox (Graph) to the compliance
+// distribution list. Returns true if sent. If the mailbox isn't connected the caller lets the server send it instead.
+async function sendTicketMailFromMe(mail) {
+  try {
+    if(!mail || !(mail.to||[]).length) return false;
+    const tok = await getGraphToken();
+    if(!tok) return false;
+    const rcpt = (arr)=>(arr||[]).filter(Boolean).map(address=>({emailAddress:{address}}));
+    const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+      method:'POST',
+      headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},
+      body: JSON.stringify({message:{subject:mail.subject,body:{contentType:'HTML',content:mail.html},toRecipients:rcpt(mail.to),ccRecipients:rcpt(mail.cc)},saveToSentItems:true}),
+    });
+    if(!res.ok){ console.warn('Ticket mail from own mailbox refused:', res.status); showToast('Ticket created, but the email to Compliance could not be sent from your mailbox — please email them directly.'); return false; }
+    return true;
+  } catch(e){ console.warn('Ticket mail from own mailbox failed:', e); return false; }
+}
+
 async function submitForCompliance(id) {
   const c = customers.find(x=>x.id===id);
   if(!c) return;
@@ -6189,9 +6207,10 @@ async function submitForCompliance(id) {
     try {
       const res = await apiFetch('/api/compliance-cases', {
         method: 'POST',
-        body: JSON.stringify({ caseId, caseType: 'Customer Eligibility', companyId: id, slaHours: 48 }),
+        body: JSON.stringify({ caseId, caseType: 'Customer Eligibility', companyId: id, slaHours: 48, senderMail: !!(await getGraphToken()) }),
       });
       if(!res.ok) { showToast('Could not submit for Compliance — please try again.'); return; }
+      try { const j = await res.json(); if(j && j.mail) { const ok = await sendTicketMailFromMe(j.mail); if(!ok) console.warn('Ticket email from own mailbox did not send.'); } } catch(e){}
     } catch(e) {
       console.error('Submitting for compliance failed:', e);
       showToast('Could not submit for Compliance — please try again.');
@@ -8377,6 +8396,7 @@ async function doSubmitMC() {
           declaredValue: value ? Number(value.replace(/[^0-9.]/g,'')) || null : null,
           weightLbs: weight ? Number(weight.replace(/[^0-9.]/g,'')) || null : null,
           dispatcherName: dispName || null, dispatcherPhone: dispPhone || null, dispatcherEmail: dispEmail || null,
+          senderMail: !!(await getGraphToken()),
         }),
       });
       if(!res.ok) {
@@ -8384,6 +8404,7 @@ async function doSubmitMC() {
         showToast(err.error || 'Could not submit — please try again.');
         return;
       }
+      try { const j = await res.json(); if(j && j.mail) await sendTicketMailFromMe(j.mail); } catch(e){}
     } catch(e) {
       console.error('Submitting MC failed:', e);
       showToast('Could not submit — please try again.');
