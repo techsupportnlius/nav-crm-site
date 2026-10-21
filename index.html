@@ -1024,7 +1024,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
   <div class="contacts-table-wrap">
     <table>
       <thead><tr>
-        <th>Name</th><th>Title</th><th>Company</th><th>Phone</th><th>Email</th><th>Added</th>
+        <th>First name</th><th>Last name</th><th>Title</th><th>Company</th><th>Phone</th><th>Cell</th><th>Email</th><th>Added</th>
       </tr></thead>
       <tbody id="ctTbody"></tbody>
     </table>
@@ -1537,9 +1537,11 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <div style="padding:9px 12px;background:var(--blue-dim);border:1px solid rgba(74,158,248,0.25);border-radius:5px;font-size:12px;color:var(--blue);margin-bottom:16px;line-height:1.5;">
         ℹ A company with no contact is a company nobody can call. Add one now if you have it.
       </div>
-      <div class="addco-field"><label>Full Name</label><input id="addCoContactName" placeholder="e.g. Jennifer Walsh"></div>
+      <div style="display:flex;gap:10px;"><div class="addco-field" style="flex:1;"><label>First Name</label><input id="addCoContactFirst" placeholder="e.g. Jennifer"></div>
+      <div class="addco-field" style="flex:1;"><label>Last Name</label><input id="addCoContactLast" placeholder="e.g. Walsh"></div></div>
       <div class="addco-field"><label>Title</label><input id="addCoContactTitle" placeholder="e.g. Director of Transportation"></div>
-      <div class="addco-field"><label>Phone</label><input id="addCoContactPhone" placeholder="(555) 555-0100"></div>
+      <div style="display:flex;gap:10px;"><div class="addco-field" style="flex:1;"><label>Phone (office)</label><input id="addCoContactPhone" placeholder="(555) 555-0100"></div>
+      <div class="addco-field" style="flex:1;"><label>Cell</label><input id="addCoContactCell" placeholder="(555) 555-0199"></div></div>
       <div class="addco-field"><label>Email</label><input id="addCoContactEmail" placeholder="name@company.com"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="addCoBackToDetails()">← Back</button>
@@ -1651,13 +1653,19 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <div class="modal-step" id="ac-step2" style="display:none;">
       <div id="ac-companyBanner" style="font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:14px;padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-        <div><label style="display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em;">Full Name *</label>
-          <input id="ac-name" type="text" placeholder="Jennifer Walsh" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:7px 10px;color:var(--text);font-size:13px;font-family:var(--sans);">
+ <div><label style="display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em;">First Name *</label>
+          <input id="ac-first" type="text" placeholder="Jennifer" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:7px 10px;color:var(--text);font-size:13px;font-family:var(--sans);">
+        </div>
+        <div><label style="display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em;">Last Name</label>
+          <input id="ac-last" type="text" placeholder="Walsh" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:7px 10px;color:var(--text);font-size:13px;font-family:var(--sans);">
         </div>
         <div><label style="display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em;">Title</label>
           <input id="ac-title" type="text" placeholder="VP of Logistics" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:7px 10px;color:var(--text);font-size:13px;font-family:var(--sans);">
         </div>
-        <div><label style="display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em;">Phone</label>
+        <div><label style="display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em;">Cell</label>
+          <input id="ac-cell" type="tel" placeholder="+1 (713) 555-0199" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:7px 10px;color:var(--text);font-size:13px;font-family:var(--sans);">
+        </div>
+        <div><label style="display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em;">Phone (office)</label>
           <input id="ac-phone" type="tel" placeholder="+1 (713) 555-0100" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:7px 10px;color:var(--text);font-size:13px;font-family:var(--sans);">
         </div>
         <div><label style="display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em;">Email *</label>
@@ -2340,6 +2348,10 @@ const carriers = [
 // that's the fix for real contacts showing up under the wrong prospect
 // (a real company_id numerically re-using a demo id, e.g. 1, 2, 3…).
 const realContactsLoaded = new Set();
+// C-040: contacts have first name, last name, cell. Older data only has one full name, so split it.
+function ctSplitName(full){ const t=String(full||'').trim().replace(/\s+/g,' '); const i=t.indexOf(' '); return i<0?{first:t,last:''}:{first:t.slice(0,i),last:t.slice(i+1)}; }
+function ctParts(ct){ if(ct && (ct.first||ct.last)) return {first:ct.first||'', last:ct.last||''}; return ctSplitName(ct&&ct.name); }
+const ctJoin=(f,l)=>[f,l].map(x=>String(x||'').trim()).filter(Boolean).join(' ');
 async function loadRealContacts(companyId) {
   try {
     const res = await apiFetch(`/api/companies/${companyId}/contacts`);
@@ -2347,7 +2359,8 @@ async function loadRealContacts(companyId) {
     const rows = await res.json();
     contactsDB[companyId] = rows.map(r => ({
       contactId: r.contact_id,
-      name: r.full_name, title: r.title || '—', phone: r.phone || '—', email: r.email || '',
+      name: r.full_name, first: r.first_name!=null ? r.first_name : ctSplitName(r.full_name).first, last: r.last_name!=null ? r.last_name : ctSplitName(r.full_name).last,
+      title: r.title || '—', phone: r.phone || '—', cell: r.cell_phone || '—', email: r.email || '',
       addedBy: r.added_by_name || resolveUserName(r.added_by_user_id),
       addedAt: r.created_at ? new Date(r.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '',
     }));
@@ -3761,6 +3774,7 @@ function renderCustomerContacts(id) {
         <div class="contact-title">${ct.title}</div>
         <div class="contact-detail">
           <span>📞 ${ct.phone}</span>
+          ${ct.cell && ct.cell!=='—' ? `<span>📱 ${esc(ct.cell)}</span>` : ''}
           <span>✉ ${ct.email}</span>
         </div>
         ${addedByTag}${mailTag}
@@ -3785,9 +3799,11 @@ function renderCustomerContacts(id) {
     </div>
     <div class="add-contact-form" id="addContactForm-${id}">
       <div class="acf-grid">
-        <div class="acf-field"><label>Full Name *</label><input id="acf-name-${id}" placeholder="Jane Smith"></div>
+        <div class="acf-field"><label>First Name *</label><input id="acf-first-${id}" placeholder="Jane"></div>
+        <div class="acf-field"><label>Last Name</label><input id="acf-last-${id}" placeholder="Smith"></div>
         <div class="acf-field"><label>Title / Role</label><input id="acf-title-${id}" placeholder="Logistics Manager"></div>
-        <div class="acf-field"><label>Phone</label><input id="acf-phone-${id}" placeholder="(713) 555-0100" type="tel"></div>
+        <div class="acf-field"><label>Phone (office)</label><input id="acf-phone-${id}" placeholder="(713) 555-0100" type="tel"></div>
+        <div class="acf-field"><label>Cell</label><input id="acf-cell-${id}" placeholder="(713) 555-0199" type="tel"></div>
         <div class="acf-field"><label>Email *</label><input id="acf-email-${id}" placeholder="name@${c&&c.domain?c.domain:'company.com'}" type="email" oninput="validateContactEmail(${id})"></div>
       </div>
       <div id="acf-warn-${id}" class="acf-warn" style="display:none;">⚠ Email domain doesn't match <strong>${c?c.domain:'—'}</strong>. Subsidiary or third-party emails are allowed — verify before saving.</div>
@@ -3805,7 +3821,7 @@ function showAddContactForm(id) {
   if(!form) return;
   form.classList.add('visible');
   if(btn) btn.style.display='none';
-  const nameInput = document.getElementById('acf-name-'+id);
+  const nameInput = document.getElementById('acf-first-'+id);
   if(nameInput) nameInput.focus();
 }
 
@@ -3839,17 +3855,20 @@ function validateContactEmail(id) {
 }
 
 async function submitContact(id) {
-  const name  = (document.getElementById('acf-name-'+id)||{}).value?.trim();
+  const first = (document.getElementById('acf-first-'+id)||{}).value?.trim()||'';
+  const last  = (document.getElementById('acf-last-'+id)||{}).value?.trim()||'';
+  const name  = ctJoin(first, last);
   const title = (document.getElementById('acf-title-'+id)||{}).value?.trim()||'—';
   const phone = (document.getElementById('acf-phone-'+id)||{}).value?.trim()||'—';
+  const cell  = (document.getElementById('acf-cell-'+id)||{}).value?.trim()||'';
   const email = (document.getElementById('acf-email-'+id)||{}).value?.trim();
-  if(!name) { showToast('Full name is required.'); return; }
+  if(!first) { showToast('First name is required.'); return; }
   if(!email) { showToast('Email is required.'); return; }
 
   if(realUser) {
     try {
       const res = await apiFetch(`/api/companies/${id}/contacts`, {
-        method: 'POST', body: JSON.stringify({ name, title, phone, email }),
+        method: 'POST', body: JSON.stringify({ first, last, name, title, phone: phone==='—'?'':phone, cell, email }),
       });
       if(!res.ok) { showToast('Could not save that contact — please try again.'); return; }
       await loadRealContacts(id);
@@ -3864,7 +3883,7 @@ async function submitContact(id) {
 
   if(!contactsDB[id]) contactsDB[id]=[];
   const addedBy = currentUserName();
-  contactsDB[id].push({name, title, phone, email, addedBy});
+  contactsDB[id].push({name, first, last, title, phone, cell: cell||'—', email, addedBy});
   showToast(`${name} added to contacts.`);
   renderCustomerContacts(id);
 }
@@ -5008,7 +5027,7 @@ function gsLocal(q){
   const companies=customers.filter(c=>has(c.name)||has(c.domain)||has(c.website)).slice(0,8)
     .map(c=>({id:c.id,name:c.name,domain:c.domain||c.website||'',owner:c.owner||'',prospect:isProspect(c),status:c.prospectStatus||c.status}));
   const contacts=[];
-  customers.forEach(co=>(contactsDB[co.id]||[]).forEach(ct=>{ if(contacts.length<8&&(has(ct.name)||has(ct.email)||has(ct.phone)||has(ct.title))) contacts.push({name:ct.name,title:ct.title,email:ct.email,phone:ct.phone,company:co.name,companyId:co.id}); }));
+  customers.forEach(co=>(contactsDB[co.id]||[]).forEach(ct=>{ if(contacts.length<8&&(has(ct.name)||has(ct.email)||has(ct.phone)||has(ct.cell)||has(ct.title))) contacts.push({name:ct.name,title:ct.title,email:ct.email,phone:ct.phone,company:co.name,companyId:co.id}); }));
   const users=(currentRole==='Admin'?usersDB.filter(u=>has(u.name)||has(u.email)).slice(0,8):[]).map(u=>({id:u.id,name:u.name,email:u.email,role:u.role,status:u.status}));
   return {companies,contacts,users};
 }
@@ -5423,7 +5442,7 @@ function addCoContinueToContact() {
 
   document.getElementById('addCo-2a2-company').innerHTML =
     `<strong style="color:var(--text);">${esc(name)}</strong> · ${esc(domain)}`;
-  ['addCoContactName','addCoContactTitle','addCoContactPhone','addCoContactEmail'].forEach(id=>document.getElementById(id).value='');
+  ['addCoContactFirst','addCoContactLast','addCoContactTitle','addCoContactPhone','addCoContactCell','addCoContactEmail'].forEach(id=>document.getElementById(id).value='');
   ADDCO_STEPS.forEach(s=>document.getElementById('addCo-'+s).classList.remove('active'));
   document.getElementById('addCo-s2a2').classList.add('active');
 }
@@ -5438,11 +5457,14 @@ function addCoFinish(withContact) {
   if(!addCoDraft) return;
   const d = addCoDraft;
   const asActive = (currentViewName==='companies' && ['Admin','Customer Compliance'].includes(currentRole));
-  const contactName  = document.getElementById('addCoContactName').value.trim();
+  const contactFirst = document.getElementById('addCoContactFirst').value.trim();
+  const contactLast  = document.getElementById('addCoContactLast').value.trim();
+  const contactCell  = document.getElementById('addCoContactCell').value.trim() || '—';
+  const contactName  = ctJoin(contactFirst, contactLast);
   const contactTitle = document.getElementById('addCoContactTitle').value.trim() || '—';
   const contactPhone = document.getElementById('addCoContactPhone').value.trim() || '—';
   const contactEmail = document.getElementById('addCoContactEmail').value.trim();
-  if(withContact && !contactName) { showToast('Enter a contact name, or use Skip.'); return; }
+  if(withContact && !contactFirst) { showToast('Enter the contact\'s first name, or use Skip.'); return; }
   if(withContact && contactName && !contactEmail) { showToast('Enter a contact email, or use Skip.'); return; }
 
   const newId = Math.max(0, ...customers.map(c=>c.id)) + 1;
@@ -5473,7 +5495,7 @@ function addCoFinish(withContact) {
         commodity:d.commodity, lanes:d.lanesList, loadFreq:d.loadFreq, loadVolume:d.loadVolume,
         equipment:d.equipmentList,
         remarks:d.remarks, ownerUserId: d.ownerUserId || undefined, prospectDays: d.prospectDays, asActive,
-        contact: (withContact && contactName) ? {name:contactName, title:contactTitle, phone:contactPhone, email:contactEmail} : null,
+        contact: (withContact && contactName) ? {first:contactFirst, last:contactLast, name:contactName, title:contactTitle, phone:contactPhone, cell:contactCell==='—'?'':contactCell, email:contactEmail} : null,
       }),
     }).then(async res => { if(!res.ok) { console.error('Create company on server failed', res.status); try{ const j=await res.json(); showToast(j.error || 'Could not add the company.'); }catch(e){} } else loadRealCompanies(); })
       .catch(err => console.error('Create company on server failed', err));
@@ -5482,7 +5504,7 @@ function addCoFinish(withContact) {
   let contactMsg = '';
   if(withContact && contactName) {
     if(!contactsDB[newId]) contactsDB[newId]=[];
-    contactsDB[newId].push({name:contactName, title:contactTitle, phone:contactPhone, email:contactEmail, addedBy:updater});
+    contactsDB[newId].push({name:contactName, first:contactFirst, last:contactLast, title:contactTitle, phone:contactPhone, cell:contactCell, email:contactEmail, addedBy:updater});
     logActivity(newId,'CONTACT',`Primary contact added: <strong>${esc(contactName)}</strong> (${esc(contactTitle)}).`);
     contactMsg = ` · contact ${contactName} added`;
   }
@@ -6214,7 +6236,7 @@ function ctSchedule(q){
       const res=await apiFetch('/api/search?only=contacts&limit=200&q='+encodeURIComponent(q));
       if(!res.ok) return;
       const j=await res.json();
-      ctServer={q, rows:(j.contacts||[]).map(c=>({name:c.full_name,title:c.title||'—',phone:c.phone||'—',email:c.email||'',company:c.company_name,companyId:c.company_id,
+      ctServer={q, rows:(j.contacts||[]).map(c=>({name:c.full_name,first:c.first_name!=null?c.first_name:ctSplitName(c.full_name).first,last:c.last_name!=null?c.last_name:ctSplitName(c.full_name).last,cell:c.cell_phone||'—',title:c.title||'—',phone:c.phone||'—',email:c.email||'',company:c.company_name,companyId:c.company_id,
         addedAt:c.created_at?new Date(c.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}))};
       if(((document.getElementById('ctSearch')||{}).value||'').toLowerCase()===q && document.getElementById('view-contacts').classList.contains('active')) renderContactsView();
     }catch(e){ console.error('Contact search failed', e); }
@@ -6274,6 +6296,7 @@ function renderContactsView() {
   allContacts = ddApply('ct', allContacts, CT_DD);
   if(search && !ctBig) allContacts = allContacts.filter(ct=>
     (ct.name&&ct.name.toLowerCase().includes(search))||
+    (ct.cell&&String(ct.cell).toLowerCase().includes(search))||
     (ct.title&&ct.title.toLowerCase().includes(search))||
     (ct.company&&ct.company.toLowerCase().includes(search))||
     (ct.email&&ct.email.toLowerCase().includes(search))
@@ -6283,18 +6306,20 @@ function renderContactsView() {
   if(subtitle) subtitle.textContent = ctBig ? (search.length>=2 ? `${allContacts.length} contact${allContacts.length!==1?'s':''} found${allContacts.length>=200?' (first 200 — type more to narrow)':''}` : `Search across all ${visibleCos.length.toLocaleString()} accounts`) : `${allContacts.length} contact${allContacts.length!==1?'s':''} across ${visibleCos.length} accounts`;
 
   if(!allContacts.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">${ctBig&&search.length<2?'Type a name, email, phone or company in the search box to find contacts.':(ctBig&&ctServer.q!==search?'Searching…':(search?'No contacts match your search.':'No contacts on file yet.'))}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">${ctBig&&search.length<2?'Type a name, email, phone or company in the search box to find contacts.':(ctBig&&ctServer.q!==search?'Searching…':(search?'No contacts match your search.':'No contacts on file yet.'))}</td></tr>`;
     return;
   }
 
   tbody.innerHTML = allContacts.map(ct=>`
     <tr onclick="openCustomerDrawer(${ct.companyId})" style="cursor:pointer;">
-      <td class="primary">${ct.name}</td>
+      <td class="primary">${esc(ctParts(ct).first)}</td>
+      <td class="primary">${esc(ctParts(ct).last)||'—'}</td>
       <td style="font-size:12px;color:var(--text-muted);">${ct.title||'—'}</td>
       <td style="font-size:12px;">
         <span style="color:var(--accent);cursor:pointer;" onclick="event.stopPropagation();openCustomerDrawer(${ct.companyId})">${ct.company}</span>
       </td>
       <td style="font-size:12px;font-family:var(--mono);">${ct.phone||'—'}</td>
+      <td style="font-size:12px;font-family:var(--mono);">${ct.cell||'—'}</td>
       <td style="font-size:12px;font-family:var(--mono);">${ct.email||'—'}</td>
       <td style="font-size:11px;color:var(--text-faint);">${ct.addedAt||'—'}</td>
     </tr>`).join('');
@@ -6319,7 +6344,7 @@ function openAddContactModal(preselectedId, scope) {
     visibleCos.map(c=>`<option value="${c.id}" ${preselectedId===c.id?'selected':''}>${c.name}</option>`).join('');
 
   // Clear step 2 fields
-  ['ac-name','ac-title','ac-phone','ac-email'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['ac-first','ac-last','ac-title','ac-phone','ac-cell','ac-email'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('ac-emailWarn').style.display='none';
 
   // Show step 1 or jump to step 2 if company pre-selected
@@ -6369,18 +6394,21 @@ function acValidateEmail() {
 
 async function submitGlobalContact() {
   if(!acSelectedCompanyId) { showToast('No company selected.'); return; }
-  const name = (document.getElementById('ac-name').value||'').trim();
+  const first = (document.getElementById('ac-first').value||'').trim();
+  const last = (document.getElementById('ac-last').value||'').trim();
+  const cell = (document.getElementById('ac-cell').value||'').trim();
+  const name = ctJoin(first, last);
   const email = (document.getElementById('ac-email').value||'').trim();
   const title = (document.getElementById('ac-title').value||'').trim();
   const phone = (document.getElementById('ac-phone').value||'').trim();
-  if(!name) { showToast('Name is required.'); return; }
+  if(!first) { showToast('First name is required.'); return; }
   if(!email) { showToast('Email is required.'); return; }
   const coName = customers.find(c=>c.id===acSelectedCompanyId)?.name||'company';
 
   if(realUser) {
     try {
       const res = await apiFetch(`/api/companies/${acSelectedCompanyId}/contacts`, {
-        method: 'POST', body: JSON.stringify({ name, title, phone, email }),
+        method: 'POST', body: JSON.stringify({ first, last, name, title, phone, cell, email }),
       });
       if(!res.ok) { showToast('Could not save that contact — please try again.'); return; }
       await loadRealContacts(acSelectedCompanyId);
@@ -6398,7 +6426,7 @@ async function submitGlobalContact() {
   if(!contactsDB[acSelectedCompanyId]) contactsDB[acSelectedCompanyId]=[];
   const now = new Date();
   const ts = now.toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
-  contactsDB[acSelectedCompanyId].push({ name, title, phone, email, addedAt:ts });
+  contactsDB[acSelectedCompanyId].push({ name, first, last, title, phone, cell: cell||'—', email, addedAt:ts });
   closeAddContactModal();
   showToast(`Contact added to ${coName}.`);
   // Re-render contacts view if active
@@ -7769,9 +7797,12 @@ const CSV_FIELDS = [
   ['commodity','commodity',['commodity','freight type','commodity / freight type']],
   ['lanes','lanes (separate with ;)',['lanes','lanes (separate with ;)','typical lanes']],
   ['equipment','equipment (separate with ;)',['equipment','equipment (separate with ;)','preferred equipment']],
+  ['contactFirst','contact first name',['contact first name','first name','contact first']],
+  ['contactLast','contact last name',['contact last name','last name','contact last']],
   ['contactName','contact name',['contact name','contact','primary contact']],
   ['contactTitle','contact title',['contact title','title']],
   ['contactPhone','contact phone',['contact phone','phone']],
+  ['contactCell','contact cell',['contact cell','cell','mobile','cell phone','contact mobile']],
   ['contactEmail','contact email',['contact email','email']],
   ['paycat','payment category',['payment category','paycat','payment terms']],
   ['ff','ff #',['ff','ff #','ff number']],
@@ -7790,7 +7821,7 @@ function downloadSampleCsv() {
   };
   const ex1 = { name:'Example Freight LLC', domain:'examplefreight.com', city:'Houston', state:'TX', zip:'77002', location:sampleLoc,
     owner:'', days:'21', industry:'', bizType:'', employees:'', revenue:'', commodity:'Dry goods', lanes:'TX -> LA; GA -> FL', equipment:'Dry Van',
-    contactName:'Jane Doe', contactTitle:'Logistics Manager', contactPhone:'(713) 555-0100', contactEmail:'jane@examplefreight.com', paycat:'', ff:'', mc:'', dot:'', remarks:'Optional notes' };
+    contactFirst:'Jane', contactLast:'Doe', contactTitle:'Logistics Manager', contactPhone:'(713) 555-0100', contactCell:'(713) 555-0199', contactEmail:'jane@examplefreight.com', paycat:'', ff:'', mc:'', dot:'', remarks:'Optional notes' };
   const ex2 = { name:'Sample Trucking Co', domain:'', city:'Dallas', state:'TX', location:sampleLoc, contactName:'', remarks:'No website — city and state are needed instead' };
   const rows = [CSV_FIELDS.map(f=>f[1]), ...[ex1,ex2].map(ex=>CSV_FIELDS.map(f=>ex[f[0]]||''))];
   const csv = rows.map(r=>r.map(csvEscape).join(',')).join('\r\n');
@@ -7864,7 +7895,7 @@ function handleCsvFile(input) {
         <td style="font-size:11.5px;">${esc([p.city,p.state].filter(Boolean).join(', ')||'—')}</td>
         <td style="font-size:11.5px;">${esc(p.location ? locationName(p.location) : '—')}</td>
         <td style="font-size:11.5px;">${esc(p.owner||'—')}</td>
-        <td style="font-size:11.5px;">${esc(p.contactName||'—')}</td>
+        <td style="font-size:11.5px;">${esc(p.contactName||ctJoin(p.contactFirst,p.contactLast)||'—')}</td>
         <td><span class="status ${p.status==='ready'?'s-active':'s-pending'}" title="${esc(p.note)}">${p.status==='ready'?'Ready':(p.status==='duplicate'?'Duplicate':'Incomplete')}</span></td>
       </tr>`).join('');
     document.getElementById('csvPreviewWrap').style.display='block';
