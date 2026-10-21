@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
+<script src="https://accounts.google.com/gsi/client" async defer onload="window.initGoogleSignIn&&initGoogleSignIn()"></script>
 <script>
 // Applied before the page paints, so there's no flash of the wrong theme
 // on reload — the saved choice from the toggle button in the topbar.
@@ -830,6 +830,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <div class="tb-avatar">RA</div>
     <div class="tb-user-name" id="tbUserName">Deep Singh</div>
     <div class="tb-role-chip" id="tbRoleChip">Admin</div>
+    <a id="tbSignOut" onclick="signOutCrm()" title="Sign out and clear the saved data in this browser" style="display:none;cursor:pointer;font-size:12px;margin-left:10px;opacity:.8;text-decoration:underline;">Sign out</a>
   </div>
 </div>
 
@@ -1344,6 +1345,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
 </div>
 
 <!-- DRAWER -->
+<div id="bootLoading" style="display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:900;background:#1f2937;color:#fff;padding:9px 18px;border-radius:999px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.25);">Still loading your companies and cases… the screens fill in as they arrive.</div>
 <div class="drawer-overlay" id="drawerOv" onclick="closeDrawer()"></div>
 <div class="drawer" id="drawer">
   <div class="drawer-head">
@@ -10855,11 +10857,76 @@ function myTeamIds() {
 }
 // Replaces the demo `customers` array with the real data from the database,
 // then re-renders every view that reads from it.
+// ── C-038: saved copy of the big lists in this browser (per person, wiped on sign-out, 7-day limit) ──
+const NC_TTL_MS = 7*24*3600*1000;
+let ncDbP = null;
+function ncDb() {
+  if(!ncDbP) ncDbP = new Promise(res => {
+    try {
+      const rq = indexedDB.open('navcrm_cache', 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore('kv');
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => res(null); rq.onblocked = () => res(null);
+    } catch(e) { res(null); }
+  });
+  return ncDbP;
+}
+async function ncPut(name, rows) {
+  try {
+    if(!realUser) return; const db = await ncDb(); if(!db) return;
+    await new Promise(r => { const tx = db.transaction('kv','readwrite'); tx.objectStore('kv').put({savedAt:Date.now(), rows}, realUser.userId+':'+name); tx.oncomplete = r; tx.onerror = r; tx.onabort = r; });
+  } catch(e) {}
+}
+let ncSavedAt = 0;
+async function ncGet(name) {
+  try {
+    if(!realUser) return null; const db = await ncDb(); if(!db) return null;
+    const rec = await new Promise(r => { const q = db.transaction('kv','readonly').objectStore('kv').get(realUser.userId+':'+name); q.onsuccess = () => r(q.result); q.onerror = () => r(null); });
+    if(!rec || !Array.isArray(rec.rows) || Date.now()-rec.savedAt > NC_TTL_MS) return null;
+    ncSavedAt = ncSavedAt ? Math.min(ncSavedAt, rec.savedAt) : rec.savedAt;
+    return rec.rows;
+  } catch(e) { return null; }
+}
+// Drop anything saved for a different person (shared computer).
+async function ncPurgeOthers() {
+  try {
+    const db = await ncDb(); if(!db || !realUser) return;
+    await new Promise(r => { const tx = db.transaction('kv','readwrite'); const st = tx.objectStore('kv'); const q = st.openCursor();
+      q.onsuccess = () => { const c = q.result; if(!c) return; if(!String(c.key).startsWith(realUser.userId+':')) c.delete(); c.continue(); };
+      tx.oncomplete = r; tx.onerror = r; tx.onabort = r; });
+  } catch(e) {}
+}
+async function ncClearAll() {
+  try { const db = await ncDb(); if(db) db.close(); ncDbP = null; await new Promise(r => { const q = indexedDB.deleteDatabase('navcrm_cache'); q.onsuccess = q.onerror = q.onblocked = () => r(); }); } catch(e) {}
+}
+async function signOutCrm() {
+  await ncClearAll();
+  try { localStorage.removeItem('nav-crm-auth-provider'); localStorage.removeItem('navcrm_lastView'); } catch(e) {}
+  try { if(window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect(); } catch(e) {}
+  try {
+    if(authProvider === 'microsoft' && typeof msalInstance !== 'undefined') {
+      const acc = msalInstance.getAllAccounts()[0];
+      if(acc) { await msalInstance.logoutRedirect({ account: acc }); return; }
+    }
+  } catch(e) { console.warn('Microsoft sign-out failed:', e); }
+  location.reload();
+}
+
 async function loadRealCompanies() {
   try {
     const res = await apiFetch('/api/companies');
     if(!res.ok) { console.error('Loading companies failed:', res.status, await res.text()); return; }
     const rows = await res.json();
+    companiesFresh = true;
+    applyCompanyRows(rows);
+    ncPut('companies', rows);
+  } catch(e) {
+    console.error('Loading companies failed:', e);
+  }
+}
+let companiesFresh = false;
+function applyCompanyRows(rows) {
+  try {
     customers.length = 0;
     rows.forEach(r => customers.push(mapCompany(r)));
     // A real company's id can numerically re-use a leftover demo id
@@ -10877,7 +10944,7 @@ async function loadRealCompanies() {
     updateNavBadges();
     if(typeof renderProspectsView === 'function') renderProspectsView();
   } catch(e) {
-    console.error('Loading companies failed:', e);
+    console.error('Showing companies failed:', e);
   }
 }
 
@@ -10923,16 +10990,18 @@ async function loadRealComplianceCases() {
     const res = await apiFetch('/api/compliance-cases');
     if(!res.ok) { console.error('Loading compliance cases failed:', res.status, await res.text()); return; }
     const rows = await res.json();
-    realComplianceCases = rows.map(mapComplianceCase);
-    renderCustCompView();
-    // Also runs here (not just from loadRealCompanies()) because the two
-    // loads happen in parallel wherever both are kicked off together —
-    // without this, whichever one finishes last could leave the sidebar
-    // badge reading the other one's now-stale count.
-    updateNavBadges();
+    ncPut('compliance', rows);
+    applyComplianceRows(rows);
   } catch(e) {
     console.error('Loading compliance cases failed:', e);
   }
+}
+function applyComplianceRows(rows) {
+  realComplianceCases = rows.map(mapComplianceCase);
+  renderCustCompView();
+  // Also runs here (not just from loadRealCompanies()) because the two loads happen in
+  // parallel — without this the sidebar badge could be left reading a stale count.
+  updateNavBadges();
 }
 // Every compliance decision (approve/hold/reject/blacklist) goes through
 // this one call, then reloads both the case list and the company record
@@ -11236,12 +11305,16 @@ async function loadRealCarrierChecks() {
     const res = await apiFetch('/api/carrier-checks');
     if(!res.ok) { console.error('Loading carrier checks failed:', res.status, await res.text()); return; }
     const rows = await res.json();
-    realCarrierChecks = rows.map(mapCarrierCheck);
-    renderCCView();
-    updateNavBadges();
+    ncPut('carrier', rows);
+    applyCarrierRows(rows);
   } catch(e) {
     console.error('Loading carrier checks failed:', e);
   }
+}
+function applyCarrierRows(rows) {
+  realCarrierChecks = rows.map(mapCarrierCheck);
+  renderCCView();
+  updateNavBadges();
 }
 // Every Carrier Compliance action below goes through this shared
 // helper: PATCH/POST, then reload the queue so every screen (Active
@@ -11358,6 +11431,7 @@ function applyRealUser(u) {
   if(mailboxBtn) mailboxBtn.style.display = 'flex';
   document.getElementById('tbRoleChip').textContent = u.role;
   document.getElementById('tbUserName').textContent = u.fullName;
+  { const so = document.getElementById('tbSignOut'); if(so) so.style.display = 'inline'; }
   document.querySelector('.tb-avatar').textContent = u.initials;
   updateCoHeader();
   updateSidebarForRole();
@@ -11406,11 +11480,40 @@ async function finishLogin() {
     // database rows, so nothing fake is ever visible even for a moment.
     notifications.length = 0;
     renderNotifications();
-    await Promise.all([loadRealCompanies(), loadRealUsers(), loadRealUserManagement(), loadRealLocations(), loadRealDepartments(), loadRealTeams(), loadRealComplianceCases(), loadRealCarrierChecks(), loadRealNotifications()]);
+    // C-037: open the app as soon as the SMALL, quick things are in. The big lists (13,000+
+    // companies, compliance cases, carrier checks) load in the background — they re-draw
+    // their own screens when they arrive — so nobody sits on "loading your account" for minutes.
+    const T0 = performance.now();
+    // C-038: show the saved copy from the last visit straight away, then refresh from the server.
+    let fromCache = false;
+    try {
+      await ncPurgeOthers();
+      const [cCo, cCc, cCk] = await Promise.all([ncGet('companies'), ncGet('compliance'), ncGet('carrier')]);
+      if(cCo) { applyCompanyRows(cCo); fromCache = true; }
+      if(cCc) applyComplianceRows(cCc);
+      if(cCk) applyCarrierRows(cCk);
+    } catch(e) { console.warn('Saved copy not used:', e); }
+    let openedEarly = false;
+    if(fromCache) {
+      console.info('[load] showing saved copy from ' + new Date(ncSavedAt).toLocaleString());
+      renderDashboard(); authGateHide(); restoreLastView(); openedEarly = true;
+      const bl0 = document.getElementById('bootLoading'); if(bl0) { bl0.textContent = 'Showing saved data from your last visit — updating…'; bl0.style.display = 'block'; }
+    }
+    const timed = (name, fn) => { const t = performance.now(); return Promise.resolve().then(fn).then(r => { console.info('[load] ' + name + ': ' + ((performance.now()-t)/1000).toFixed(1) + 's'); return r; }); };
+    await Promise.all([timed('users', loadRealUsers), timed('locations', loadRealLocations), timed('departments', loadRealDepartments), timed('teams', loadRealTeams), timed('notifications', loadRealNotifications)]);
+    console.info('[load] app opened after ' + ((performance.now()-T0)/1000).toFixed(1) + 's');
+    const bl = document.getElementById('bootLoading'); if(bl && !fromCache) bl.style.display = 'block';
+    const bigDone = [
+      timed('companies', loadRealCompanies).then(()=>{ try{ renderDashboard(); }catch(e){} setTimeout(()=>{ try{ showProspectAlerts(true); }catch(e){ console.warn(e); } }, 600); }),
+      timed('user management', loadRealUserManagement),
+      timed('compliance cases', loadRealComplianceCases),
+      timed('carrier checks', loadRealCarrierChecks),
+    ];
+    Promise.allSettled(bigDone).then(()=>{ const b = document.getElementById('bootLoading');
+      if(b) { if(fromCache && !companiesFresh) { b.textContent = 'Could not update — you are looking at saved data from ' + new Date(ncSavedAt).toLocaleString() + '. Reload to try again.'; b.style.display = 'block'; } else b.style.display = 'none'; } console.info('[load] everything loaded after ' + ((performance.now()-T0)/1000).toFixed(1) + 's'); });
     renderDashboard();
     authGateHide();
-    restoreLastView();
-    setTimeout(()=>{ try{ showProspectAlerts(true); }catch(e){ console.warn(e); } }, 900);
+    if(!openedEarly) restoreLastView();
     setTimeout(pollDueReminders, 2500);
     if(authProvider === 'microsoft') checkMailboxConnected();
   } catch(err) {
