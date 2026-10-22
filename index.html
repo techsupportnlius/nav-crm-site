@@ -1070,9 +1070,10 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input type="text" id="ccSearch" placeholder="Search carrier or MC…" oninput="renderCCView()">
     </div>
+    <select id="ccLocFilter" onchange="renderCCView()" title="Show MCs from one office" style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12.5px;font-family:var(--sans);"><option value="">All locations</option></select>
     <div class="filter-chips" id="ccFilterChips">
       <button class="fchip active" onclick="setCCFilter('open',this)">All Open</button>
-      <button class="fchip" onclick="setCCFilter('mine',this)">My Tickets</button>
+      <button class="fchip" onclick="setCCFilter('mine',this)">Assigned to me</button>
       <button class="fchip" onclick="setCCFilter('quotation',this)">Quotation Only</button>
       <button class="fchip" onclick="setCCFilter('setup',this)">Setup</button>
       <button class="fchip" onclick="setCCFilter('sla',this)">Over SLA</button>
@@ -1086,7 +1087,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
   <div class="dd-bar" id="ccDD"></div>
   <div class="table-wrap">
     <table>
-      <thead id="ccThead"><tr><th>MC #</th><th>Carrier</th><th>Stage</th><th>Team</th><th>Submitted by</th><th>Lane</th><th>SLA</th><th>When</th></tr></thead>
+      <thead id="ccThead"><tr><th>MC #</th><th>Carrier</th><th>Stage</th><th>Office</th><th>Owner</th><th>Submitted by</th><th>Lane</th><th>SLA</th><th>When</th></tr></thead>
       <tbody id="ccTbody"></tbody>
     </table>
   </div>
@@ -3215,7 +3216,7 @@ const CT_DD = [
 ];
 const CC_DD = [
   {key:'stage', label:'Stage', get:c=>c.stage||''},
-  {key:'team', label:'Team', get:c=>c.team||''},
+  {key:'owner', label:'Owner', get:c=>c.owner||'Unassigned'},
   {key:'by', label:'Submitted by', get:c=>c.broker||''},
 ];
 const CCH_DD = [
@@ -4386,8 +4387,18 @@ function renderCCView() {
   else if(ccFilter==='mine') {
     const myName = document.getElementById('tbUserName')?.textContent||'';
     if(isSalesRep) activeCases = activeCases.filter(c=>c.broker===myName||c.broker===currentUserName());
+    else if(realUser) activeCases = activeCases.filter(c=>c.ownerId===realUser.userId);
     else { const locs = myLocations(); if(locs.length) activeCases = activeCases.filter(c=>locs.includes(c.location)); }
   }
+  // C-050: location filter (All locations / one office)
+  { const lf = document.getElementById('ccLocFilter');
+    if(lf) {
+      const want = lf.value;
+      const opts = '<option value="">All locations</option>' + LOCATIONS.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('');
+      if(lf.dataset.built !== String(LOCATIONS.length)) { lf.innerHTML = opts; lf.dataset.built = String(LOCATIONS.length); lf.value = want; }
+      if(lf.value) activeCases = activeCases.filter(c=>c.location===lf.value);
+      lf.style.display = isSalesRep ? 'none' : '';
+    } }
 
   if(userFilterVal) activeCases = activeCases.filter(c=>c.broker===userFilterVal);
   const ccBase = activeCases;
@@ -4400,35 +4411,37 @@ function renderCCView() {
     ccNote.textContent='Showing: your MC submissions only';
     ccHead.innerHTML=`<button class="btn btn-primary btn-sm" onclick="openSubmitMC()">+ Submit MC</button>`;
     const myMCs = activeCases.filter(c=>c.broker===currentUserName());
-    document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Lane</th><th>Stage</th><th>SLA</th><th>Submitted</th></tr>`;
+    document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Lane</th><th>Stage</th><th>Handled by</th><th>SLA</th><th>Submitted</th></tr>`;
     document.getElementById('ccTbody').innerHTML = myMCs.length ? myMCs.map(c=>`
       <tr onclick="openCCCase('${c.mc}')" style="cursor:pointer;">
         <td class="mono" style="color:var(--accent);">${c.mc}</td>
         <td class="primary">${c.carrier}</td>
         <td style="font-size:11.5px;color:var(--text-faint);">${c.lane}</td>
         <td><span class="status ${c.stageCls}">${c.stage}</span></td>
-        <td class="sla ${c.slaCls}">${c.sla}</td>
+        <td>${ccOwnerCell(c)}</td>
+        <td class="sla ${c.slaCls}" data-sla="${c.mc.replace(/\s/g,'_')}">${c.sla}</td>
         <td style="font-size:11.5px;color:var(--text-faint);">${c.submitted}</td>
       </tr>`).join('') :
-      `<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">No MC submissions match${search?' your search':' from you yet'}.</td></tr>`;
+      `<tr><td colspan="7" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">No MC submissions match${search?' your search':' from you yet'}.</td></tr>`;
   } else if(isCarrierComp) {
     ccNote.style.display='block';
     ccNote.textContent='Compliance view — click a row to take action';
     ccHead.innerHTML=``;
-    document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Stage</th><th>Team</th><th>Submitted by</th><th>Lane</th><th>SLA</th><th>Status</th></tr>`;
+    document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Stage</th><th>Office</th><th>Owner</th><th>Submitted by</th><th>Lane</th><th>SLA</th><th>Status</th></tr>`;
     document.getElementById('ccTbody').innerHTML = activeCases.length ? activeCases.map(c=>{
       const rowCls = c.slaCls==='sla-over'?'tr-sla-over':c.slaCls==='sla-critical'?'tr-sla-critical':'';
       return `<tr onclick="openCCCase('${c.mc}')" class="${rowCls}" style="cursor:pointer;">
         <td class="mono" style="color:var(--accent);">${c.mc}</td>
         <td class="primary">${c.carrier}</td>
         <td><span class="status ${c.stageCls}">${c.stage}</span></td>
-        <td style="font-size:12px;color:var(--text-muted);">${c.team}</td>
+        <td style="font-size:12px;color:var(--text-muted);">${esc(c.officeName)}</td>
+        <td>${ccOwnerCell(c)}</td>
         <td style="font-size:12px;color:var(--text-muted);">${c.broker}</td>
         <td style="font-size:11.5px;color:var(--text-faint);">${c.lane}</td>
-        <td class="sla ${c.slaCls}" id="sla-cell-${c.mc.replace(/\s/g,'_')}">${c.slaCls==='sla-over'?'<span class="sla-dot">●</span> '+c.sla:c.sla}</td>
+        <td class="sla ${c.slaCls}" id="sla-cell-${c.mc.replace(/\s/g,'_')}" data-sla="${c.mc.replace(/\s/g,'_')}">${c.slaCls==='sla-over'?'<span class="sla-dot">●</span> '+c.sla:c.sla}</td>
         <td><span class="status ${c.ccStatus?'s-active':'s-pending'}">${c.ccStatus||'Open'}</span></td>
       </tr>`;}).join('') :
-      `<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">No cases match your filter.</td></tr>`;
+      `<tr><td colspan="9" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">No cases match your filter.</td></tr>`;
   } else if(isCoiSpec) {
     ccNote.style.display='block';
     ccNote.textContent='COI Specialist view — all active MCs · Setup cases include Carrier Onboarding & COI tabs';
@@ -4449,7 +4462,7 @@ function renderCCView() {
         <td>${typePill}</td>
         <td style="font-size:12px;color:var(--text-muted);">${c.broker}</td>
         <td style="font-size:11.5px;color:var(--text-faint);">${c.lane}</td>
-        <td class="sla ${c.slaCls}" id="sla-cell-${c.mc.replace(/\s/g,'_')}">${c.slaCls==='sla-over'?'<span class="sla-dot">●</span> '+c.sla:c.sla}</td>
+        <td class="sla ${c.slaCls}" id="sla-cell-${c.mc.replace(/\s/g,'_')}" data-sla="${c.mc.replace(/\s/g,'_')}">${c.slaCls==='sla-over'?'<span class="sla-dot">●</span> '+c.sla:c.sla}</td>
         <td>${coiCls?`<span class="status ${coiCls}">${coiLbl}</span>`:`<span style="color:var(--text-faint);font-size:12px;">—</span>`}</td>
         <td>${opsCls?`<span class="status ${opsCls}">${opsLbl}</span>`:`<span style="color:var(--text-faint);font-size:12px;">—</span>`}</td>
       </tr>`;}).join('') :
@@ -4457,20 +4470,21 @@ function renderCCView() {
   } else {
     ccNote.style.display='none';
     ccHead.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="exportCCQueue()">Export</button><button class="btn btn-primary" onclick="openSubmitMC()">+ Submit MC</button>`;
-    document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Stage</th><th>Team</th><th>Submitted by</th><th>Lane</th><th>SLA</th><th>When</th></tr>`;
+    document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Stage</th><th>Office</th><th>Owner</th><th>Submitted by</th><th>Lane</th><th>SLA</th><th>When</th></tr>`;
     document.getElementById('ccTbody').innerHTML = activeCases.length ? activeCases.map(c=>{
       const rowCls = c.slaCls==='sla-over'?'tr-sla-over':c.slaCls==='sla-critical'?'tr-sla-critical':'';
       return `<tr onclick="openCCCase('${c.mc}')" class="${rowCls}" style="cursor:pointer;">
         <td class="mono" style="color:var(--accent);">${c.mc}</td>
         <td class="primary">${c.carrier}</td>
         <td><span class="status ${c.stageCls}">${c.stage}</span></td>
-        <td style="font-size:12px;color:var(--text-muted);">${c.team}</td>
+        <td style="font-size:12px;color:var(--text-muted);">${esc(c.officeName)}</td>
+        <td>${ccOwnerCell(c)}</td>
         <td style="font-size:12px;color:var(--text-muted);">${c.broker}</td>
         <td style="font-size:11.5px;color:var(--text-faint);">${c.lane}</td>
-        <td class="sla ${c.slaCls}" id="sla-cell-${c.mc.replace(/\s/g,'_')}">${c.slaCls==='sla-over'?'<span class="sla-dot">●</span> '+c.sla:c.sla}</td>
+        <td class="sla ${c.slaCls}" id="sla-cell-${c.mc.replace(/\s/g,'_')}" data-sla="${c.mc.replace(/\s/g,'_')}">${c.slaCls==='sla-over'?'<span class="sla-dot">●</span> '+c.sla:c.sla}</td>
         <td style="font-size:11.5px;color:var(--text-faint);">${c.submitted}</td>
       </tr>`;}).join('') :
-      `<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">No cases match your filter.</td></tr>`;
+      `<tr><td colspan="9" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">No cases match your filter.</td></tr>`;
   }
 }
 
@@ -6223,16 +6237,21 @@ async function sendTicketMailFromMe(mail) {
   try {
     if(!mail || !(mail.to||[]).length) return false;
     const tok = await getGraphToken();
-    if(!tok) return false;
+    if(!tok) { window.__ticketMailWarn = true; return false; }
     const rcpt = (arr)=>(arr||[]).filter(Boolean).map(address=>({emailAddress:{address}}));
     const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
       method:'POST',
       headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},
       body: JSON.stringify({message:{subject:mail.subject,body:{contentType:'HTML',content:mail.html},toRecipients:rcpt(mail.to),ccRecipients:rcpt(mail.cc)},saveToSentItems:true}),
     });
-    if(!res.ok){ console.warn('Ticket mail from own mailbox refused:', res.status); showToast('Ticket created, but the email to Compliance could not be sent from your mailbox — please email them directly.'); return false; }
+    if(!res.ok){ console.warn('Ticket mail from own mailbox refused:', res.status); window.__ticketMailWarn = true; return false; }
     return true;
-  } catch(e){ console.warn('Ticket mail from own mailbox failed:', e); return false; }
+  } catch(e){ console.warn('Ticket mail from own mailbox failed:', e); window.__ticketMailWarn = true; return false; }
+}
+// Added to the "submitted" message when the email to Compliance could not be sent from the person's own Microsoft mailbox.
+function ticketMailNote() {
+  const w = window.__ticketMailWarn; window.__ticketMailWarn = false;
+  return w ? ' ⚠ The email to Compliance was NOT sent — click "Connect Mailbox" (Microsoft sign-in needed) or tell them directly. They can still see it in the CRM.' : '';
 }
 
 async function submitForCompliance(id) {
@@ -6244,10 +6263,11 @@ async function submitForCompliance(id) {
     try {
       const res = await apiFetch('/api/compliance-cases', {
         method: 'POST',
-        body: JSON.stringify({ caseId, caseType: 'Customer Eligibility', companyId: id, slaHours: 48, senderMail: !!(await getGraphToken()) }),
+        body: JSON.stringify({ caseId, caseType: 'Customer Eligibility', companyId: id, slaHours: 48, }),
       });
       if(!res.ok) { showToast('Could not submit for Compliance — please try again.'); return; }
-      try { const j = await res.json(); if(j && j.mail) { const ok = await sendTicketMailFromMe(j.mail); if(!ok) console.warn('Ticket email from own mailbox did not send.'); } } catch(e){}
+      window.__ticketMailWarn = false;
+      try { const j = await res.json(); if(j && j.mail) await sendTicketMailFromMe(j.mail); } catch(e){}
     } catch(e) {
       console.error('Submitting for compliance failed:', e);
       showToast('Could not submit for Compliance — please try again.');
@@ -6259,7 +6279,7 @@ async function submitForCompliance(id) {
     // the next refresh.
     await Promise.all([loadRealCompanies(), loadRealComplianceCases()]);
     resetProspectFilterToAll();
-    showToast(`${c.name} submitted for Compliance review — it stays in Prospect Companies (now marked Pending Compliance) until Compliance decides.`);
+    showToast(`${c.name} submitted for Compliance review — it stays in Prospect Companies (now marked Pending Compliance) until Compliance decides.` + ticketMailNote());
     renderProspectsView();
     return;
   }
@@ -6902,6 +6922,24 @@ function umDrawerPreset(id, name) { if(!name) return; umApplyPreset([id], name);
 function umDrawerAddLoc(id, loc) { addAssignedLoc(id, loc); openUserDrawer(id); }
 function umDrawerRemoveLoc(id, loc) { removeAssignedLoc(id, loc); openUserDrawer(id); }
 
+async function umSaveCarrierLeadership(userId) {
+  const u = usersDB.find(x=>x.id===userId); if(!u) return;
+  if(!realUser) return;
+  try {
+    const res = await apiFetch('/api/users/'+encodeURIComponent(userId)+'/carrier-leadership', { method:'PUT', body: JSON.stringify({ leadLocations: u.carrierLeadLocations||[], isManager: !!u.isCarrierManager }) });
+    if(!res.ok) { const j = await res.json().catch(()=>({})); showToast(j.error || 'Could not save — run add_carrier_assignment.sql first?'); return; }
+    showToast('Carrier assignment saved for '+u.name+'.');
+  } catch(e) { console.error(e); showToast('Could not save.'); }
+}
+function umSetCarrierLead(userId, loc, on) {
+  const u = usersDB.find(x=>x.id===userId); if(!u) return;
+  const cur = new Set(u.carrierLeadLocations||[]); if(on) cur.add(loc); else cur.delete(loc);
+  u.carrierLeadLocations = [...cur]; umSaveCarrierLeadership(userId);
+}
+function umSetCarrierManager(userId, on) {
+  const u = usersDB.find(x=>x.id===userId); if(!u) return;
+  u.isCarrierManager = !!on; umSaveCarrierLeadership(userId);
+}
 function openUserDrawer(userId) {
   activeUserId = userId;
   const u = usersDB.find(u=>u.id===userId);
@@ -7009,6 +7047,20 @@ function openUserDrawer(userId) {
   // Assigned locations + view restrictions (moved here from the table)
   const canHaveLocs = ['Carrier Compliance','Operations Head','Operations Manager','Location Head'].includes(u.role);
   const vr = u.viewRestrictions || {};
+  // C-050: Carrier Compliance leadership (Admin sets it)
+  const carrierLeadSection = (currentRole==='Admin' && u.role==='Carrier Compliance' && u.status!=='Former Employee') ? `
+    <div class="d-sec">
+      <div class="d-sec-label">Carrier MC assignment</div>
+      <div style="font-size:11.5px;color:var(--text-faint);margin:6px 0 10px;line-height:1.5;">New MCs go to the Carrier Compliance people of the broker's office in a round robin. The people of an office are the <b>Assigned Locations</b> ticked above. A Team Leader is part of the rotation and can reassign that office's MCs (with a reason).</div>
+      <div style="font-size:12px;font-weight:500;margin-bottom:6px;">Team Leader for:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+        ${LOCATIONS.map(l=>`<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:5px 9px;background:var(--surface-2);"><input type="checkbox" ${(u.carrierLeadLocations||[]).includes(l.id)?'checked':''} style="accent-color:var(--accent);" onchange="umSetCarrierLead('${u.id}','${esc(l.id)}',this.checked)">${esc(l.name)}</label>`).join('')}
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
+        <input type="checkbox" ${u.isCarrierManager?'checked':''} style="accent-color:var(--accent);" onchange="umSetCarrierManager('${u.id}',this.checked)">
+        <span>⭐ <b>Carrier Compliance Manager</b> (top level) — gets MCs when nobody is set up for an office, and can reassign any MC</span>
+      </label>
+    </div>` : '';
   const locViewSection = (currentRole==='Admin' && u.status!=='Former Employee' && (canHaveLocs || u.role==='Carrier Compliance')) ? `
     <div class="d-sec">
       <div class="d-sec-label">Assigned Locations ${u.role==='Carrier Compliance'?'':''}</div>
@@ -7106,6 +7158,7 @@ function openUserDrawer(userId) {
     ${roleSection}
     ${moduleAccessSection}
     ${locViewSection}
+    ${carrierLeadSection}
     ${offboardSection}
 
     <div class="d-sec">
@@ -8106,15 +8159,13 @@ function openCCCase(mc, forceTab) {
   const isCoiSpec = currentRole==='COI Specialist';
   const isSetup   = c.type==='setup';
 
-  // Location access check for CC users — use userId-based lookup for reliable matching
+  // C-050: ownership. A Carrier Compliance person can act on an MC that is theirs (or not yet assigned);
+  // the office Team Leader, the Carrier manager and Admin can act on any MC of their office.
   const currentUser = getDemoUser();
-  const assignedLocs = currentUser?.assignedLocations || [];
   const isReassigned = c._reassignedTo && currentUser && c._reassignedTo === currentUser.id;
-  // locLocked only if CC user has assignedLocations set AND this MC's location isn't in it
-  const locLocked = isCarrCC && !isAdmin && !isCoiSpec
-    && assignedLocs.length > 0
-    && !assignedLocs.includes(c.location)
-    && !isReassigned;
+  const ownedByOther = !!c.ownerId && !!realUser && c.ownerId !== realUser.userId;
+  const iAmLead = ccIsLeadFor(c.location);
+  const locLocked = isCarrCC && !isAdmin && !isCoiSpec && ownedByOther && !iAmLead && !isReassigned;
 
   const slaColour = c.slaCls==='sla-over' ? 'var(--red)' : c.slaCls==='sla-warn' ? 'var(--amber)' : 'var(--green)';
   const mcKey = mc.replace(/\s/g,'_');
@@ -8124,9 +8175,8 @@ function openCCCase(mc, forceTab) {
     <div class="loc-locked-banner">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
       <div>
-        <strong>View only — ${esc(locationName(c.location))} location</strong><br>
-        <span style="font-size:11.5px;">This MC was submitted from <strong>${esc(locationName(c.location))}</strong>. You can read the case, but cannot update the status unless an Admin or Compliance Manager reassigns it to you.</span>
-        ${isAdmin ? `<br><button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="reassignCCTicket('${mc}')">Reassign to me</button>` : ''}
+        <strong>View only — owned by ${esc(c.owner||'another person')}</strong><br>
+        <span style="font-size:11.5px;">This MC belongs to <strong>${esc(c.owner||'someone else')}</strong> (${esc(locationName(c.location))}). You can read it, but only the owner, the office Team Leader or the Carrier manager can update it. Ask the Team Leader to reassign it to you if needed.</span>
       </div>
     </div>` : '';
 
@@ -8153,6 +8203,7 @@ function openCCCase(mc, forceTab) {
         <button class="btn btn-sm"${disAttr} style="background:var(--amber-dim);border:1px solid var(--amber);color:var(--amber);padding:9px 8px;font-size:12px;"
           onclick="setCCStatusAction('${mc}','Info Requested')">⏸ Info Requested</button>
       </div>
+      ${c.ccStatus==='Info Requested' ? `<button class="btn btn-sm"${disAttr} style="width:100%;margin-bottom:10px;background:var(--surface-2);border:1px solid var(--accent);color:var(--accent);padding:8px;font-size:12px;" onclick="setCCStatusAction('${mc}','Resume')">▶ Info received — resume the timer</button>` : ''}
       <div class="addco-field">
         <label style="font-size:11px;color:var(--text-faint);">Internal Note <span style="color:var(--text-faint);font-style:italic;">(required for Not Recommended)</span></label>
         <textarea id="ccnote-${mcKey}"${locLocked?' disabled':''} style="width:100%;background:var(--bg-card);border:1px solid var(--border);border-radius:5px;color:var(--text-main);padding:7px 9px;font-size:12.5px;font-family:var(--sans);resize:vertical;min-height:55px;box-sizing:border-box;${locLocked?'opacity:0.35;':''}" placeholder="e.g. Missing COI · Authority issue flagged…"></textarea>
@@ -8281,8 +8332,17 @@ function openCCCase(mc, forceTab) {
     </div>` : '';
 
   // ── OVERVIEW PANE ──
+  const reassignPanel = (realUser && iAmLead && !c.resolvedAt && c.checkId) ? `
+    <div class="d-sec">
+      <div class="d-sec-label">Reassign this MC</div>
+      <div style="font-size:12px;color:var(--text-faint);margin:6px 0 8px;">Office Team Leader / manager only. A reason is required and is saved on the MC.</div>
+      <select id="ccAssignSel" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:7px 10px;color:var(--text);font-size:13px;font-family:var(--sans);margin-bottom:8px;"><option value="">Loading people…</option></select>
+      <textarea id="ccAssignWhy" placeholder="Reason for reassigning (required)…" style="width:100%;min-height:54px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;margin-bottom:8px;"></textarea>
+      <button class="btn btn-primary btn-sm" onclick="ccAssignMC('${mc}')">Reassign</button>
+    </div>` : '';
   const overviewPane = `
     ${locBanner}
+    ${reassignPanel}
     <div class="d-sec">
       <div class="d-sec-label">Carrier Check Info</div>
       <div class="field-grid" style="border:1px solid var(--border);border-radius:5px;overflow:hidden;margin-top:8px;">
@@ -8296,7 +8356,8 @@ function openCCCase(mc, forceTab) {
         <div class="field-box"><div class="field-label">Value</div><div class="field-val">${c.value||'—'}</div></div>
         <div class="field-box"><div class="field-label">Weight</div><div class="field-val">${c.weight||'—'} lbs</div></div>
         <div class="field-box"><div class="field-label">Submitted By</div><div class="field-val">${c.broker}</div></div>
-        <div class="field-box"><div class="field-label">Team</div><div class="field-val">${c.team}</div></div>
+        <div class="field-box"><div class="field-label">Owner</div><div class="field-val">${c.owner?esc(c.owner)+`<div style="font-size:10.5px;color:var(--text-faint);">${c.assignMethod==='manual'?'reassigned':(c.assignMethod==='manager'?'sent to manager (no one set up for this office)':'assigned automatically')}</div>`:'<span style="color:var(--text-faint);">Unassigned</span>'}</div></div>
+        <div class="field-box"><div class="field-label">Office</div><div class="field-val">${esc(c.officeName)}</div></div>
         <div class="field-box"><div class="field-label">Submitted</div><div class="field-val muted">${c.submitted}</div></div>
       </div>
     </div>
@@ -8304,7 +8365,7 @@ function openCCCase(mc, forceTab) {
       <div class="d-sec-label">SLA &amp; Stage</div>
       <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span class="status ${c.stageCls}">${c.stage}</span>
-        <span style="font-size:12px;color:${slaColour};font-family:var(--mono);">${c.sla}</span>
+        <span data-sla="${mcKey}" style="font-size:12px;color:${slaColour};font-family:var(--mono);">${c.sla}</span>
         ${statusBadge}
       </div>
       ${isSetup ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -8362,6 +8423,13 @@ function openCCCase(mc, forceTab) {
   `;
 
   openDrawer();
+  if(reassignPanel) ccLoadAssignees().then(list=>{
+    const sel = document.getElementById('ccAssignSel'); if(!sel) return;
+    const pool = list.filter(u=>u.id!==c.ownerId);
+    const here = pool.filter(u=>(u.locations||[]).includes(c.location)), rest = pool.filter(u=>!(u.locations||[]).includes(c.location));
+    const opt = u=>`<option value="${esc(u.id)}">${esc(u.name)}${(u.locations||[]).length?' · '+esc(u.locations.map(locationName).join(', ')):''}</option>`;
+    sel.innerHTML = '<option value="">— Choose who should own it…</option>' + (here.length?`<optgroup label="${esc(locationName(c.location))}">${here.map(opt).join('')}</optgroup>`:'') + (rest.length?`<optgroup label="Other offices">${rest.map(opt).join('')}</optgroup>`:'');
+  });
 }
 
 // ── SUBMIT MC MODAL ───────────────────────────────────────────
@@ -8437,7 +8505,6 @@ async function doSubmitMC() {
           declaredValue: value ? Number(value.replace(/[^0-9.]/g,'')) || null : null,
           weightLbs: weight ? Number(weight.replace(/[^0-9.]/g,'')) || null : null,
           dispatcherName: dispName || null, dispatcherPhone: dispPhone || null, dispatcherEmail: dispEmail || null,
-          senderMail: !!(await getGraphToken()),
         }),
       });
       if(!res.ok) {
@@ -8445,6 +8512,7 @@ async function doSubmitMC() {
         showToast(err.error || 'Could not submit — please try again.');
         return;
       }
+      window.__ticketMailWarn = false;
       try { const j = await res.json(); if(j && j.mail) await sendTicketMailFromMe(j.mail); } catch(e){}
     } catch(e) {
       console.error('Submitting MC failed:', e);
@@ -8453,7 +8521,7 @@ async function doSubmitMC() {
     }
     await loadRealCarrierChecks();
     closeSubmitMC();
-    showToast(`${mc} submitted — ${smcMode==='setup'?'Setup (15-min SLA)':'Quotation (5-min SLA)'} check started.`);
+    showToast(`${mc} submitted — ${smcMode==='setup'?'Setup (15-min SLA)':'Quotation (5-min SLA)'} check started.` + ticketMailNote());
     return;
   }
 
@@ -8673,7 +8741,7 @@ async function setCCStatusAction(mc, newStatus) {
   const ok = await patchCarrierCheck(c.checkId, '/resolve', { status: newStatus, note });
   if(!ok) return;
 
-  showToast(`${mc} → ${newStatus}`);
+  showToast(newStatus==='Resume' ? `${mc} — timer running again.` : `${mc} → ${newStatus}` + (newStatus==='Info Requested' ? ' (timer paused)' : ''));
   closeDrawer();
   renderCCView();
 }
@@ -10133,8 +10201,9 @@ setInterval(() => {
   let needsRerender = false;
   const ccViewOpen = document.getElementById('view-carrier-compliance')?.classList.contains('active');
   realCarrierChecks.forEach(c => {
-    if(typeof c.slaSeconds !== 'number') return;
-    if(c.slaSeconds > 0) c.slaSeconds--;
+    if(typeof c.slaSeconds !== 'number' || c.paused) return;
+    // C-048: recompute from the real due time every second (a plain countdown drifts when the tab is in the background)
+    c.slaSeconds = isFinite(c.dueMs) ? Math.round((c.dueMs - Date.now()) / 1000) : (c.slaSeconds > 0 ? c.slaSeconds - 1 : 0);
     const newCls = getSLACls(c.slaSeconds);
     const newTxt = formatSLATime(c.slaSeconds);
 
@@ -10157,15 +10226,16 @@ setInterval(() => {
       needsRerender = true;
     } else {
       c.sla = newTxt;
-      const key = c.mc.replace(/\s/g,'_');
-      const cell = document.getElementById('sla-cell-'+key);
-      if(cell) {
-        cell.className = 'sla ' + newCls;
-        cell.innerHTML = newCls==='sla-over'
-          ? '<span class="sla-dot">●</span> '+newTxt
-          : newTxt;
-      }
     }
+    const key = c.mc.replace(/\s/g,'_');
+    document.querySelectorAll('[data-sla="'+key+'"]').forEach(cell=>{
+      if(cell.tagName==='TD') {
+        cell.className = 'sla ' + newCls;
+        cell.innerHTML = newCls==='sla-over' ? '<span class="sla-dot">●</span> '+newTxt : newTxt;
+      } else {
+        cell.textContent = newTxt;
+      }
+    });
   });
   if(needsRerender) renderCCView();
 }, 1000);
@@ -11139,15 +11209,48 @@ function formatNoteEntry(n) {
   const who = n.created_by_name ? ` (${n.created_by_name})` : '';
   return `${when}${who} — ${n.note_text}`;
 }
+// C-050: who may reassign / act on an MC: Admin, the top Carrier manager, or the Team Leader of that office
+function ccIsLeadFor(loc) {
+  if(currentRole==='Admin') return true;
+  if(!realUser) return false;
+  return !!realUser.isCarrierManager || (realUser.carrierLeadLocations||[]).includes(loc);
+}
+function ccOwnerCell(c) {
+  if(!c.owner) return '<span style="color:var(--text-faint);font-size:12px;">Unassigned</span>';
+  return `<span style="font-size:12px;color:var(--text);font-weight:500;">${esc(c.owner)}</span>`;
+}
+let ccAssignees = null;
+async function ccLoadAssignees() {
+  if(ccAssignees) return ccAssignees;
+  try { const res = await apiFetch('/api/carrier-assignees'); ccAssignees = res.ok ? await res.json() : []; } catch(e) { ccAssignees = []; }
+  return ccAssignees;
+}
+async function ccAssignMC(mc) {
+  const c = realCarrierChecks.find(x=>x.mc===mc); if(!c) return;
+  const sel = document.getElementById('ccAssignSel'), why = document.getElementById('ccAssignWhy');
+  if(!sel || !sel.value) { showToast('Choose who should own this MC.'); return; }
+  if(!why || why.value.trim().length < 3) { showToast('Please type a reason for the reassignment.'); if(why) why.focus(); return; }
+  try {
+    const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/assign', { method:'PATCH', body: JSON.stringify({ userId: sel.value, reason: why.value.trim() }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not reassign.'); return; }
+    showToast(mc+' reassigned to '+(j.assignedTo||'that person')+'.');
+    await loadRealCarrierChecks(); openCCCase(mc);
+  } catch(e) { console.error(e); showToast('Could not reassign.'); }
+}
 function mapCarrierCheck(r) {
-  const slaSeconds = r.resolved_at ? null : Math.round((new Date(r.sla_due_at) - new Date()) / 1000);
-  const sla = r.resolved_at ? 'Completed' : formatSLATime(slaSeconds);
-  const slaCls = r.resolved_at ? '' : getSLACls(slaSeconds);
+  // C-048: while "Info Requested" the timer is paused (frozen at the moment it was paused)
+  const resolved = !!r.resolved_at;
+  const paused = !resolved && r.cc_status === 'Info Requested';
+  const ref = paused && r.sla_paused_at ? new Date(r.sla_paused_at) : new Date();
+  const slaSeconds = resolved ? null : Math.round((new Date(r.sla_due_at) - ref) / 1000);
+  const sla = resolved ? 'Completed' : (paused ? '⏸ Paused · ' + (slaSeconds > 0 ? formatSLATime(slaSeconds).replace(' remaining',' left') : 'over target') : formatSLATime(slaSeconds));
+  const slaCls = resolved ? '' : (paused ? (slaSeconds <= 0 ? 'sla-over' : 'sla-ok') : getSLACls(slaSeconds));
   return {
     checkId: r.check_id, mc: r.mc_number, carrier: r.carrier_name, type: r.check_type,
     stage: r.stage, stageCls: r.cc_status === 'Not Recommended' ? 's-rejected' : (r.cc_status === 'Good to Go' ? 's-active' : 's-check'),
     team: r.team_label || 'Unassigned', broker: r.broker_name || '—', lane: r.lane || '',
-    location: r.location_id, sla, slaCls, slaSeconds,
+    location: r.location_id, sla, slaCls, slaSeconds, paused, dueMs: new Date(r.sla_due_at).getTime(),
     submitted: relativeNotifTime(r.submitted_at),
     pickupDate: formatUSDate(r.pickup_date), deliveryDate: formatUSDate(r.delivery_date),
     loadtype: r.load_type || '', commodity: r.commodity || '',
@@ -11166,6 +11269,8 @@ function mapCarrierCheck(r) {
     resolvedAt: r.resolved_at ? new Date(r.resolved_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : null,
     outcome: r.cc_status || null,
     _reassignedTo: r.reassigned_to_user_id || null,
+    ownerId: r.assigned_to_user_id || null, owner: r.assigned_to_name || '', assignMethod: r.assign_method || '',
+    officeName: r.location_id ? locationName(r.location_id) : '—',
   };
 }
 let ccMail = { mailboxes:[], offices:[], team:[], customerTeam:[], mine:{operations:null,coi:null,customer:null}, canEdit:false };
@@ -11557,6 +11662,8 @@ async function finishLogin() {
       carrierAccess: me.carrierAccess !== false,
       canBulkEmail: me.canBulkEmail === true,
       isComplianceManager: me.isComplianceManager === true,
+      isCarrierManager: me.isCarrierManager === true,
+      carrierLeadLocations: me.carrierLeadLocations || [],
       moduleAccess: me.moduleAccess || null, // Admin's Module Access ticks (null = old server, treat as all on)
     };
     applyRealUser(realUser);
