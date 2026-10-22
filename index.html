@@ -7046,13 +7046,17 @@ function openUserDrawer(userId) {
     </div>`;
 
   const isGlobal = GLOBAL_ROLES.includes(u.role);
+  // C-052: roles that work for several offices pick them right here in the top box (no second place further down)
+  const multiLoc = isGlobal || ['Carrier Compliance','Operations Head','Operations Manager','Location Head'].includes(u.role);
+  const locTicks = (currentRole==='Admin') ? LOCATIONS.map(l=>`<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:5px 9px;background:var(--surface-2);"><input type="checkbox" ${(u.assignedLocations||[]).includes(l.id)?'checked':''} style="accent-color:var(--accent);" onchange="umToggleLoc('${u.id}','${esc(l.id)}',this.checked)">${esc(l.name)}</label>`).join('')
+    : ((u.assignedLocations||[]).map(x=>esc(locationName(x))).join(', ') || '—');
   const subTeamStr = (u.subTeam||[]).filter(t=>t!=='—').join(', ')||'—';
   const roleSection = u.status !== 'Former Employee' ? `
     <div class="d-sec">
       <div class="d-sec-label">Role &amp; Access Override</div>
       <div style="font-size:11.5px;color:var(--text-faint);margin:8px 0 10px;line-height:1.6;">
         ${isGlobal
-          ? `<span style="color:var(--blue);">⊕ Global role</span> — this user sees all locations regardless of location assignment.`
+          ? (u.role==='Carrier Compliance' ? `Works for: <strong style="color:var(--text);">${esc((u.assignedLocations||[]).map(locationName).join(', ')||'no office ticked yet')}</strong>. New MCs from those offices are shared out between the people ticked for them.` : `<span style="color:var(--blue);">⊕ Global role</span> — this user sees all locations regardless of location assignment.`)
           : `Location-scoped — this user sees only <strong style="color:var(--text);">${esc(locationName(u.location))}</strong>, sub-team(s): <strong style="color:var(--text);">${subTeamStr}</strong>.`}
       </div>
       <div class="field-grid" style="border:1px solid var(--border);border-radius:5px;overflow:hidden;">
@@ -7062,7 +7066,7 @@ function openUserDrawer(userId) {
             ${ROLES.map(r=>`<option${r===u.role?' selected':''}>${r}</option>`).join('')}
           </select>
         </div>
-        <div class="field-box">
+${multiLoc ? '' : `        <div class="field-box">
           <div class="field-label">Location</div>
           <select class="field-select" onchange="updateUserLocation('${u.id}',this.value)">
             ${isGlobal
@@ -7070,7 +7074,8 @@ function openUserDrawer(userId) {
               : LOCATIONS.map(l=>`<option value="${esc(l.id)}"${l.id===u.location?' selected':''}>${esc(l.name)}</option>`).join('')}
           </select>
         </div>
-        <div class="field-box">
+`}
+${multiLoc && isGlobal ? '' : `        <div class="field-box">
           <div class="field-label">Sub-team(s) assigned</div>
           ${isGlobal ? `<div class="field-val" style="font-size:12px;">Global — N/A</div>`
             : realUser ? `
@@ -7093,12 +7098,17 @@ function openUserDrawer(userId) {
             : `<div class="field-val" style="font-size:12px;">${subTeamStr}</div>
                <div style="font-size:10.5px;color:var(--text-faint);margin-top:3px;">Manage via M365 group membership</div>`}
         </div>
+`}
         <div class="field-box">
           <div class="field-label">Status</div>
           <select class="field-select" onchange="updateUserStatus('${u.id}',this.value)">
             ${['Active','Inactive'].map(s=>`<option${s===u.status?' selected':''}>${s}</option>`).join('')}
           </select>
         </div>
+        ${multiLoc ? `<div class="field-box" style="grid-column:1/-1;">
+          <div class="field-label">Location(s) — tick every office this person works for</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">${locTicks}</div>
+        </div>` : ''}
       </div>
       <div style="margin-top:10px;padding:9px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;">
         <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint);margin-bottom:4px;">M365 Group(s)</div>
@@ -7116,7 +7126,7 @@ function openUserDrawer(userId) {
   const carrierLeadSection = (currentRole==='Admin' && u.role==='Carrier Compliance' && u.status!=='Former Employee') ? `
     <div class="d-sec">
       <div class="d-sec-label">Carrier MC assignment</div>
-      <div style="font-size:11.5px;color:var(--text-faint);margin:6px 0 10px;line-height:1.5;">New MCs go to the Carrier Compliance people of the broker's office in a round robin. The people of an office are the <b>Assigned Locations</b> ticked above. A Team Leader is part of the rotation and can reassign that office's MCs (with a reason).</div>
+      <div style="font-size:11.5px;color:var(--text-faint);margin:6px 0 10px;line-height:1.5;">New MCs go to the Carrier Compliance people of the broker's office in a round robin. The people of an office are the <b>Location(s)</b> ticked above. A Team Leader is part of the rotation and can reassign that office's MCs (with a reason).</div>
       <div style="font-size:12px;font-weight:500;margin-bottom:6px;">Team Leader for:</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
         ${LOCATIONS.map(l=>`<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:5px 9px;background:var(--surface-2);"><input type="checkbox" ${(u.carrierLeadLocations||[]).includes(l.id)?'checked':''} style="accent-color:var(--accent);" onchange="umSetCarrierLead('${u.id}','${esc(l.id)}',this.checked)">${esc(l.name)}</label>`).join('')}
@@ -7130,15 +7140,15 @@ function openUserDrawer(userId) {
         <span>⭐ <b>Carrier Compliance Manager</b> (top level) — gets MCs when nobody is set up for an office, and can reassign any MC</span>
       </label>
     </div>` : '';
-  const locViewSection = (currentRole==='Admin' && u.status!=='Former Employee') ? `
+  const locViewSection = (currentRole==='Admin' && u.status!=='Former Employee' && (!multiLoc || u.role==='Carrier Compliance')) ? `
     <div class="d-sec">
-      <div class="d-sec-label">Assigned Locations</div>
+      ${multiLoc ? '' : `<div class="d-sec-label">Assigned Locations</div>
       <div style="font-size:11.5px;color:var(--text-faint);margin:6px 0 8px;line-height:1.5;">Tick every office this person works for. You can tick as many as you need.</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;">
         ${LOCATIONS.map(l=>`<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:5px 9px;background:var(--surface-2);"><input type="checkbox" ${(u.assignedLocations||[]).includes(l.id)?'checked':''} style="accent-color:var(--accent);" onchange="umToggleLoc('${u.id}','${esc(l.id)}',this.checked)">${esc(l.name)}</label>`).join('')}
-      </div>
+      </div>`}
       ${u.role==='Carrier Compliance' ? `
-      <div class="d-sec-label" style="margin-top:14px;">View Restrictions</div>
+      <div class="d-sec-label" style="margin-top:${multiLoc?0:14}px;">View Restrictions</div>
       <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12.5px;">
         <label style="display:flex;align-items:center;gap:7px;cursor:pointer;"><input type="checkbox" ${vr.hideActiveCustomers?'checked':''} style="accent-color:var(--accent);" onchange="toggleViewRestriction('${u.id}','hideActiveCustomers',this.checked)"> Hide Active Customers</label>
         <label style="display:flex;align-items:center;gap:7px;cursor:pointer;"><input type="checkbox" ${vr.hideProspects?'checked':''} style="accent-color:var(--accent);" onchange="toggleViewRestriction('${u.id}','hideProspects',this.checked)"> Hide Prospects</label>
