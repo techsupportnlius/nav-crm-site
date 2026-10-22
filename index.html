@@ -234,6 +234,7 @@ td.mono{font-family:var(--mono);font-size:11.5px;}
 .sla-over{color:var(--red);font-weight:600;}
 .tr-sla-critical{background:rgba(249,115,22,0.06);border-left:2px solid #F97316;}
 .tr-sla-over{background:rgba(239,68,68,0.07);border-left:2px solid var(--red);}
+.tr-urgent{box-shadow:inset 3px 0 0 var(--red);}
 @keyframes sla-pulse{0%,100%{opacity:1;}50%{opacity:0.55;}}
 .sla-over .sla-dot,.sla-critical .sla-dot{display:inline-block;animation:sla-pulse 1.2s ease-in-out infinite;}
 
@@ -2044,12 +2045,55 @@ thead th.cb-th{width:36px;padding:0 10px;}
     </div>
 
     <div class="addco-field">
+      <label>Priority</label>
+      <select id="smc-priority" style="background:var(--surface-3);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;border-radius:5px;padding:9px 12px;width:100%;outline:none;">
+        <option value="Normal">Normal</option>
+        <option value="Urgent">Urgent — flagged and shown at the top (same target time)</option>
+      </select>
+    </div>
+    <div class="addco-field">
       <label>Notes / Flags</label>
       <textarea id="smc-notes" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:8px 10px;font-size:13px;font-family:var(--sans);resize:vertical;min-height:60px;box-sizing:border-box;" placeholder="Hazmat, permits, special requirements…"></textarea>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeSubmitMC()">Cancel</button>
       <button class="btn btn-primary" onclick="doSubmitMC()" id="smcSubmitBtn">Submit for Quotation Check →</button>
+    </div>
+  </div>
+</div>
+
+<!-- C-051: INFORMATION REQUEST MODAL -->
+<div class="modal-overlay" id="ccInfoModal">
+  <div class="modal" style="max-width:520px;max-height:92vh;overflow-y:auto;">
+    <h3 id="ccInfoTitle" style="margin-bottom:6px;">Request information from the broker</h3>
+    <p id="ccInfoSub" style="font-size:12px;color:var(--text-faint);margin-bottom:14px;line-height:1.5;"></p>
+    <div class="addco-field"><label>Saved message</label>
+      <select id="ccInfoTpl" onchange="ccInfoTplPick()" style="background:var(--surface-3);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;border-radius:5px;padding:9px 12px;width:100%;outline:none;"><option value="">— Type your own —</option></select></div>
+    <div class="addco-field"><label>What do you need from the broker? <span style="color:var(--red);">*</span></label>
+      <textarea id="ccInfoMsg" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:8px 10px;font-size:13px;font-family:var(--sans);resize:vertical;min-height:100px;box-sizing:border-box;" placeholder="e.g. Please send the carrier's current COI and the dispatcher's phone number."></textarea></div>
+    <div class="addco-field"><label>Cc (optional — separate emails with commas)</label><input id="ccInfoCc" type="text" placeholder="name@nlius.com"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="ccCloseInfoModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="ccSendInfoRequest()">Send request &amp; pause timer</button>
+    </div>
+  </div>
+</div>
+
+<!-- C-051: SAVED TEMPLATES MODAL -->
+<div class="modal-overlay" id="ccTplModal">
+  <div class="modal" style="max-width:560px;max-height:92vh;overflow-y:auto;">
+    <h3 style="margin-bottom:6px;">Saved messages</h3>
+    <p style="font-size:12px;color:var(--text-faint);margin-bottom:10px;">Everyone in Carrier Compliance can use these. Only Admin, the manager and Team Leaders can change them.</p>
+    <div id="ccTplList"></div>
+    <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:12px;">
+      <div class="addco-field"><label>Used for</label>
+        <select id="ccTplKind" style="background:var(--surface-3);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;border-radius:5px;padding:9px 12px;width:100%;outline:none;"><option value="info">Information request to a broker</option><option value="decision">Decision note (Good to Go / Not Recommended)</option></select></div>
+      <div class="addco-field"><label>Title</label><input id="ccTplTitle" type="text" placeholder="e.g. Need current COI"></div>
+      <div class="addco-field"><label>Text</label><textarea id="ccTplBody" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:8px 10px;font-size:13px;font-family:var(--sans);resize:vertical;min-height:80px;box-sizing:border-box;"></textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="ccCloseTplManager()">Close</button>
+      <button class="btn btn-primary" id="ccTplSaveBtn" onclick="ccSaveTpl()">Add template</button>
     </div>
   </div>
 </div>
@@ -4348,8 +4392,8 @@ function renderCCView() {
     if(search) rows = rows.filter(c=>c.mc.toLowerCase().includes(search)||c.carrier.toLowerCase().includes(search)||(c.lane||'').toLowerCase().includes(search));
     document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Lane</th><th>Submitted by</th><th>Commodity</th><th>Value</th><th>Submitted</th><th>Outcome</th></tr>`;
     document.getElementById('ccTbody').innerHTML = rows.length ? rows.map(c=>`
-      <tr style="opacity:0.85;">
-        <td class="mono" style="color:var(--accent);">${c.mc}</td>
+      <tr style="opacity:0.85;cursor:pointer;" onclick="ccOpenById('${esc(c.checkId)}')">
+        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}</td>
         <td class="primary">${c.carrier}</td>
         <td style="font-size:11.5px;color:var(--text-faint);">${c.lane}</td>
         <td style="font-size:12px;color:var(--text-muted);">${c.broker}</td>
@@ -4376,6 +4420,7 @@ function renderCCView() {
   // own submissions; every other role: everything — see
   // carrierCompliance.js's listCarrierChecks() for why).
   let activeCases = realCarrierChecks.filter(c=>!c.resolvedAt).sort((a,b)=>{
+    if((a.priority==='Urgent')!==(b.priority==='Urgent')) return a.priority==='Urgent'?-1:1;
     const rank = c => c.slaCls==='sla-over'?0:c.slaCls==='sla-critical'?1:2;
     if(rank(a)!==rank(b)) return rank(a)-rank(b);
     return (a.slaSeconds||999) - (b.slaSeconds||999);
@@ -4413,11 +4458,11 @@ function renderCCView() {
     const myMCs = activeCases.filter(c=>c.broker===currentUserName());
     document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Lane</th><th>Stage</th><th>Handled by</th><th>SLA</th><th>Submitted</th></tr>`;
     document.getElementById('ccTbody').innerHTML = myMCs.length ? myMCs.map(c=>`
-      <tr onclick="openCCCase('${c.mc}')" style="cursor:pointer;">
-        <td class="mono" style="color:var(--accent);">${c.mc}</td>
+      <tr onclick="openCCCase('${c.mc}')" style="cursor:pointer;"${''}>
+        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}</td>
         <td class="primary">${c.carrier}</td>
         <td style="font-size:11.5px;color:var(--text-faint);">${c.lane}</td>
-        <td><span class="status ${c.stageCls}">${c.stage}</span></td>
+        <td><span class="status ${c.stageCls}">${c.stage}</span> ${ccWorkBadge(c)}</td>
         <td>${ccOwnerCell(c)}</td>
         <td class="sla ${c.slaCls}" data-sla="${c.mc.replace(/\s/g,'_')}">${c.sla}</td>
         <td style="font-size:11.5px;color:var(--text-faint);">${c.submitted}</td>
@@ -4426,12 +4471,12 @@ function renderCCView() {
   } else if(isCarrierComp) {
     ccNote.style.display='block';
     ccNote.textContent='Compliance view — click a row to take action';
-    ccHead.innerHTML=``;
+    ccHead.innerHTML=ccHeadExtras();
     document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Stage</th><th>Office</th><th>Owner</th><th>Submitted by</th><th>Lane</th><th>SLA</th><th>Status</th></tr>`;
     document.getElementById('ccTbody').innerHTML = activeCases.length ? activeCases.map(c=>{
-      const rowCls = c.slaCls==='sla-over'?'tr-sla-over':c.slaCls==='sla-critical'?'tr-sla-critical':'';
+      const rowCls = (c.slaCls==='sla-over'?'tr-sla-over':c.slaCls==='sla-critical'?'tr-sla-critical':'') + (c.priority==='Urgent'?' tr-urgent':'');
       return `<tr onclick="openCCCase('${c.mc}')" class="${rowCls}" style="cursor:pointer;">
-        <td class="mono" style="color:var(--accent);">${c.mc}</td>
+        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}</td>
         <td class="primary">${c.carrier}</td>
         <td><span class="status ${c.stageCls}">${c.stage}</span></td>
         <td style="font-size:12px;color:var(--text-muted);">${esc(c.officeName)}</td>
@@ -4439,7 +4484,7 @@ function renderCCView() {
         <td style="font-size:12px;color:var(--text-muted);">${c.broker}</td>
         <td style="font-size:11.5px;color:var(--text-faint);">${c.lane}</td>
         <td class="sla ${c.slaCls}" id="sla-cell-${c.mc.replace(/\s/g,'_')}" data-sla="${c.mc.replace(/\s/g,'_')}">${c.slaCls==='sla-over'?'<span class="sla-dot">●</span> '+c.sla:c.sla}</td>
-        <td><span class="status ${c.ccStatus?'s-active':'s-pending'}">${c.ccStatus||'Open'}</span></td>
+        <td>${ccWorkBadge(c)}</td>
       </tr>`;}).join('') :
       `<tr><td colspan="9" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">No cases match your filter.</td></tr>`;
   } else if(isCoiSpec) {
@@ -4448,7 +4493,7 @@ function renderCCView() {
     ccHead.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="exportCCQueue()">Export</button>`;
     document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Type</th><th>Submitted by</th><th>Lane</th><th>SLA</th><th>COI Status</th><th>Onboarding</th></tr>`;
     document.getElementById('ccTbody').innerHTML = activeCases.length ? activeCases.map(c=>{
-      const rowCls = c.slaCls==='sla-over'?'tr-sla-over':c.slaCls==='sla-critical'?'tr-sla-critical':'';
+      const rowCls = (c.slaCls==='sla-over'?'tr-sla-over':c.slaCls==='sla-critical'?'tr-sla-critical':'') + (c.priority==='Urgent'?' tr-urgent':'');
       const coiCls = c.type==='setup' ? ({'not-sent':'s-pending','sent':'s-check','received':'s-limited','verified':'s-active'}[c.coiEmailStatus||'not-sent']||'s-pending') : '';
       const coiLbl = c.type==='setup' ? ({'not-sent':'Not Sent','sent':'Sent','received':'Received','verified':'Verified'}[c.coiEmailStatus||'not-sent']||'Not Sent') : '—';
       const opsCls = c.type==='setup' ? ({'not-sent':'s-pending','sent':'s-check','received':'s-limited','verified':'s-active'}[c.opsEmailStatus||'not-sent']||'s-pending') : '';
@@ -4457,7 +4502,7 @@ function renderCCView() {
         ? `<span class="status s-active" style="font-size:10px;">Setup</span>`
         : `<span class="status s-check" style="font-size:10px;">Quotation</span>`;
       return `<tr onclick="openCCCase('${c.mc}')" class="${rowCls}" style="cursor:pointer;">
-        <td class="mono" style="color:var(--accent);">${c.mc}</td>
+        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}</td>
         <td class="primary">${c.carrier}</td>
         <td>${typePill}</td>
         <td style="font-size:12px;color:var(--text-muted);">${c.broker}</td>
@@ -4469,14 +4514,14 @@ function renderCCView() {
       `<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">No cases match your filter.</td></tr>`;
   } else {
     ccNote.style.display='none';
-    ccHead.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="exportCCQueue()">Export</button><button class="btn btn-primary" onclick="openSubmitMC()">+ Submit MC</button>`;
+    ccHead.innerHTML=ccHeadExtras()+`<button class="btn btn-ghost btn-sm" onclick="exportCCQueue()">Export</button><button class="btn btn-primary" onclick="openSubmitMC()">+ Submit MC</button>`;
     document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Stage</th><th>Office</th><th>Owner</th><th>Submitted by</th><th>Lane</th><th>SLA</th><th>When</th></tr>`;
     document.getElementById('ccTbody').innerHTML = activeCases.length ? activeCases.map(c=>{
-      const rowCls = c.slaCls==='sla-over'?'tr-sla-over':c.slaCls==='sla-critical'?'tr-sla-critical':'';
+      const rowCls = (c.slaCls==='sla-over'?'tr-sla-over':c.slaCls==='sla-critical'?'tr-sla-critical':'') + (c.priority==='Urgent'?' tr-urgent':'');
       return `<tr onclick="openCCCase('${c.mc}')" class="${rowCls}" style="cursor:pointer;">
-        <td class="mono" style="color:var(--accent);">${c.mc}</td>
+        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}</td>
         <td class="primary">${c.carrier}</td>
-        <td><span class="status ${c.stageCls}">${c.stage}</span></td>
+        <td><span class="status ${c.stageCls}">${c.stage}</span> ${ccWorkBadge(c)}</td>
         <td style="font-size:12px;color:var(--text-muted);">${esc(c.officeName)}</td>
         <td>${ccOwnerCell(c)}</td>
         <td style="font-size:12px;color:var(--text-muted);">${c.broker}</td>
@@ -6919,6 +6964,26 @@ function umBulkDo(kind, val) {
 }
 // Drawer helpers (re-open the drawer so it shows the new state)
 function umDrawerPreset(id, name) { if(!name) return; umApplyPreset([id], name); showToast(`"${name}" applied.`); openUserDrawer(id); }
+function umToggleLoc(id, loc, on) {
+  const u = usersDB.find(x=>x.id===id); if(!u) return;
+  const cur = new Set(u.assignedLocations||[]); if(on) cur.add(loc); else cur.delete(loc);
+  u.assignedLocations = [...cur];
+  if(!u.auditLog) u.auditLog = [];
+  u.auditLog.push({ts:nowDateOnly(),action:`Assigned location ${on?'added':'removed'}: ${loc}`,by:currentUserName()});
+  saveAssignedLocationsReal(id, u.assignedLocations);
+  showToast(`${locationName(loc)} ${on?'added to':'removed from'} ${u.name}.`);
+}
+async function umSetCarrierAway(userId, on) {
+  const u = usersDB.find(x=>x.id===userId); if(!u) return;
+  try {
+    const res = await apiFetch('/api/carrier-away', { method:'PATCH', body: JSON.stringify({ userId, away: !!on }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not change the away switch.'); openUserDrawer(userId); return; }
+    u.carrierAway = !!on;
+    showToast(on ? `${u.name} marked away${j.moved?' - '+j.moved+' open MC(s) moved to others':''}.` : `${u.name} is back in the rotation.`);
+    loadRealCarrierChecks();
+  } catch(e) { showToast('Could not change the away switch.'); }
+}
 function umDrawerAddLoc(id, loc) { addAssignedLoc(id, loc); openUserDrawer(id); }
 function umDrawerRemoveLoc(id, loc) { removeAssignedLoc(id, loc); openUserDrawer(id); }
 
@@ -7056,20 +7121,21 @@ function openUserDrawer(userId) {
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
         ${LOCATIONS.map(l=>`<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:5px 9px;background:var(--surface-2);"><input type="checkbox" ${(u.carrierLeadLocations||[]).includes(l.id)?'checked':''} style="accent-color:var(--accent);" onchange="umSetCarrierLead('${u.id}','${esc(l.id)}',this.checked)">${esc(l.name)}</label>`).join('')}
       </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;margin-bottom:10px;">
+        <input type="checkbox" ${u.carrierAway?'checked':''} style="accent-color:var(--accent);" onchange="umSetCarrierAway('${u.id}',this.checked)">
+        <span>🏖 <b>Away / on leave</b> — skipped by the round robin; their open MCs move to the rest of the office</span>
+      </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
         <input type="checkbox" ${u.isCarrierManager?'checked':''} style="accent-color:var(--accent);" onchange="umSetCarrierManager('${u.id}',this.checked)">
         <span>⭐ <b>Carrier Compliance Manager</b> (top level) — gets MCs when nobody is set up for an office, and can reassign any MC</span>
       </label>
     </div>` : '';
-  const locViewSection = (currentRole==='Admin' && u.status!=='Former Employee' && (canHaveLocs || u.role==='Carrier Compliance')) ? `
+  const locViewSection = (currentRole==='Admin' && u.status!=='Former Employee') ? `
     <div class="d-sec">
-      <div class="d-sec-label">Assigned Locations ${u.role==='Carrier Compliance'?'':''}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;">
-        ${(u.assignedLocations||[]).map(loc=>`<span style="background:rgba(212,98,26,0.12);border:1px solid rgba(212,98,26,0.3);border-radius:3px;padding:2px 7px;font-size:11px;color:var(--accent);display:inline-flex;align-items:center;gap:4px;">${esc(locationName(loc))}<span style="cursor:pointer;opacity:0.6;font-size:13px;" onclick="umDrawerRemoveLoc('${u.id}','${esc(loc)}')">×</span></span>`).join('') || '<span style="font-size:11px;color:var(--text-faint);">None yet</span>'}
-        <select onchange="umDrawerAddLoc('${u.id}',this.value)" style="border:1px dashed var(--border);border-radius:3px;padding:2px 5px;font-size:11px;background:transparent;color:var(--text-faint);cursor:pointer;">
-          <option value="">+ Location</option>
-          ${LOCATIONS.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')}
-        </select>
+      <div class="d-sec-label">Assigned Locations</div>
+      <div style="font-size:11.5px;color:var(--text-faint);margin:6px 0 8px;line-height:1.5;">Tick every office this person works for. You can tick as many as you need.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${LOCATIONS.map(l=>`<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:5px 9px;background:var(--surface-2);"><input type="checkbox" ${(u.assignedLocations||[]).includes(l.id)?'checked':''} style="accent-color:var(--accent);" onchange="umToggleLoc('${u.id}','${esc(l.id)}',this.checked)">${esc(l.name)}</label>`).join('')}
       </div>
       ${u.role==='Carrier Compliance' ? `
       <div class="d-sec-label" style="margin-top:14px;">View Restrictions</div>
@@ -8146,12 +8212,17 @@ function switchCCTab(tab, btn) {
   document.querySelectorAll('.cc-dpane').forEach(p=>p.style.display='none');
   const pane = document.getElementById('ccPane-'+tab);
   if(pane) pane.style.display='block';
+  if(!btn) document.querySelectorAll('.cc-dtab').forEach(b=>{ if((b.getAttribute('onclick')||'').indexOf("'"+tab+"'")>-1) b.classList.add('active'); });
+  if(['msgs','files','tl','hist'].includes(tab)) ccLoadTab(tab);
 }
 
 // ── CARRIER COMPLIANCE CASE DRAWER ───────────────────────────
-function openCCCase(mc, forceTab) {
-  const c = realCarrierChecks.find(x=>x.mc===mc);
+function openCCCase(mc, forceTab, keepPin) {
+  if(!keepPin) CC_TK.pinId = null;
+  const c = ccFind(mc);
   if(!c) return;
+  if(CC_TK.checkId !== c.checkId) { CC_TK.events = null; CC_TK.files = null; CC_TK.history = null; }
+  CC_TK.mc = c.mc; CC_TK.checkId = c.checkId;
 
   const isCarrCC  = currentRole==='Carrier Compliance';
   const isAdmin   = currentRole==='Admin';
@@ -8201,11 +8272,12 @@ function openCCCase(mc, forceTab) {
         <button class="btn btn-sm"${disAttr} style="background:rgba(239,68,68,0.08);border:1px solid var(--red);color:var(--red);padding:9px 8px;font-size:12px;"
           onclick="setCCStatusAction('${mc}','Not Recommended')">✗ Not Recommended</button>
         <button class="btn btn-sm"${disAttr} style="background:var(--amber-dim);border:1px solid var(--amber);color:var(--amber);padding:9px 8px;font-size:12px;"
-          onclick="setCCStatusAction('${mc}','Info Requested')">⏸ Info Requested</button>
+          onclick="ccOpenInfoModal('${mc}',false)">⏸ Info Requested</button>
       </div>
       ${c.ccStatus==='Info Requested' ? `<button class="btn btn-sm"${disAttr} style="width:100%;margin-bottom:10px;background:var(--surface-2);border:1px solid var(--accent);color:var(--accent);padding:8px;font-size:12px;" onclick="setCCStatusAction('${mc}','Resume')">▶ Info received — resume the timer</button>` : ''}
       <div class="addco-field">
-        <label style="font-size:11px;color:var(--text-faint);">Internal Note <span style="color:var(--text-faint);font-style:italic;">(required for Not Recommended)</span></label>
+        <label style="font-size:11px;color:var(--text-faint);">Decision note <span style="color:var(--text-faint);font-style:italic;">(required for Not Recommended)</span></label>
+        <select id="ccTplDec-${mcKey}" onchange="ccPickDecisionTpl('${mcKey}',this.value)" style="display:block;width:100%;margin:4px 0;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-size:12px;font-family:var(--sans);"${locLocked?' disabled':''}><option value="">Use a saved note…</option></select>
         <textarea id="ccnote-${mcKey}"${locLocked?' disabled':''} style="width:100%;background:var(--bg-card);border:1px solid var(--border);border-radius:5px;color:var(--text-main);padding:7px 9px;font-size:12.5px;font-family:var(--sans);resize:vertical;min-height:55px;box-sizing:border-box;${locLocked?'opacity:0.35;':''}" placeholder="e.g. Missing COI · Authority issue flagged…"></textarea>
       </div>
     </div>` : `
@@ -8331,6 +8403,24 @@ function openCCCase(mc, forceTab) {
       </div>
     </div>` : '';
 
+  // ── C-051: working-status controls (Start working / Urgent) and Reopen ──
+  const workerNow = ccCanWork(c) && !!c.checkId;
+  const flowHtml = (workerNow && !c.resolvedAt) ? `
+    <div class="d-sec">
+      <div class="d-sec-label">Ticket</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        ${!c.startedAt ? `<button class="btn btn-primary btn-sm" onclick="ccStartWorking('${mc}')">▶ Start working</button>` : `<span style="font-size:12px;color:var(--text-faint);align-self:center;">Working on it since ${esc(ccWhen(c.startedAt))}</span>`}
+        <button class="btn btn-ghost btn-sm" style="${c.priority==='Urgent'?'border-color:var(--red);color:var(--red);':''}" onclick="ccTogglePriority('${mc}')">${c.priority==='Urgent'?'⚑ Urgent — click to make normal':'⚑ Mark urgent'}</button>
+      </div>
+    </div>` : '';
+  const reopenHtml = (workerNow && c.resolvedAt) ? `
+    <div class="d-sec">
+      <div class="d-sec-label">Reopen this check</div>
+      <div style="font-size:12px;color:var(--text-faint);margin:6px 0 8px;">Started again with a fresh timer. A reason is required and is saved on the MC.</div>
+      <textarea id="ccReopenWhy" placeholder="Why is it being reopened? (required)" style="width:100%;min-height:54px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;margin-bottom:8px;box-sizing:border-box;"></textarea>
+      <button class="btn btn-primary btn-sm" onclick="ccReopen('${mc}')">↺ Reopen</button>
+    </div>` : '';
+
   // ── OVERVIEW PANE ──
   const reassignPanel = (realUser && iAmLead && !c.resolvedAt && c.checkId) ? `
     <div class="d-sec">
@@ -8366,7 +8456,7 @@ function openCCCase(mc, forceTab) {
       <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span class="status ${c.stageCls}">${c.stage}</span>
         <span data-sla="${mcKey}" style="font-size:12px;color:${slaColour};font-family:var(--mono);">${c.sla}</span>
-        ${statusBadge}
+        ${ccWorkBadge(c)}${ccUrgentBadge(c)}${c.reopenCount?`<span style="font-size:11px;color:var(--text-faint);">reopened ${c.reopenCount}×</span>`:''}${c.ccStatus?` ${statusBadge}`:''}
       </div>
       ${isSetup ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <span style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;">Onboarding:</span>
@@ -8377,7 +8467,7 @@ function openCCCase(mc, forceTab) {
       </div>` : ''}
     </div>
     ${dispSection}
-    ${(isCoiSpec && isSetup) ? '' : actionHtml}
+    ${(isCoiSpec && isSetup) ? '' : (c.resolvedAt && ccStaffRole() ? (reopenHtml || '') : flowHtml + actionHtml)}
   `;
 
   // ── CARRIER ONBOARDING PANE ──
@@ -8399,12 +8489,16 @@ function openCCCase(mc, forceTab) {
 
   // ── TAB BAR ──
   const defaultTab = (isCoiSpec && isSetup) ? 'coi' : 'overview';
-  const activeTab = (forceTab && ['overview','onboard','coi'].includes(forceTab)) ? forceTab : defaultTab;
+  const activeTab = (forceTab && ['overview','onboard','coi','msgs','files','tl','hist'].includes(forceTab)) ? forceTab : defaultTab;
   const tabBar = `
     <div class="cc-dtab-bar">
       <button class="cc-dtab${activeTab==='overview'?' active':''}" onclick="switchCCTab('overview',this)">Overview</button>
       ${isSetup ? `<button class="cc-dtab${activeTab==='onboard'?' active':''}" onclick="switchCCTab('onboard',this)">Carrier Onboarding</button>` : ''}
       ${isSetup && (isCarrCC || isCoiSpec || isAdmin) ? `<button class="cc-dtab${activeTab==='coi'?' active':''}" onclick="switchCCTab('coi',this)">COI Verification</button>` : ''}
+      <button class="cc-dtab${activeTab==='msgs'?' active':''}" onclick="switchCCTab('msgs',this)">Conversation</button>
+      <button class="cc-dtab${activeTab==='files'?' active':''}" onclick="switchCCTab('files',this)">Files</button>
+      <button class="cc-dtab${activeTab==='tl'?' active':''}" onclick="switchCCTab('tl',this)">Timeline</button>
+      ${ccStaffRole() ? `<button class="cc-dtab${activeTab==='hist'?' active':''}" onclick="switchCCTab('hist',this)">History</button>` : ''}
     </div>`;
 
   // ── ASSEMBLE DRAWER ──
@@ -8412,6 +8506,7 @@ function openCCCase(mc, forceTab) {
   document.getElementById('dSubtitle').textContent = `${c.mc} · ${locationName(c.location)} · ${isSetup?'Setup':'Quotation Only'}`;
   renderDrawerTabs('none');
   document.getElementById('dBody').innerHTML = `
+    <div id="ccHistBanner"></div>
     ${tabBar}
     <div id="ccPane-overview" class="cc-dpane" style="display:${activeTab==='overview'?'block':'none'};">
       ${overviewPane}
@@ -8420,9 +8515,16 @@ function openCCCase(mc, forceTab) {
       ${onboardPane}
     </div>
     ${isSetup && (isCarrCC || isCoiSpec || isAdmin) ? `<div id="ccPane-coi" class="cc-dpane" style="display:${activeTab==='coi'?'block':'none'};">${coiPane}</div>` : ''}
+    <div id="ccPane-msgs" class="cc-dpane" style="display:${activeTab==='msgs'?'block':'none'};"></div>
+    <div id="ccPane-files" class="cc-dpane" style="display:${activeTab==='files'?'block':'none'};"></div>
+    <div id="ccPane-tl" class="cc-dpane" style="display:${activeTab==='tl'?'block':'none'};"></div>
+    ${ccStaffRole() ? `<div id="ccPane-hist" class="cc-dpane" style="display:${activeTab==='hist'?'block':'none'};"></div>` : ''}
   `;
 
   openDrawer();
+  currentCCActiveTab = activeTab;
+  ccFillDecisionTpl(mcKey);
+  ccAfterOpen(c, activeTab);
   if(reassignPanel) ccLoadAssignees().then(list=>{
     const sel = document.getElementById('ccAssignSel'); if(!sel) return;
     const pool = list.filter(u=>u.id!==c.ownerId);
@@ -8457,6 +8559,7 @@ function openSubmitMC() {
   });
   const sel = document.getElementById('smc-loadtype');
   if(sel) sel.value='';
+  { const pr = document.getElementById('smc-priority'); if(pr) pr.value='Normal'; }
   setSmcMode('quotation');
   document.getElementById('submitMCModal').classList.add('open');
 }
@@ -8505,6 +8608,7 @@ async function doSubmitMC() {
           declaredValue: value ? Number(value.replace(/[^0-9.]/g,'')) || null : null,
           weightLbs: weight ? Number(weight.replace(/[^0-9.]/g,'')) || null : null,
           dispatcherName: dispName || null, dispatcherPhone: dispPhone || null, dispatcherEmail: dispEmail || null,
+          priority: (document.getElementById('smc-priority')||{}).value === 'Urgent' ? 'Urgent' : 'Normal',
         }),
       });
       if(!res.ok) {
@@ -8726,8 +8830,9 @@ function markAllRead() {
 // which PATCH/POST the real API and then reload the queue — same approach
 // Customer Compliance's compApproveCustomer()/compHoldCase() etc. use.
 async function setCCStatusAction(mc, newStatus) {
-  const c = realCarrierChecks.find(x=>x.mc===mc);
+  const c = ccFind(mc);
   if(!c) return;
+  if(newStatus==='Info Requested' && realUser) { ccOpenInfoModal(mc, false); return; }
   const noteKey = 'ccnote-'+mc.replace(/\s/g,'_');
   const noteEl = document.getElementById(noteKey);
   const note = noteEl ? noteEl.value.trim() : '';
@@ -8741,13 +8846,13 @@ async function setCCStatusAction(mc, newStatus) {
   const ok = await patchCarrierCheck(c.checkId, '/resolve', { status: newStatus, note });
   if(!ok) return;
 
-  showToast(newStatus==='Resume' ? `${mc} — timer running again.` : `${mc} → ${newStatus}` + (newStatus==='Info Requested' ? ' (timer paused)' : ''));
+  showToast((newStatus==='Resume' ? `${mc} — timer running again.` : `${mc} → ${newStatus}` + (newStatus==='Info Requested' ? ' (timer paused)' : '')) + ((newStatus==='Good to Go'||newStatus==='Not Recommended') ? ticketMailNote() : ''));
   closeDrawer();
   renderCCView();
 }
 
 async function saveCCOpsNote(mc) {
-  const c = realCarrierChecks.find(x=>x.mc===mc);
+  const c = ccFind(mc);
   if(!c) return;
   const el = document.getElementById('opsNoteInput-'+mc.replace(/\s/g,'_'));
   if(!el||!el.value.trim()) { showToast('Note is empty.'); return; }
@@ -8760,7 +8865,7 @@ async function saveCCOpsNote(mc) {
 }
 
 async function saveCCCoiNote(mc) {
-  const c = realCarrierChecks.find(x=>x.mc===mc);
+  const c = ccFind(mc);
   if(!c) return;
   const el = document.getElementById('coiNoteInput-'+mc.replace(/\s/g,'_'));
   if(!el||!el.value.trim()) { showToast('Note is empty.'); return; }
@@ -8803,7 +8908,7 @@ function openEmailCompose(type, mc, opts) {
     return;
   }
 
-  const c = realCarrierChecks.find(x=>x.mc===mc);
+  const c = ccFind(mc);
   if(!c) return;
   emailComposeContext = {type, mc};
 
@@ -9211,7 +9316,7 @@ async function doSendEmail() {
   // through Microsoft Graph the way company emails do (see
   // sendRealCompanyEmail above). See carrierCompliance.js's header
   // comment for why.
-  const c = realCarrierChecks.find(x=>x.mc===mc);
+  const c = ccFind(mc);
   if(!c) { showToast('Could not find that case.'); return; }
   // C-026: really send it (from the signed-in person's own mailbox, with the
   // broker on CC as filled in) BEFORE marking it sent. If the send fails the
@@ -10120,7 +10225,7 @@ function openMailCompose() {
 }
 
 async function toggleOpsCall(mc) {
-  const c = realCarrierChecks.find(x=>x.mc===mc);
+  const c = ccFind(mc);
   if(!c) return;
   const wasDone = c.opsCallDone;
   const ok = await patchCarrierCheck(c.checkId, '/ops-call', {});
@@ -10130,7 +10235,7 @@ async function toggleOpsCall(mc) {
 }
 
 async function toggleCoiCall(mc) {
-  const c = realCarrierChecks.find(x=>x.mc===mc);
+  const c = ccFind(mc);
   if(!c) return;
   const wasDone = c.coiCallDone;
   const ok = await patchCarrierCheck(c.checkId, '/coi-call', {});
@@ -10152,7 +10257,7 @@ const COI_STATUSES = [
 ];
 
 async function setOnboardingStatus(mc, key) {
-  const c = realCarrierChecks.find(x=>x.mc===mc);
+  const c = ccFind(mc);
   if(!c) return;
   const willClear = c.onboardingStatus===key;
   const ok = await patchCarrierCheck(c.checkId, '/onboarding', { status: key });
@@ -10163,7 +10268,7 @@ async function setOnboardingStatus(mc, key) {
 }
 
 async function setCoiStatus(mc, key) {
-  const c = realCarrierChecks.find(x=>x.mc===mc);
+  const c = ccFind(mc);
   if(!c) return;
   const willClear = c.coiStatus===key;
   const ok = await patchCarrierCheck(c.checkId, '/coi', { status: key });
@@ -10174,7 +10279,7 @@ async function setCoiStatus(mc, key) {
 }
 
 async function reassignCCTicket(mc) {
-  const c = realCarrierChecks.find(x=>x.mc===mc);
+  const c = ccFind(mc);
   if(!c) return;
   const ok = await patchCarrierCheck(c.checkId, '/reassign', {});
   if(!ok) return;
@@ -11226,7 +11331,7 @@ async function ccLoadAssignees() {
   return ccAssignees;
 }
 async function ccAssignMC(mc) {
-  const c = realCarrierChecks.find(x=>x.mc===mc); if(!c) return;
+  const c = ccFind(mc); if(!c) return;
   const sel = document.getElementById('ccAssignSel'), why = document.getElementById('ccAssignWhy');
   if(!sel || !sel.value) { showToast('Choose who should own this MC.'); return; }
   if(!why || why.value.trim().length < 3) { showToast('Please type a reason for the reassignment.'); if(why) why.focus(); return; }
@@ -11271,8 +11376,353 @@ function mapCarrierCheck(r) {
     _reassignedTo: r.reassigned_to_user_id || null,
     ownerId: r.assigned_to_user_id || null, owner: r.assigned_to_name || '', assignMethod: r.assign_method || '',
     officeName: r.location_id ? locationName(r.location_id) : '—',
+    // C-051 ticketing
+    brokerId: r.broker_user_id || null,
+    priority: r.priority === 'Urgent' ? 'Urgent' : 'Normal',
+    startedAt: r.started_at || null, infoRounds: r.info_rounds || 0, reopenCount: r.reopen_count || 0,
+    workStatus: resolved ? 'Resolved' : (r.cc_status === 'Info Requested' ? 'Waiting on Broker' : (r.started_at ? 'In Progress' : (r.assigned_to_user_id ? 'Assigned' : 'New'))),
   };
 }
+// ── C-051: Carrier Compliance ticketing (conversation, info requests, files, history, urgent, away, templates) ──
+const CC_TK = { mc:null, checkId:null, events:null, files:null, storageReady:true, history:null, tpl:null, pinId:null, pinMc:null, infoMc:null, infoNot:false, tplEditId:null };
+function ccFind(mc) {
+  if(CC_TK.pinId && CC_TK.pinMc===mc) { const p = realCarrierChecks.find(x=>x.checkId===CC_TK.pinId); if(p) return p; }
+  return realCarrierChecks.find(x=>x.mc===mc);
+}
+function ccOpenById(checkId) {
+  const r = realCarrierChecks.find(x=>x.checkId===checkId);
+  if(!r) { showToast('That earlier check is not in your list.'); return; }
+  CC_TK.pinId = checkId; CC_TK.pinMc = r.mc;
+  openCCCase(r.mc, undefined, true);
+}
+const ccStaffRole = () => ['Admin','Carrier Compliance','COI Specialist'].includes(currentRole);
+function ccCanWork(c) {
+  if(!ccStaffRole()) return false;
+  if(currentRole==='Admin' || currentRole==='COI Specialist') return true;
+  if(!realUser) return true;
+  return !c.ownerId || c.ownerId===realUser.userId || ccIsLeadFor(c.location);
+}
+function ccIsMyBroker(c) { return !!realUser && !ccStaffRole() && c.brokerId && c.brokerId===realUser.userId; }
+function ccWorkBadge(c) {
+  const cls = { 'Resolved': c.ccStatus==='Not Recommended'?'s-rejected':'s-active', 'Waiting on Broker':'s-pending', 'In Progress':'s-check', 'Assigned':'s-limited', 'New':'s-pending' }[c.workStatus] || 's-pending';
+  return `<span class="status ${cls}">${c.workStatus||'New'}</span>`;
+}
+function ccUrgentBadge(c) { return c.priority==='Urgent' ? ' <span style="background:var(--red);color:#fff;border-radius:3px;padding:1px 5px;font-size:9.5px;font-weight:700;letter-spacing:0.05em;vertical-align:middle;">URGENT</span>' : ''; }
+function ccWhen(ts) {
+  if(!ts) return '';
+  const d = new Date(String(ts).endsWith('Z') ? ts : ts+'Z');
+  return d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+}
+function ccCanManageTpl() { return currentRole==='Admin' || (currentRole==='Carrier Compliance' && !!realUser && (!!realUser.isCarrierManager || (realUser.carrierLeadLocations||[]).length>0)); }
+function ccHeadExtras() {
+  if(!realUser) return '';
+  let h = '';
+  if(currentRole==='Carrier Compliance') h += `<button class="btn btn-ghost btn-sm" id="ccAwayBtn" onclick="ccToggleAway()" title="When you are away, new MCs skip you and your open MCs move to the rest of the office">${realUser.carrierAway?'🏖 I am away — click to come back':'🏖 Mark me away'}</button>`;
+  if(ccCanManageTpl()) h += `<button class="btn btn-ghost btn-sm" onclick="openCcTplManager()">✎ Templates</button>`;
+  return h;
+}
+async function ccToggleAway() {
+  if(!realUser) return;
+  const want = !realUser.carrierAway;
+  try {
+    const res = await apiFetch('/api/carrier-away', { method:'PATCH', body: JSON.stringify({ away: want }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not change the away switch.'); return; }
+    realUser.carrierAway = want;
+    showToast(want ? 'You are marked away.' + (j.moved ? ` ${j.moved} open MC(s) moved to others.` : '') : 'Welcome back — you are in the rotation again.');
+    await loadRealCarrierChecks();
+  } catch(e) { showToast('Could not change the away switch.'); }
+}
+async function ccLoadTemplates(force) {
+  if(CC_TK.tpl && !force) return CC_TK.tpl;
+  try { const res = await apiFetch('/api/carrier-templates'); CC_TK.tpl = res.ok ? await res.json() : []; } catch(e) { CC_TK.tpl = []; }
+  return CC_TK.tpl;
+}
+// ── drawer data ──
+function ccCur() { return CC_TK.mc ? ccFind(CC_TK.mc) : null; }
+async function ccEnsureEvents(force) {
+  const c = ccCur(); if(!c) return;
+  if(CC_TK.events && !force) return;
+  try { const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/events'); CC_TK.events = res.ok ? await res.json() : []; } catch(e) { CC_TK.events = []; }
+}
+async function ccEnsureFiles(force) {
+  const c = ccCur(); if(!c) return;
+  if(CC_TK.files && !force) return;
+  try { const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/files'); const j = res.ok ? await res.json() : { files:[], storageReady:false }; CC_TK.files = j.files||[]; CC_TK.storageReady = j.storageReady!==false; } catch(e) { CC_TK.files = []; }
+}
+async function ccEnsureHistory(force) {
+  const c = ccCur(); if(!c || !ccStaffRole()) return;
+  if(CC_TK.history && !force) return;
+  try { const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/history'); CC_TK.history = res.ok ? await res.json() : []; } catch(e) { CC_TK.history = []; }
+}
+async function ccLoadTab(tab) {
+  if(tab==='msgs' || tab==='tl') { ccRenderMsgs(); ccRenderTimeline(); await ccEnsureEvents(); ccRenderMsgs(); ccRenderTimeline(); }
+  else if(tab==='files') { ccRenderFiles(); await ccEnsureFiles(); ccRenderFiles(); }
+  else if(tab==='hist') { ccRenderHistory(); await ccEnsureHistory(); ccRenderHistory(); }
+}
+async function ccAfterOpen(c, tab) {
+  if(ccStaffRole()) {
+    await ccEnsureHistory();
+    const ban = document.getElementById('ccHistBanner');
+    if(ban && CC_TK.history && CC_TK.history.length && CC_TK.mc===c.mc) {
+      const last = CC_TK.history[0];
+      const lastTxt = (last.cc_status || 'no decision yet') + ' on ' + (last.resolved_at ? formatUSDate(last.resolved_at) : formatUSDate(last.submitted_at)) + (last.location_id ? ' (' + esc(locationName(last.location_id)) + ')' : '');
+      ban.innerHTML = `<div style="background:var(--amber-dim);border:1px solid var(--amber);border-radius:6px;padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:var(--text);line-height:1.5;">⚠ <b>This MC was checked ${CC_TK.history.length} time${CC_TK.history.length===1?'':'s'} before.</b> Last: ${esc(lastTxt)}. <a style="color:var(--accent);cursor:pointer;text-decoration:underline;" onclick="switchCCTab('hist')">See the history</a> <span style="color:var(--text-faint);">(only Carrier Compliance can see this)</span></div>`;
+    }
+  }
+  if(['msgs','files','tl','hist'].includes(tab)) ccLoadTab(tab);
+}
+// ── conversation ──
+function ccRenderMsgs() {
+  const pane = document.getElementById('ccPane-msgs'); if(!pane) return;
+  const c = ccCur(); if(!c) return;
+  const staff = ccStaffRole();
+  if(!CC_TK.events) { pane.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-faint);font-size:13px;">Loading…</div>'; return; }
+  const kinds = ['message','broker_reply','info_request','not_relevant','note'];
+  const list = CC_TK.events.filter(e=>kinds.includes(e.event_type) && (staff || e.event_type!=='note'));
+  const bubble = e=>{
+    const mine = e.event_type==='broker_reply';
+    const note = e.event_type==='note';
+    const ask = e.event_type==='info_request' || e.event_type==='not_relevant';
+    const bg = note ? 'rgba(245,158,11,0.12)' : (mine ? 'var(--surface-2)' : (ask ? 'var(--amber-dim)' : 'rgba(212,98,26,0.10)'));
+    const bd = note ? 'var(--amber)' : (ask ? 'var(--amber)' : 'var(--border)');
+    const tag = note ? '🔒 Internal note — the broker cannot see this' : (e.event_type==='info_request' ? 'Information requested' : (e.event_type==='not_relevant' ? 'Asked again — last reply was not what was needed' : ''));
+    return `<div style="display:flex;justify-content:${mine?'flex-start':'flex-end'};margin-bottom:9px;"><div style="max-width:86%;background:${bg};border:1px solid ${bd};border-radius:8px;padding:8px 11px;">
+      <div style="font-size:10.5px;color:var(--text-faint);margin-bottom:3px;"><b style="color:var(--text);">${esc(e.by_name||'System')}</b> · ${esc(ccWhen(e.created_at))}${tag?` · <span style="color:var(--amber);">${tag}</span>`:''}</div>
+      <div style="font-size:13px;white-space:pre-wrap;word-break:break-word;">${esc(e.body||'')}</div></div></div>`;
+  };
+  const thread = list.length ? list.map(bubble).join('') : '<div style="padding:24px 0;text-align:center;color:var(--text-faint);font-size:13px;">No messages yet.</div>';
+  let composer = '';
+  const worker = ccCanWork(c) && !c.resolvedAt;
+  const lastMsg = list.filter(e=>e.event_type!=='note').slice(-1)[0];
+  if(worker) {
+    composer = `<div style="border-top:1px solid var(--border);padding-top:10px;">
+      <textarea id="ccMsgTxt" placeholder="Write a message to the broker…" style="width:100%;min-height:62px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;box-sizing:border-box;"></textarea>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:7px;">
+        <label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="ccMsgInternal" style="accent-color:var(--amber);"> 🔒 Internal note (broker cannot see)</label>
+        <button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="ccSendMsg()">Send</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+        <button class="btn btn-ghost btn-sm" onclick="ccOpenInfoModal('${c.mc}',false)">⏸ Request information (pauses the timer)</button>
+        ${lastMsg && lastMsg.event_type==='broker_reply' ? `<button class="btn btn-ghost btn-sm" style="border-color:var(--amber);color:var(--amber);" onclick="ccOpenInfoModal('${c.mc}',true)">↩ Not what I asked — ask again</button>` : ''}
+      </div></div>`;
+  } else if(ccIsMyBroker(c) && !c.resolvedAt) {
+    composer = `<div style="border-top:1px solid var(--border);padding-top:10px;">
+      ${c.workStatus==='Waiting on Broker' ? '<div style="font-size:12px;color:var(--amber);margin-bottom:6px;">Carrier Compliance is waiting for your reply. Their timer starts again when you send it.</div>' : ''}
+      <textarea id="ccMsgTxt" placeholder="Write your reply…" style="width:100%;min-height:62px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;box-sizing:border-box;"></textarea>
+      <div style="text-align:right;margin-top:7px;"><button class="btn btn-primary btn-sm" onclick="ccSendMsg()">Send reply</button></div></div>`;
+  } else if(c.resolvedAt) {
+    composer = '<div style="font-size:12px;color:var(--text-faint);border-top:1px solid var(--border);padding-top:10px;">This check is finished. To talk about it again it must be reopened.</div>';
+  }
+  pane.innerHTML = `<div class="d-sec" style="margin-top:0;"><div class="d-sec-label">Conversation${c.infoRounds?` · ${c.infoRounds} information request${c.infoRounds===1?'':'s'}`:''}</div><div style="margin-top:10px;">${thread}</div>${composer}</div>`;
+}
+async function ccSendMsg() {
+  const c = ccCur(); if(!c) return;
+  const t = document.getElementById('ccMsgTxt'); const txt = t ? t.value.trim() : '';
+  if(!txt) { showToast('Type a message first.'); return; }
+  const internal = !!(document.getElementById('ccMsgInternal') && document.getElementById('ccMsgInternal').checked);
+  try {
+    const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/messages', { method:'POST', body: JSON.stringify({ text: txt, internal }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not send.'); return; }
+    CC_TK.events = null; await ccEnsureEvents(true); ccRenderMsgs(); ccRenderTimeline();
+    showToast(internal ? 'Internal note saved.' : (j.resumed ? 'Reply sent — the timer is running again.' : 'Sent.'));
+    if(j.resumed) loadRealCarrierChecks();
+  } catch(e) { showToast('Could not send.'); }
+}
+// ── info request ──
+async function ccOpenInfoModal(mc, notRelevant) {
+  const c = ccFind(mc); if(!c) return;
+  CC_TK.infoMc = mc; CC_TK.infoNot = !!notRelevant;
+  document.getElementById('ccInfoTitle').textContent = notRelevant ? 'Ask again — that was not what we asked' : 'Request information from the broker';
+  document.getElementById('ccInfoSub').textContent = `${c.mc} · ${c.carrier||''} · to ${c.broker}. The timer pauses until the broker replies. They are notified in the CRM and an email goes from your own mailbox.`;
+  document.getElementById('ccInfoMsg').value = ''; document.getElementById('ccInfoCc').value = '';
+  const sel = document.getElementById('ccInfoTpl'); sel.innerHTML = '<option value="">— Type your own —</option>';
+  document.getElementById('ccInfoModal').classList.add('open');
+  const tpl = (await ccLoadTemplates()).filter(t=>t.kind==='info');
+  sel.innerHTML = '<option value="">— Type your own —</option>' + tpl.map(t=>`<option value="${t.template_id}">${esc(t.title)}</option>`).join('');
+}
+function ccInfoTplPick() {
+  const id = document.getElementById('ccInfoTpl').value; if(!id) return;
+  const t = (CC_TK.tpl||[]).find(x=>String(x.template_id)===String(id)); if(t) document.getElementById('ccInfoMsg').value = t.body;
+}
+function ccCloseInfoModal() { document.getElementById('ccInfoModal').classList.remove('open'); }
+async function ccSendInfoRequest() {
+  const c = ccFind(CC_TK.infoMc); if(!c) return;
+  const message = document.getElementById('ccInfoMsg').value.trim();
+  if(message.length < 3) { showToast('Please type what information you need.'); return; }
+  const cc = document.getElementById('ccInfoCc').value.split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean);
+  try {
+    const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/info-request', { method:'POST', body: JSON.stringify({ message, cc, notRelevant: CC_TK.infoNot }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not send the request.'); return; }
+    window.__ticketMailWarn = false;
+    if(j.mail) { try { await sendTicketMailFromMe(j.mail); } catch(e) {} }
+    ccCloseInfoModal();
+    await loadRealCarrierChecks();
+    CC_TK.events = null;
+    showToast(`Request sent (round ${j.round}) — timer paused.` + ticketMailNote());
+    openCCCase(c.mc, 'msgs', true);
+  } catch(e) { console.error(e); showToast('Could not send the request.'); }
+}
+// ── start / reopen / urgent ──
+async function ccStartWorking(mc) {
+  const c = ccFind(mc); if(!c) return;
+  try {
+    const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/start', { method:'PATCH' });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not start.'); return; }
+    await loadRealCarrierChecks(); CC_TK.events = null; showToast('Marked In progress.'); openCCCase(mc, currentCCActiveTab, true);
+  } catch(e) { showToast('Could not start.'); }
+}
+async function ccReopen(mc) {
+  const c = ccFind(mc); if(!c) return;
+  const w = document.getElementById('ccReopenWhy'); const reason = w ? w.value.trim() : '';
+  if(reason.length < 3) { showToast('Please type a reason for reopening.'); if(w) w.focus(); return; }
+  try {
+    const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/reopen', { method:'PATCH', body: JSON.stringify({ reason }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not reopen.'); return; }
+    await loadRealCarrierChecks(); CC_TK.events = null; CC_TK.history = null;
+    showToast(mc+' reopened — the timer restarted.'); closeDrawer(); setCCViewMode('active', document.getElementById('ccActiveTab'));
+  } catch(e) { showToast('Could not reopen.'); }
+}
+async function ccTogglePriority(mc) {
+  const c = ccFind(mc); if(!c) return;
+  const pr = c.priority==='Urgent' ? 'Normal' : 'Urgent';
+  try {
+    const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/priority', { method:'PATCH', body: JSON.stringify({ priority: pr }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not change the priority.'); return; }
+    await loadRealCarrierChecks(); CC_TK.events = null; showToast(pr==='Urgent' ? 'Marked URGENT — leaders notified.' : 'Back to normal priority.'); openCCCase(mc, currentCCActiveTab, true);
+  } catch(e) { showToast('Could not change the priority.'); }
+}
+// ── timeline ──
+function ccRenderTimeline() {
+  const pane = document.getElementById('ccPane-tl'); if(!pane) return;
+  if(!CC_TK.events) { pane.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-faint);font-size:13px;">Loading…</div>'; return; }
+  const label = { created:'SUBMITTED', assigned:'ASSIGNED', reassigned:'REASSIGNED', started:'STARTED', info_request:'INFO ASKED', not_relevant:'ASKED AGAIN', broker_reply:'BROKER REPLY', message:'MESSAGE', note:'NOTE', resumed:'TIMER ON', decision:'DECISION', reopened:'REOPENED', priority:'PRIORITY', file:'FILE', reminder:'REMINDER', sla_missed:'SLA MISSED' };
+  const rows = CC_TK.events.slice().reverse().map(e=>`<div class="tl-item"><div class="tl-kind">${label[e.event_type]||esc(String(e.event_type||'').toUpperCase())}</div><div class="tl-text">${esc(e.body||'')}${ccStaffRole() && !e.visible_to_broker ? ' <span style="font-size:10px;color:var(--amber);">🔒 internal</span>' : ''}<div class="tl-time">${esc(e.by_name?e.by_name+' · ':'')}${esc(ccWhen(e.created_at))}</div></div></div>`).join('');
+  pane.innerHTML = `<div class="d-sec" style="margin-top:0;"><div class="d-sec-label">Activity timeline</div>${rows || '<div style="padding:24px 0;text-align:center;color:var(--text-faint);font-size:13px;">Nothing yet.</div>'}</div>`;
+}
+// ── files ──
+function ccFileSize(n) { n = Number(n)||0; return n > 1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB'; }
+function ccRenderFiles() {
+  const pane = document.getElementById('ccPane-files'); if(!pane) return;
+  const c = ccCur(); if(!c) return;
+  if(!CC_TK.files) { pane.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-faint);font-size:13px;">Loading…</div>'; return; }
+  const staff = ccStaffRole(), worker = ccCanWork(c);
+  const canAdd = (worker || ccIsMyBroker(c)) && !c.resolvedAt;
+  const rows = CC_TK.files.map(f=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);flex-wrap:wrap;">
+      <span style="font-size:16px;">📎</span>
+      <div style="flex:1;min-width:140px;"><a style="color:var(--accent);cursor:pointer;font-size:13px;" onclick="ccDownload(${f.file_id})">${esc(f.file_name)}</a><div style="font-size:10.5px;color:var(--text-faint);">${ccFileSize(f.size_bytes)} · ${esc(f.by_name||'')} · ${esc(ccWhen(f.created_at))}</div></div>
+      ${staff ? (worker ? `<label style="font-size:11.5px;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" ${f.visible_to_broker?'checked':''} style="accent-color:var(--accent);" onchange="ccFileVisible(${f.file_id},this.checked)"> Broker can see</label>` : `<span style="font-size:11px;color:var(--text-faint);">${f.visible_to_broker?'Broker can see':'Internal'}</span>`) : ''}
+    </div>`).join('');
+  pane.innerHTML = `<div class="d-sec" style="margin-top:0;"><div class="d-sec-label">Files</div>
+    ${CC_TK.storageReady ? '' : '<div style="background:var(--amber-dim);border:1px solid var(--amber);border-radius:6px;padding:8px 11px;font-size:12px;margin:8px 0;">File storage is not set up yet, so files cannot be added or opened. An Admin needs to finish the storage step (the CARRIER_DOCS_SAS_URL setting).</div>'}
+    <div style="margin-top:8px;">${rows || '<div style="padding:18px 0;text-align:center;color:var(--text-faint);font-size:13px;">No files yet.</div>'}</div>
+    ${canAdd && CC_TK.storageReady ? `<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:10px;">
+      <input type="file" id="ccFileIn" style="font-size:12px;max-width:100%;">
+      ${worker ? '<label style="font-size:12px;display:flex;align-items:center;gap:5px;margin-top:7px;cursor:pointer;"><input type="checkbox" id="ccFileVis" style="accent-color:var(--accent);"> Broker can see this file</label>' : ''}
+      <button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="ccUploadFile()">Upload (up to 10 MB)</button>
+      ${worker ? '<div style="font-size:11px;color:var(--text-faint);margin-top:6px;">Files you add are hidden from the broker unless you tick the box. Files the broker adds are always visible to them.</div>' : ''}
+    </div>` : ''}</div>`;
+}
+async function ccUploadFile() {
+  const c = ccCur(); if(!c) return;
+  const inp = document.getElementById('ccFileIn'); const f = inp && inp.files && inp.files[0];
+  if(!f) { showToast('Choose a file first.'); return; }
+  if(f.size > 10*1024*1024) { showToast('Files can be up to 10 MB.'); return; }
+  const b64 = await new Promise((ok, bad)=>{ const r = new FileReader(); r.onload = ()=>ok(String(r.result).split(',')[1]||''); r.onerror = bad; r.readAsDataURL(f); });
+  const vis = !!(document.getElementById('ccFileVis') && document.getElementById('ccFileVis').checked);
+  showToast('Uploading…');
+  try {
+    const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/files', { method:'POST', body: JSON.stringify({ name: f.name, contentType: f.type||'application/octet-stream', dataBase64: b64, visibleToBroker: vis }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not upload.'); return; }
+    CC_TK.files = null; CC_TK.events = null; await ccEnsureFiles(true); ccRenderFiles(); showToast('File added.');
+  } catch(e) { showToast('Could not upload.'); }
+}
+async function ccDownload(fileId) {
+  const c = ccCur(); if(!c) return;
+  try {
+    const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/files/'+fileId);
+    if(!res.ok) { const j = await res.json().catch(()=>({})); showToast(j.error || 'Could not open the file.'); return; }
+    const blob = await res.blob(); const f = (CC_TK.files||[]).find(x=>x.file_id===fileId);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = f ? f.file_name : 'file'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  } catch(e) { showToast('Could not open the file.'); }
+}
+async function ccFileVisible(fileId, on) {
+  const c = ccCur(); if(!c) return;
+  try {
+    const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/files/'+fileId, { method:'PATCH', body: JSON.stringify({ visible: !!on }) });
+    if(!res.ok) { const j = await res.json().catch(()=>({})); showToast(j.error || 'Could not change this.'); CC_TK.files = null; await ccEnsureFiles(true); ccRenderFiles(); return; }
+    showToast(on ? 'The broker can now see this file.' : 'Hidden from the broker.');
+  } catch(e) { showToast('Could not change this.'); }
+}
+// ── history of the same MC (Carrier Compliance only) ──
+function ccRenderHistory() {
+  const pane = document.getElementById('ccPane-hist'); if(!pane) return;
+  if(!CC_TK.history) { pane.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-faint);font-size:13px;">Loading…</div>'; return; }
+  const rows = CC_TK.history.map(h=>`<div style="padding:10px 0;border-top:1px solid var(--border);${realCarrierChecks.some(x=>x.checkId===h.check_id)?'cursor:pointer;':''}" ${realCarrierChecks.some(x=>x.checkId===h.check_id)?`onclick="ccOpenById('${esc(h.check_id)}')"`:''}>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span class="status ${h.cc_status==='Good to Go'?'s-active':(h.cc_status==='Not Recommended'?'s-rejected':'s-pending')}">${esc(h.cc_status||(h.resolved_at?'Finished':'Still open'))}</span>
+      <span style="font-size:12.5px;font-weight:500;">${esc(h.carrier_name||h.mc_number)}</span><span style="font-size:11px;color:var(--text-faint);margin-left:auto;">${esc(formatUSDate(h.submitted_at))}</span></div>
+    <div style="font-size:11.5px;color:var(--text-faint);margin-top:3px;">${esc(h.location_id?locationName(h.location_id):'—')} · broker ${esc(h.broker_name||'—')} · owner ${esc(h.owner_name||'—')} · ${h.check_type==='setup'?'Setup':'Quotation'}</div>
+    ${h.cc_status_note ? `<div style="font-size:12px;margin-top:4px;white-space:pre-wrap;">${esc(h.cc_status_note)}</div>` : ''}</div>`).join('');
+  pane.innerHTML = `<div class="d-sec" style="margin-top:0;"><div class="d-sec-label">Earlier checks of this MC · all offices</div>
+    <div style="font-size:11.5px;color:var(--text-faint);margin:6px 0;">Only Carrier Compliance and Admin can see this. Brokers never see it.</div>
+    ${rows || '<div style="padding:18px 0;text-align:center;color:var(--text-faint);font-size:13px;">This MC has not been checked before.</div>'}</div>`;
+}
+// ── templates ──
+async function openCcTplManager() {
+  CC_TK.tplEditId = null;
+  document.getElementById('ccTplModal').classList.add('open');
+  await ccLoadTemplates(true); ccRenderTplManager();
+}
+function ccCloseTplManager() { document.getElementById('ccTplModal').classList.remove('open'); }
+function ccRenderTplManager() {
+  const list = CC_TK.tpl || [];
+  const el = document.getElementById('ccTplList');
+  el.innerHTML = list.length ? list.map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--border);">
+    <div style="flex:1;"><div style="font-size:13px;font-weight:500;">${esc(t.title)} <span style="font-size:10px;color:var(--text-faint);border:1px solid var(--border);border-radius:3px;padding:0 5px;">${t.kind==='decision'?'decision note':'info request'}</span></div><div style="font-size:12px;color:var(--text-faint);white-space:pre-wrap;">${esc(t.body)}</div></div>
+    <button class="btn btn-ghost btn-sm" onclick="ccEditTpl(${t.template_id})">Edit</button><button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="ccDeleteTpl(${t.template_id})">Delete</button></div>`).join('') : '<div style="padding:14px 0;font-size:12.5px;color:var(--text-faint);">No templates yet.</div>';
+  const e = list.find(x=>x.template_id===CC_TK.tplEditId);
+  document.getElementById('ccTplKind').value = e ? e.kind : 'info';
+  document.getElementById('ccTplTitle').value = e ? e.title : '';
+  document.getElementById('ccTplBody').value = e ? e.body : '';
+  document.getElementById('ccTplSaveBtn').textContent = e ? 'Save changes' : 'Add template';
+}
+function ccEditTpl(id) { CC_TK.tplEditId = id; ccRenderTplManager(); }
+async function ccSaveTpl() {
+  const kind = document.getElementById('ccTplKind').value, title = document.getElementById('ccTplTitle').value.trim(), body = document.getElementById('ccTplBody').value.trim();
+  if(!title || !body) { showToast('A title and the text are both required.'); return; }
+  try {
+    const id = CC_TK.tplEditId;
+    const res = await apiFetch('/api/carrier-templates' + (id?'/'+id:''), { method: id?'PUT':'POST', body: JSON.stringify({ kind, title, body }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not save (run add_carrier_ticketing.sql first?).'); return; }
+    CC_TK.tplEditId = null; await ccLoadTemplates(true); ccRenderTplManager(); showToast('Template saved.');
+  } catch(e) { showToast('Could not save.'); }
+}
+async function ccDeleteTpl(id) {
+  try {
+    const res = await apiFetch('/api/carrier-templates/'+id, { method:'DELETE' });
+    if(!res.ok) { const j = await res.json().catch(()=>({})); showToast(j.error || 'Could not delete.'); return; }
+    CC_TK.tplEditId = null; await ccLoadTemplates(true); ccRenderTplManager(); showToast('Template deleted.');
+  } catch(e) { showToast('Could not delete.'); }
+}
+async function ccFillDecisionTpl(mcKey) {
+  const sel = document.getElementById('ccTplDec-'+mcKey); if(!sel) return;
+  const tpl = (await ccLoadTemplates()).filter(t=>t.kind==='decision');
+  if(!tpl.length) { sel.style.display = 'none'; return; }
+  sel.innerHTML = '<option value="">Use a saved note…</option>' + tpl.map(t=>`<option value="${t.template_id}">${esc(t.title)}</option>`).join('');
+}
+function ccPickDecisionTpl(mcKey, id) {
+  if(!id) return; const t = (CC_TK.tpl||[]).find(x=>String(x.template_id)===String(id)); const ta = document.getElementById('ccnote-'+mcKey);
+  if(t && ta) ta.value = t.body;
+}
+
 let ccMail = { mailboxes:[], offices:[], team:[], customerTeam:[], mine:{operations:null,coi:null,customer:null}, canEdit:false };
 let ccMailLoadFailed = false;
 let cmbScope = 'carrier';
@@ -11528,6 +11978,8 @@ async function patchCarrierCheck(checkId, path, body) {
       showToast(errBody.error || 'Could not update — please try again.');
       return false;
     }
+    window.__ticketMailWarn = false;
+    try { const j = await res.json(); if(j && j.mail) await sendTicketMailFromMe(j.mail); } catch(e) {}
     await loadRealCarrierChecks();
     return true;
   } catch(e) {
@@ -11664,6 +12116,7 @@ async function finishLogin() {
       isComplianceManager: me.isComplianceManager === true,
       isCarrierManager: me.isCarrierManager === true,
       carrierLeadLocations: me.carrierLeadLocations || [],
+      carrierAway: me.carrierAway === true,
       moduleAccess: me.moduleAccess || null, // Admin's Module Access ticks (null = old server, treat as all on)
     };
     applyRealUser(realUser);
