@@ -3078,6 +3078,11 @@ function updateSidebarForRole() {
   }
 }
 
+// C-047: Admin, or a Customer Compliance user Admin switched "Compliance Manager" on for.
+function isCompMgr() {
+  return currentRole==='Admin' || (currentRole==='Customer Compliance' && !!(realUser && realUser.isComplianceManager));
+}
+
 function updateCoHeader() {
   const btns = document.getElementById('coHeaderBtns');
   const carrierTab = document.getElementById('coCarrierTab');
@@ -3094,7 +3099,9 @@ function updateCoHeader() {
     roleNote.style.display='block';
     roleNote.textContent='Showing: your assigned accounts only';
   } else if(currentRole==='Customer Compliance'||currentRole==='Carrier Compliance') {
-    btns.innerHTML=``;
+    btns.innerHTML = (currentRole==='Customer Compliance' && isCompMgr())
+      ? `<button class="btn btn-ghost" onclick="openAddContactModal(null,'active')">+ Add Contact</button><button class="btn btn-ghost" onclick="openCsvImport()">Import CSV</button><button class="btn btn-primary" onclick="openAddCo()">+ Add Company</button>`
+      : ``;
     carrierTab.style.display='';
     roleNote.style.display='block';
     roleNote.textContent= currentRole==='Customer Compliance'?'Compliance view':'Compliance view — carriers only';
@@ -4595,7 +4602,7 @@ function openCompCase(id) {
           </optgroup>
           <optgroup label="Decline">
             <option value="reject">✗ Reject</option>
-            ${isAdmin ? '<option value="blacklist">⚑ Blacklist Company (Admin only)</option>' : ''}
+            ${isCompMgr() ? '<option value="blacklist">⚑ Blacklist Company (Manager / Admin only)</option>' : ''}
           </optgroup>
         </select>
         <button class="btn btn-primary btn-sm" onclick="compApplyDecision('${c.id}','${relatedCo.id}')">Apply</button>
@@ -4619,6 +4626,14 @@ function openCompCase(id) {
   const startHtml = (canWork && notStarted) ? `<div class="d-sec"><div class="d-sec-label">Pick this up</div>
       <div style="font-size:12px;color:var(--text-faint);margin-bottom:8px;">Moves the case to <strong>In Review</strong> and tells the rep and their Team Leader you are working on it.</div>
       <button class="btn btn-primary btn-sm" onclick="compStartWorking('${c.id}')">▶ Start working</button></div>` : '';
+  const assignHtml = (isCompMgr() && !isResolved && c.companyId) ? `<div class="d-sec"><div class="d-sec-label">Assign this case</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="compAssignSel" style="flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:6px 10px;color:var(--text);font-size:13px;font-family:var(--sans);">
+          <option value="">— Choose a Customer Compliance person…</option>
+          ${realUsers.filter(a=>a.role==='Customer Compliance'||a.role==='Admin').map(a=>`<option value="${a.userId}">${esc(personLabel(a))}</option>`).join('')}
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="compAssignCase('${c.id}')">Assign</button>
+      </div></div>` : '';
   const msgHtml = `<div class="d-sec"><div class="d-sec-label">Updates for the sales rep</div>
       ${canWork ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${COMP_PRESETS.map((p,i)=>`<span class="fchip" style="cursor:pointer;font-size:11.5px;" onclick="compPickPreset(${i})">${esc(p.length>34?p.slice(0,34)+'…':p)}</span>`).join('')}</div>
       <textarea id="compMsgText" placeholder="Write a status or timing update for the rep…" style="width:100%;min-height:70px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;"></textarea>
@@ -4640,6 +4655,7 @@ function openCompCase(id) {
       </div>
     </div>
     ${startHtml}
+    ${assignHtml}
     ${reassignHtml}
     ${msgHtml}
     ${(isCustComp||isAdmin) ? `    <div class="d-sec"><div class="d-sec-label">Activity</div>
@@ -4650,6 +4666,17 @@ function openCompCase(id) {
   compDrawer = { caseId:c.id, companyId:c.companyId, name:c.co, caseHtml, showTabs:(isCustComp||isAdmin)&&!!c.companyId };
   compShowTab('case');
   openDrawer();
+}
+async function compAssignCase(caseId) {
+  const v = (document.getElementById('compAssignSel')||{}).value;
+  if(!v) { showToast('Choose a person first.'); return; }
+  try {
+    const res = await apiFetch('/api/compliance-cases/'+encodeURIComponent(caseId)+'/assign', { method:'PATCH', body: JSON.stringify({ userId: v }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not assign the case.'); return; }
+    showToast('Case assigned to '+(j.assignedTo||'that person')+'.');
+    await loadRealComplianceCases(); openCompCase(caseId);
+  } catch(e) { console.error(e); showToast('Could not assign the case.'); }
 }
 function compApplyDecision(caseId, companyId) {
   const v = (document.getElementById('compDecisionSel')||{}).value;
@@ -5466,7 +5493,7 @@ function addCoBackToDetails() {
 function addCoFinish(withContact) {
   if(!addCoDraft) return;
   const d = addCoDraft;
-  const asActive = (currentViewName==='companies' && ['Admin','Customer Compliance'].includes(currentRole));
+  const asActive = (currentViewName==='companies' && isCompMgr());
   const contactFirst = document.getElementById('addCoContactFirst').value.trim();
   const contactLast  = document.getElementById('addCoContactLast').value.trim();
   const contactCell  = document.getElementById('addCoContactCell').value.trim() || '—';
@@ -6790,7 +6817,7 @@ const UM_PRESETS = {
 const umSel = new Set();
 let umVisible = [];
 function umAccess(u) {
-  return Object.assign({prospects:true,customers:true,contacts:true,custCompliance:true,carrierCompliance:true,bulkEmail:false}, u.moduleAccess || {});
+  return Object.assign({prospects:true,customers:true,contacts:true,custCompliance:true,carrierCompliance:true,bulkEmail:false,complianceManager:false}, u.moduleAccess || {});
 }
 function umToggle(id, on) { if(on) umSel.add(id); else umSel.delete(id); renderUserManagement(); }
 function umToggleAll(on) { umVisible.forEach(id=>{ if(on) umSel.add(id); else umSel.delete(id); }); renderUserManagement(); }
@@ -7037,6 +7064,10 @@ function openUserDrawer(userId) {
             </div>
           </label>`).join('')}
       </div>
+      ${u.role==='Customer Compliance' ? `<label style="display:flex;align-items:center;gap:9px;margin-top:10px;padding:9px 12px;border:1px solid ${ma.complianceManager?'rgba(34,197,94,0.25)':'var(--border)'};border-radius:5px;background:${ma.complianceManager?'rgba(34,197,94,0.05)':'var(--surface-2)'};cursor:pointer;" onclick="event.stopPropagation();">
+        <input type="checkbox" ${ma.complianceManager?'checked':''} style="width:14px;height:14px;accent-color:var(--green);cursor:pointer;" onchange="setUserModuleAccess('${u.id}','complianceManager',this.checked)">
+        <div><div style="font-size:12px;font-weight:500;color:var(--text);">⭐ Compliance Manager</div>
+        <div style="font-size:10.5px;color:var(--text-faint);margin-top:1px;">Can add / import Active customers, blacklist, and assign cases to other executives.</div></div></label>` : ''}
       ${ma.bulkEmail ? `<div style="margin-top:10px;font-size:12px;display:flex;align-items:center;gap:8px;" onclick="event.stopPropagation();">
         <span>Bulk Email daily limit (people per day):</span>
         <input type="number" min="1" value="${u.bulkDailyLimit||''}" placeholder="300 (default)" style="width:120px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"
@@ -7374,7 +7405,7 @@ function setUserModuleAccess(userId, mod, val) {
   if(!u) return;
   if(!u.moduleAccess) u.moduleAccess = {prospects:true,customers:true,contacts:true,custCompliance:true};
   u.moduleAccess[mod] = val;
-  const labels = {prospects:'Prospect Companies',customers:'Active Customers',contacts:'Contacts',custCompliance:'Customer Compliance',carrierCompliance:'Carrier Compliance',bulkEmail:'Bulk Email'};
+  const labels = {prospects:'Prospect Companies',customers:'Active Customers',contacts:'Contacts',custCompliance:'Customer Compliance',carrierCompliance:'Carrier Compliance',bulkEmail:'Bulk Email',complianceManager:'Compliance Manager'};
   if(!u.auditLog) u.auditLog = [];
   u.auditLog.push({ts: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}), action:`Module access "${labels[mod]}" set to ${val?'Enabled':'Disabled'}`, by: getDemoUser()?.name||'Admin'});
   showToast(`${labels[mod]} access ${val?'enabled':'disabled'} for ${u.name}`);
@@ -7785,14 +7816,14 @@ function openCsvImport() {
   document.getElementById('csvFileInput').value='';
   // Only Admin and Customer Compliance may import straight into Active
   // Customers; everyone else's imports always land under Prospects.
-  const canPickTarget = ['Admin','Customer Compliance'].includes(currentRole);
+  const canPickTarget = isCompMgr();
   document.getElementById('csvTargetRow').style.display = canPickTarget ? 'block' : 'none';
   // Opened from the Active Customers page → default to Active; otherwise Prospects.
   document.getElementById('csvTarget').value = (canPickTarget && typeof currentViewName!=='undefined' && currentViewName==='companies') ? 'Active' : 'Prospect';
   document.getElementById('csvImportModal').classList.add('open');
 }
 function csvTarget() {
-  const canPick = ['Admin','Customer Compliance'].includes(currentRole);
+  const canPick = isCompMgr();
   return (canPick && document.getElementById('csvTarget').value === 'Active') ? 'Active' : 'Prospect';
 }
 function csvTargetChanged() {
@@ -11525,6 +11556,7 @@ async function finishLogin() {
       teamIds: me.teamIds || [],
       carrierAccess: me.carrierAccess !== false,
       canBulkEmail: me.canBulkEmail === true,
+      isComplianceManager: me.isComplianceManager === true,
       moduleAccess: me.moduleAccess || null, // Admin's Module Access ticks (null = old server, treat as all on)
     };
     applyRealUser(realUser);
