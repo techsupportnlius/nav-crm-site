@@ -4755,7 +4755,7 @@ function openCompCase(id) {
       <div style="display:flex;gap:8px;align-items:center;">
         <select id="compAssignSel" style="flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:6px 10px;color:var(--text);font-size:13px;font-family:var(--sans);">
           <option value="">— Choose a Customer Compliance person…</option>
-          ${realUsers.filter(a=>a.role==='Customer Compliance'||a.role==='Admin').map(a=>`<option value="${a.userId}">${esc(personLabel(a))}</option>`).join('')}
+          ${(compAssignees||[]).map(a=>`<option value="${a.user_id}">${esc(a.full_name+' · '+a.role)}</option>`).join('')}
         </select>
         <button class="btn btn-ghost btn-sm" onclick="compAssignCase('${c.id}')">Assign</button>
       </div></div>` : '';
@@ -4793,6 +4793,19 @@ function openCompCase(id) {
   compDrawer = { caseId:c.id, companyId:c.companyId, name:c.co, caseHtml, showTabs:(isCustComp||isAdmin)&&!!c.companyId, staff:(isCustComp||isAdmin), canWrite:((isCustComp||isAdmin||iAmRep) && !isResolved), isRep:iAmRep, resolved:isResolved };
   compShowTab('case');
   openDrawer();
+  if(document.getElementById('compAssignSel')) compLoadAssignees();
+}
+// C-053: the people a case can be assigned to (the general user list never contained Customer Compliance staff)
+let compAssignees = null;
+function compFillAssignees() {
+  const sel = document.getElementById('compAssignSel');
+  if(sel && compAssignees && compAssignees.length) sel.innerHTML = '<option value="">— Choose a Customer Compliance person…</option>' + compAssignees.map(a=>`<option value="${a.user_id}">${esc(a.full_name+' · '+a.role)}</option>`).join('');
+}
+async function compLoadAssignees() {
+  if(compAssignees === null) {
+    try { const r = await apiFetch('/api/compliance-assignees'); const l = r.ok ? await r.json() : []; compAssignees = l.length ? l : null; } catch(e) { compAssignees = null; }
+  }
+  compFillAssignees();
 }
 async function compAssignCase(caseId) {
   const v = (document.getElementById('compAssignSel')||{}).value;
@@ -4828,7 +4841,7 @@ function compShowTab(tab){
   const body = document.getElementById('dBody');
   compTabsBar(tab);
   d.tab = tab;
-  if(tab==='case'){ body.innerHTML = d.caseHtml; return; }
+  if(tab==='case'){ body.innerHTML = d.caseHtml; compFillAssignees(); return; }
   if(tab==='conv'){ compRenderConvShell(d); compLoadMessages(d.caseId); convMarkRead('customer', d.caseId); return; }
   if(tab==='emails'){
     body.innerHTML = `<div class="d-sec"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
