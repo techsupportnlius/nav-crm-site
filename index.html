@@ -3442,6 +3442,8 @@ function openCustomerDrawer(id) {
   renderDrawerTabs('customer');
   renderCustomerDetails(id);
   openDrawer();
+  // C-056: show what is true right now - quietly re-read this one company (redraws only if someone changed it)
+  if(realUser) refreshCompanies([id], true);
 }
 
 function renderDrawerTabs(type) {
@@ -4921,7 +4923,7 @@ async function submitCreditCap() {
       const res = await apiFetch(`/api/companies/${ctx.companyId}/credit-limit`, { method:'PATCH', body: JSON.stringify({ creditLimit: amt }) });
       const j = await res.json().catch(()=>({}));
       if(!res.ok) { showToast(j.error || 'Could not save the credit limit.'); return; }
-      await loadRealCompanies(); showToast(`Credit limit saved: $${amt.toLocaleString('en-US')}.`);
+      await refreshCompanies([ctx.companyId]); showToast(`Credit limit saved: $${amt.toLocaleString('en-US')}.`);
       if(openCompanyId===ctx.companyId) openCustomerDrawer(ctx.companyId);
     } catch(e) { showToast('Could not save the credit limit.'); }
     return;
@@ -5060,7 +5062,7 @@ async function compReassignAndApprove(coId, caseId) {
     });
     if(!res.ok) { showToast('Could not reassign the account — please try again.'); return; }
   }
-  if(newRepId) { await loadRealCompanies(); showToast('Account reassigned. Now enter the credit limit to approve.'); }
+  if(newRepId) { await refreshCompanies([coId]); showToast('Account reassigned. Now enter the credit limit to approve.'); }
   compApproveCustomer(caseId, 'Approved');
 }
 
@@ -5106,7 +5108,7 @@ async function decideExtension(id, approve) {
   try {
     const res = await apiFetch(`/api/companies/${id}/extension-decision`, { method:'POST', body: JSON.stringify({ approve, days }) });
     if(!res.ok) { const b = await res.json().catch(()=>({})); showToast(b.error || 'Could not save that decision.'); return; }
-    await loadRealCompanies();
+    await refreshCompanies([id]);
     showToast(approve ? `Extension approved: +${days} days.` : 'Extension request declined.');
     renderProspectsView();
     if(openCompanyId===id) renderCustomerDetails(id);
@@ -5121,7 +5123,7 @@ async function saveProspectWindow(id) {
   try {
     const res = await apiFetch(`/api/companies/${id}/assign`, { method:'POST', body: JSON.stringify(body) });
     if(!res.ok) { const b = await res.json().catch(()=>({})); showToast(b.error || 'Could not save.'); return; }
-    await loadRealCompanies();
+    await refreshCompanies([id]);
     showToast(body.ownerUserId ? 'Prospect assigned with a new working window.' : `Working window set to ${days} days.`);
     renderProspectsView();
     if(openCompanyId===id) renderCustomerDetails(id);
@@ -6190,8 +6192,19 @@ async function realAssign(ids, ownerUserId, label) {
     const res = await apiFetch('/api/companies-assign', { method:'POST', body: JSON.stringify({ companyIds: [...ids], ownerUserId }) });
     const j = await res.json().catch(()=>({}));
     if(!res.ok) { showToast(j.error || 'Could not assign — please try again.'); return false; }
-    await loadRealCompanies();
+    // C-054: update the screen right away from what we already have; the full company list (11,000+ rows) reloads quietly
+    // in the background instead of making the person wait for it.
+    if(j.moved) {
+      const stamp = nowStamp();
+      [...ids].forEach(id=>{
+        const c = customers.find(x=>x.id===id); if(!c || c.ownerUserId===ownerUserId) return;
+        c.ownerUserId = ownerUserId; c.owner = label || c.owner; c.rep = label || c.rep;
+        if(c.status==='Prospect' && (!c.prospectStatus || c.prospectStatus==='Open' || c.prospectStatus==='Lost')) c.prospectStatus = 'New Lead';
+        c.updatedBy = currentUserName(); c.updatedAt = stamp; c.lastUpdated = 'Just now';
+      });
+    }
     showToast(`${j.moved} assigned to ${label}` + (j.skipped ? ` · ${j.skipped} skipped (already theirs or not yours)` : '') + '.');
+    refreshCompanies([...ids]);
     return true;
   } catch(e) { console.error(e); showToast('Could not assign — please try again.'); return false; }
 }
@@ -6362,6 +6375,12 @@ function renderProspectsView() {
     return;
   }
 
+  // C-055: draw only the first rows (11,000+ rows made every click slow); "Show more" adds the rest on demand
+  const prSig = prospectFilter + '|' + search;
+  if(prSig !== PR_SHOW.sig) { PR_SHOW.sig = prSig; PR_SHOW.n = 200; }
+  const prTotal = rows.length;
+  if(prTotal > PR_SHOW.n) rows = rows.slice(0, PR_SHOW.n);
+  const prMore = prTotal > rows.length ? `<tr><td colspan="6" style="text-align:center;padding:14px;color:var(--text-faint);font-size:12.5px;">Showing ${rows.length.toLocaleString()} of ${prTotal.toLocaleString()} — <a style="color:var(--accent);cursor:pointer;" onclick="prShowMore(200)">show 200 more</a> · <a style="color:var(--accent);cursor:pointer;" onclick="prShowMore(1e9)">show all</a> · or use the search box / filters above</td></tr>` : '';
   tbody.innerHTML = rows.map(c=>{
     let stageLabel = 'Unassigned', stageCls = 'stage-unassigned';
     if(c.status.toLowerCase().includes('pending')) { stageLabel='Submitted'; stageCls='stage-submitted'; }
@@ -6389,8 +6408,10 @@ function renderProspectsView() {
       <td style="font-size:11.5px;color:var(--text-faint);">${c.lastUpdated}</td>
       ${canSubmitRole?`<td onclick="event.stopPropagation();">${submitBtn}</td>`:''}
     </tr>`;
-  }).join('');
+  }).join('') + prMore;
 }
+const PR_SHOW = { n:200, sig:'' };
+function prShowMore(k) { PR_SHOW.n += k; renderProspectsView(); }
 
 // A submitted prospect is NOT done with the sales rep — it just moves to
 // "Pending — eligibility" while Compliance reviews it, and stays fully
@@ -6472,7 +6493,7 @@ async function submitForComplianceGo(id, priority) {
     // opened the real case in the database — reload both so every screen
     // shows the real, persisted state right away instead of reverting on
     // the next refresh.
-    await Promise.all([loadRealCompanies(), loadRealComplianceCases()]);
+    await Promise.all([refreshCompanies([id]), loadRealComplianceCases()]);
     resetProspectFilterToAll();
     showToast(`${c.name} submitted for Compliance review — it stays in Prospect Companies (now marked Pending Compliance) until Compliance decides.` + ticketMailNote());
     renderProspectsView();
@@ -8362,7 +8383,7 @@ async function confirmCsvImport() {
       });
       const data = await res.json().catch(()=>({}));
       if(!res.ok) throw new Error(data.error || ('HTTP '+res.status));
-      await loadRealCompanies();
+      loadRealCompanies(); // big import: refresh the whole list quietly in the background
       if(data.skippedCount) {
         // Stay open and explain every skipped row — nothing disappears silently.
         document.getElementById('csvSummary').innerHTML =
@@ -9012,7 +9033,7 @@ async function extendCompanyInactivity(companyId) {
       return;
     }
     showToast(`Extended by ${days} day${days===1?'':'s'}.`);
-    await Promise.all([loadRealCompanies(), loadRealNotifications()]);
+    await Promise.all([refreshCompanies([companyId]), loadRealNotifications()]);
   } catch(e) {
     console.error('Extending inactivity window failed:', e);
     showToast('Could not extend — please try again.');
@@ -10908,7 +10929,7 @@ async function hsStartImport() {
     ${mo.length?`<div style="margin-top:8px;"><b>Owners not found as CRM users</b> (their records went to the Open Pool):<br>${mo.map(([k,v])=>esc(k)+' — '+v).join('<br>')}</div>`:''}
     ${skipped.length?`<button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="hsDownloadSkipped()">⬇ Download skipped list</button>`:''}</div>`;
   window._hsSkipped = skipped;
-  try { await loadRealCompanies(); renderProspectsView(); } catch(e) {}
+  try { loadRealCompanies(); } catch(e) {} // big import: refresh quietly in the background
   if(!failed && !hsCancel) showToast('HubSpot import finished.');
 }
 function hsDownloadSkipped() {
@@ -11452,19 +11473,48 @@ async function signOutCrm() {
   location.reload();
 }
 
-async function loadRealCompanies() {
-  try {
-    const res = await apiFetch('/api/companies');
-    if(!res.ok) { console.error('Loading companies failed:', res.status, await res.text()); return; }
-    const rows = await res.json();
-    companiesFresh = true;
-    applyCompanyRows(rows);
-    ncPut('companies', rows);
-  } catch(e) {
-    console.error('Loading companies failed:', e);
-  }
+let _coLoading = null; // C-055: if a full load is already running, everyone waits for that one instead of starting another
+function loadRealCompanies() {
+  if(_coLoading) return _coLoading;
+  _coLoading = (async()=>{
+    try {
+      const res = await apiFetch('/api/companies');
+      if(!res.ok) { console.error('Loading companies failed:', res.status, await res.text()); return; }
+      const rows = await res.json();
+      companiesFresh = true;
+      applyCompanyRows(rows);
+      ncPut('companies', rows);
+    } catch(e) {
+      console.error('Loading companies failed:', e);
+    }
+  })().finally(()=>{ _coLoading = null; });
+  return _coLoading;
 }
 let companiesFresh = false;
+// C-055: refresh only the companies that just changed (fast) instead of reloading and redrawing all 11,000+.
+// Falls back to the full reload if the server is an older version that ignores ?ids=.
+async function refreshCompanies(ids, onlyIfChanged) {
+  ids = [...new Set((ids||[]).map(Number).filter(n=>n>0))];
+  if(!ids.length) return;
+  try {
+    const res = await apiFetch('/api/companies?ids=' + ids.join(','));
+    if(!res.ok) return;
+    const rows = await res.json();
+    if(!Array.isArray(rows)) return;
+    if(rows.length > ids.length) { companiesFresh = true; applyCompanyRows(rows); ncPut('companies', rows); return; }
+    let changed = false;
+    const sig = (c)=>JSON.stringify(Object.assign({}, c, { lastUpdated:'' }));
+    rows.forEach(r=>{
+      const m = mapCompany(r); const i = customers.findIndex(x=>x.id===m.id);
+      if(i>=0) { if(sig(customers[i]) !== sig(m)) { changed = true; customers[i] = m; } } else { customers.push(m); changed = true; }
+      if(!onlyIfChanged) realActivityLoaded.delete(m.id);
+    });
+    if(onlyIfChanged && !changed) return;
+    renderCoTable(); renderCustCompView(); updateNavBadges();
+    if(typeof renderProspectsView === 'function') renderProspectsView();
+    if(typeof openCompanyId!=='undefined' && ids.includes(openCompanyId) && document.getElementById('drawer') && document.getElementById('drawer').classList.contains('open') && typeof renderCustomerDetails==='function') { try { renderCustomerDetails(openCompanyId); } catch(e) {} }
+  } catch(e) { console.error('Refreshing companies failed:', e); }
+}
 function applyCompanyRows(rows) {
   try {
     customers.length = 0;
@@ -11559,7 +11609,7 @@ async function resolveComplianceCase(caseId, status, extra) {
       showToast(body.error || 'Could not update the case — please try again.');
       return false;
     }
-    await Promise.all([loadRealComplianceCases(), loadRealCompanies()]);
+    { const cs = realComplianceCases.find(x=>x.id===caseId); await Promise.all([loadRealComplianceCases(), cs && cs.companyId ? refreshCompanies([cs.companyId]) : loadRealCompanies()]); }
     return true;
   } catch(e) {
     console.error('Resolving compliance case failed:', e);
@@ -11710,6 +11760,18 @@ async function convLoadUnread() {
     if(typeof renderCustCompView==='function' && document.getElementById('view-customer-compliance') && document.getElementById('view-customer-compliance').classList.contains('active')) renderCustCompView();
   } catch(e) { /* ignore */ }
 }
+// C-056: every 3 minutes, quietly re-read the companies on screen (and the open one) so other people's changes show up without F5
+setInterval(()=>{
+  try {
+    if(!realUser || document.hidden) return;
+    const ids = new Set();
+    if(typeof openCompanyId!=='undefined' && openCompanyId) ids.add(openCompanyId);
+    document.querySelectorAll('#prospectTbody tr[onclick], #coTbody tr[onclick]').forEach(tr=>{
+      const m = /openCustomerDrawer\((\d+)\)/.exec(tr.getAttribute('onclick')||''); if(m && ids.size<100) ids.add(Number(m[1]));
+    });
+    if(ids.size) refreshCompanies([...ids], true);
+  } catch(e) {}
+}, 3*60*1000);
 function convStartPolling() { if(CONV.timer) return; CONV.timer = setInterval(()=>{ if(!document.hidden) convLoadUnread(); }, 60000); convLoadUnread(); }
 async function convMarkRead(kind, id) {
   if(!realUser || !id) return;
@@ -12446,7 +12508,7 @@ async function approveRealLeadClaim(claimId) {
     if(!res.ok) { const err = await res.json().catch(()=>({})); showToast(err.error || 'Could not approve this claim.'); return; }
     showToast('Approved — co-owner access granted.');
     realLeadClaimsLoaded = false;
-    await Promise.all([loadRealLeadClaims(), loadRealCompanies()]); // co-owner should show up right away
+    { const lc = (realLeadClaims||[]).find(x=>x.claim_id===claimId); await Promise.all([loadRealLeadClaims(), lc && lc.company_id ? refreshCompanies([lc.company_id]) : loadRealCompanies()]); } // co-owner should show up right away
     renderDashboard();
   } catch(e) { console.error('Approving lead claim failed:', e); showToast('Could not approve this claim.'); }
 }
