@@ -141,6 +141,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14
 .nav-item.active svg{opacity:1;}
 .nav-badge{margin-left:auto;font-family:var(--mono);font-size:9.5px;padding:1px 6px;border-radius:10px;background:var(--surface-3);color:var(--text-faint);}
 .nav-badge.hot{background:rgba(212,98,26,0.2);color:var(--accent);}
+.conv-badge{display:inline-block;background:var(--accent);color:#fff;border-radius:9px;padding:0 6px;font-size:10px;font-weight:700;line-height:15px;vertical-align:middle;margin-left:4px;}
 .sidebar-bottom{margin-top:auto;padding:10px 6px;border-top:1px solid var(--border);}
 .main{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
 .view{display:none;flex:1;flex-direction:column;}
@@ -881,12 +882,12 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <div class="nav-item" id="navCarrierComp" data-view="carrier-compliance" onclick="nav(this,'carrier-compliance','Carrier Compliance')">
       <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
       Carrier Compliance
-      <span class="nav-badge hot" id="navCarrierBadge">12</span>
+      <span class="nav-badge hot" id="navCarrierBadge">12</span><span class="conv-badge" id="navCarrierMsg" style="display:none;margin-left:4px;" title="Unread conversation messages"></span>
     </div>
     <div class="nav-item" id="navCustomerComp" data-view="customer-compliance" onclick="nav(this,'customer-compliance','Customer Compliance')">
       <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       Customer Compliance
-      <span class="nav-badge hot" id="navCustCompBadge">6</span>
+      <span class="nav-badge hot" id="navCustCompBadge">6</span><span class="conv-badge" id="navCustMsg" style="display:none;margin-left:4px;" title="Unread conversation messages"></span>
     </div>
     <div class="nav-section-label">Communication</div>
     <div class="nav-item" id="navMail" data-view="mail" onclick="nav(this,'mail','Mail')">
@@ -1489,6 +1490,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
         <div class="addco-field"><label>Business Type</label><select id="addCoBizType"></select></div>
       </div>
       <div class="addco-field"><label>Headquarters <span class="addco-hint" style="display:inline;margin:0;">— this company's own address, not our office above</span></label>
+        <input id="addCoHqAddress" placeholder="Street address — start typing and pick from the list" autocomplete="off" onfocus="coAddrInit(this,0)" style="margin-bottom:8px;">
         <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">
           <input id="addCoHqCity" placeholder="City">
           <input id="addCoHqState" placeholder="State">
@@ -2062,6 +2064,67 @@ thead th.cb-th{width:36px;padding:0 10px;}
   </div>
 </div>
 
+<!-- C-053: CUSTOMER REVIEW SUBMIT MODAL -->
+<div class="modal-overlay" id="custSubmitModal">
+  <div class="modal" style="max-width:420px;">
+    <h3 style="margin-bottom:6px;">Submit for Compliance review</h3>
+    <p id="custSubmitSub" style="font-size:12px;color:var(--text-faint);margin-bottom:12px;"></p>
+    <div class="addco-field"><label>Priority</label>
+      <select id="custSubmitPri" style="background:var(--surface-3);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;border-radius:5px;padding:9px 12px;width:100%;outline:none;">
+        <option value="Normal">Normal</option>
+        <option value="Urgent">Urgent — flagged and shown at the top (same target time)</option>
+      </select></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="custSubmitCancel()">Cancel</button>
+      <button class="btn btn-primary" onclick="custSubmitGo()">Submit</button>
+    </div>
+  </div>
+</div>
+
+<!-- C-053: AWAY UNTIL MODAL -->
+<div class="modal-overlay" id="ccAwayModal">
+  <div class="modal" style="max-width:420px;">
+    <h3 id="ccAwayTitle" style="margin-bottom:6px;">Mark away</h3>
+    <p id="ccAwaySub" style="font-size:12px;color:var(--text-faint);margin-bottom:12px;line-height:1.5;">New MCs skip this person until the time below, then they join the round robin again by themselves. Their open MCs move to the rest of the office now.</p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="btn btn-ghost btn-sm" onclick="ccAwayPreset(1)">1 day</button>
+      <button class="btn btn-ghost btn-sm" onclick="ccAwayPreset(3)">3 days</button>
+      <button class="btn btn-ghost btn-sm" onclick="ccAwayPreset(7)">1 week</button>
+      <button class="btn btn-ghost btn-sm" onclick="ccAwayPreset(14)">2 weeks</button>
+    </div>
+    <div class="addco-field"><label>Back on (date and time) <span style="color:var(--red);">*</span></label><input id="ccAwayUntil" type="datetime-local"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="ccAwayCancel()">Cancel</button>
+      <button class="btn btn-primary" onclick="ccAwayConfirm()">Mark away</button>
+    </div>
+  </div>
+</div>
+
+<!-- C-053: MOVE TO SETUP MODAL -->
+<div class="modal-overlay" id="ccSetupModal">
+  <div class="modal" style="max-width:480px;max-height:92vh;overflow-y:auto;">
+    <h3 style="margin-bottom:6px;">Move to Setup</h3>
+    <p id="ccSetupSub" style="font-size:12px;color:var(--text-faint);margin-bottom:12px;line-height:1.5;">This MC stays the same ticket with the same conversation. Carrier Compliance gets a fresh 15-minute timer for the Setup.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="addco-field"><label>Dispatcher name *</label><input id="cst-dn" type="text"></div>
+      <div class="addco-field"><label>Dispatcher phone *</label><input id="cst-dp" type="text" placeholder="(XXX) XXX-XXXX"></div>
+    </div>
+    <div class="addco-field"><label>Dispatcher email *</label><input id="cst-de" type="text" placeholder="dispatch@carriercompany.com"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="addco-field"><label>Pickup date *</label><input id="cst-pd" type="date"></div>
+      <div class="addco-field"><label>Load type *</label>
+        <select id="cst-lt" style="background:var(--surface-3);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;border-radius:5px;padding:9px 12px;width:100%;outline:none;">
+          <option value="">— Select —</option><option>Dry Van</option><option>Refrigerated (Reefer)</option><option>Flatbed</option><option>Tanker</option><option>Intermodal</option><option>LTL</option><option>Other</option>
+        </select></div>
+    </div>
+    <div class="addco-field"><label>Commodity *</label><input id="cst-co" type="text" placeholder="e.g. Fresh produce"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="ccSetupClose()">Cancel</button>
+      <button class="btn btn-primary" onclick="ccSetupSend()">Move to Setup</button>
+    </div>
+  </div>
+</div>
+
 <!-- C-051: INFORMATION REQUEST MODAL -->
 <div class="modal-overlay" id="ccInfoModal">
   <div class="modal" style="max-width:520px;max-height:92vh;overflow-y:auto;">
@@ -2072,6 +2135,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <div class="addco-field"><label>What do you need from the broker? <span style="color:var(--red);">*</span></label>
       <textarea id="ccInfoMsg" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:8px 10px;font-size:13px;font-family:var(--sans);resize:vertical;min-height:100px;box-sizing:border-box;" placeholder="e.g. Please send the carrier's current COI and the dispatcher's phone number."></textarea></div>
     <div class="addco-field"><label>Cc (optional — separate emails with commas)</label><input id="ccInfoCc" type="text" placeholder="name@nlius.com"></div>
+    <div id="ccInfoErr" style="display:none;background:rgba(239,68,68,0.1);border:1px solid var(--red);color:var(--red);border-radius:5px;padding:7px 10px;font-size:12.5px;margin-bottom:8px;"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="ccCloseInfoModal()">Cancel</button>
       <button class="btn btn-primary" onclick="ccSendInfoRequest()">Send request &amp; pause timer</button>
@@ -3583,11 +3647,12 @@ function renderCustomerDetails(id) {
         </div>
         <div class="field-box" style="grid-column:1/-1;"><div class="field-label">Headquarters</div>
           ${canEditProfile ? `
+          <input class="field-select" id="hqAddr-${c.id}" style="width:100%;box-sizing:border-box;margin-bottom:6px;" autocomplete="off" value="${esc(c.hqAddress||'')}" placeholder="Street address — start typing and pick from the list" onfocus="coAddrInit(this,${c.id})" onchange="updateCoField(${c.id},'hqAddress',this.value.trim())">
           <div style="display:flex;gap:6px;">
-            <input class="field-select" style="flex:2;" value="${c.hqCity==='—'||!c.hqCity?'':c.hqCity}" placeholder="City" onchange="updateCoField(${c.id},'hqCity',this.value||'—')">
-            <input class="field-select" style="flex:1;" value="${c.hqState==='—'||!c.hqState?'':c.hqState}" placeholder="State" onchange="updateCoField(${c.id},'hqState',this.value||'—')">
-            <input class="field-select" style="flex:1;" value="${c.hqZip==='—'||!c.hqZip?'':c.hqZip}" placeholder="ZIP" onchange="updateCoField(${c.id},'hqZip',this.value||'—')">
-          </div>` : `<div class="field-val">${[c.hqCity,c.hqState].filter(v=>v&&v!=='—').join(', ')||'—'}${c.hqZip&&c.hqZip!=='—'?' '+c.hqZip:''}</div>`}
+            <input class="field-select" id="hqCity-${c.id}" style="flex:2;" value="${c.hqCity==='—'||!c.hqCity?'':c.hqCity}" placeholder="City" onchange="updateCoField(${c.id},'hqCity',this.value||'—')">
+            <input class="field-select" style="flex:1;" value="${c.hqState==='—'||!c.hqState?'':c.hqState}" id="hqState-${c.id}" placeholder="State" onchange="updateCoField(${c.id},'hqState',this.value||'—')">
+            <input class="field-select" style="flex:1;" value="${c.hqZip==='—'||!c.hqZip?'':c.hqZip}" id="hqZip-${c.id}" placeholder="ZIP" onchange="updateCoField(${c.id},'hqZip',this.value||'—')">
+          </div>` : `<div class="field-val">${c.hqAddress?esc(c.hqAddress)+'<br>':''}${[c.hqCity,c.hqState].filter(v=>v&&v!=='—').join(', ')||'—'}${c.hqZip&&c.hqZip!=='—'?' '+c.hqZip:''}</div>`}
         </div>
         <div class="field-box"><div class="field-label">Number of Employees</div>
           ${canEditProfile?`<select class="field-select" onchange="updateCoField(${c.id},'employeeRange',this.value)">${employeeOpts}</select>`:`<div class="field-val ${!c.employeeRange?'muted':''}">${c.employeeRange||'—'}</div>`}
@@ -4393,7 +4458,7 @@ function renderCCView() {
     document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Lane</th><th>Submitted by</th><th>Commodity</th><th>Value</th><th>Submitted</th><th>Outcome</th></tr>`;
     document.getElementById('ccTbody').innerHTML = rows.length ? rows.map(c=>`
       <tr style="opacity:0.85;cursor:pointer;" onclick="ccOpenById('${esc(c.checkId)}')">
-        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}</td>
+        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}${ccConvBadge(c)}</td>
         <td class="primary">${c.carrier}</td>
         <td style="font-size:11.5px;color:var(--text-faint);">${c.lane}</td>
         <td style="font-size:12px;color:var(--text-muted);">${c.broker}</td>
@@ -4459,7 +4524,7 @@ function renderCCView() {
     document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Lane</th><th>Stage</th><th>Handled by</th><th>SLA</th><th>Submitted</th></tr>`;
     document.getElementById('ccTbody').innerHTML = myMCs.length ? myMCs.map(c=>`
       <tr onclick="openCCCase('${c.mc}')" style="cursor:pointer;"${''}>
-        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}</td>
+        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}${ccConvBadge(c)}</td>
         <td class="primary">${c.carrier}</td>
         <td style="font-size:11.5px;color:var(--text-faint);">${c.lane}</td>
         <td><span class="status ${c.stageCls}">${c.stage}</span> ${ccWorkBadge(c)}</td>
@@ -4476,7 +4541,7 @@ function renderCCView() {
     document.getElementById('ccTbody').innerHTML = activeCases.length ? activeCases.map(c=>{
       const rowCls = (c.slaCls==='sla-over'?'tr-sla-over':c.slaCls==='sla-critical'?'tr-sla-critical':'') + (c.priority==='Urgent'?' tr-urgent':'');
       return `<tr onclick="openCCCase('${c.mc}')" class="${rowCls}" style="cursor:pointer;">
-        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}</td>
+        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}${ccConvBadge(c)}</td>
         <td class="primary">${c.carrier}</td>
         <td><span class="status ${c.stageCls}">${c.stage}</span></td>
         <td style="font-size:12px;color:var(--text-muted);">${esc(c.officeName)}</td>
@@ -4502,7 +4567,7 @@ function renderCCView() {
         ? `<span class="status s-active" style="font-size:10px;">Setup</span>`
         : `<span class="status s-check" style="font-size:10px;">Quotation</span>`;
       return `<tr onclick="openCCCase('${c.mc}')" class="${rowCls}" style="cursor:pointer;">
-        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}</td>
+        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}${ccConvBadge(c)}</td>
         <td class="primary">${c.carrier}</td>
         <td>${typePill}</td>
         <td style="font-size:12px;color:var(--text-muted);">${c.broker}</td>
@@ -4519,7 +4584,7 @@ function renderCCView() {
     document.getElementById('ccTbody').innerHTML = activeCases.length ? activeCases.map(c=>{
       const rowCls = (c.slaCls==='sla-over'?'tr-sla-over':c.slaCls==='sla-critical'?'tr-sla-critical':'') + (c.priority==='Urgent'?' tr-urgent':'');
       return `<tr onclick="openCCCase('${c.mc}')" class="${rowCls}" style="cursor:pointer;">
-        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}</td>
+        <td class="mono" style="color:var(--accent);">${c.mc}${ccUrgentBadge(c)}${ccConvBadge(c)}</td>
         <td class="primary">${c.carrier}</td>
         <td><span class="status ${c.stageCls}">${c.stage}</span> ${ccWorkBadge(c)}</td>
         <td style="font-size:12px;color:var(--text-muted);">${esc(c.officeName)}</td>
@@ -4615,9 +4680,10 @@ function renderCustCompView() {
   const showAction = isCustomerComp || isAdmin;
   document.getElementById('custCompThead').innerHTML=`<tr><th>Case ID</th><th>Type</th><th>Company</th><th>Status</th><th>Assigned</th><th>SLA</th><th>Raised by</th></tr>`;
 
+  visibleCases = visibleCases.slice().sort((a,b)=>((b.priority==='Urgent')-(a.priority==='Urgent')));
   document.getElementById('compTbody').innerHTML = visibleCases.length ? visibleCases.map(c=>`
-    <tr onclick="openCompCase('${c.id}')" style="cursor:pointer;">
-      <td class="mono" style="color:var(--text-faint);font-size:11px;">${c.id}</td>
+    <tr onclick="openCompCase('${c.id}')" style="cursor:pointer;"${c.priority==='Urgent'?' class="tr-urgent"':''}>
+      <td class="mono" style="color:var(--text-faint);font-size:11px;">${c.id}${ccUrgentBadge(c)}${custConvBadge(c)}</td>
       <td><span class="status ${c.typeCls}">${c.type}</span></td>
       <td class="primary">${c.co}</td>
       <td><span class="status ${c.sCls}">${c.status}</span></td>
@@ -4693,17 +4759,19 @@ function openCompCase(id) {
         </select>
         <button class="btn btn-ghost btn-sm" onclick="compAssignCase('${c.id}')">Assign</button>
       </div></div>` : '';
-  const msgHtml = `<div class="d-sec"><div class="d-sec-label">Updates for the sales rep</div>
-      ${canWork ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${COMP_PRESETS.map((p,i)=>`<span class="fchip" style="cursor:pointer;font-size:11.5px;" onclick="compPickPreset(${i})">${esc(p.length>34?p.slice(0,34)+'…':p)}</span>`).join('')}</div>
-      <textarea id="compMsgText" placeholder="Write a status or timing update for the rep…" style="width:100%;min-height:70px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;"></textarea>
-      <div style="display:flex;gap:8px;align-items:center;margin:6px 0 10px;"><button class="btn btn-primary btn-sm" id="compMsgBtn" onclick="compSendMessage('${c.id}')">Send to rep</button><span style="font-size:11px;color:var(--text-faint);">Rep and Team Leader get a notification in the CRM.</span></div>` : ''}
-      <div id="compMsgList"></div></div>`;
+  // C-053: Urgent. The rep on the case can raise it; only Customer Compliance / Admin can set it back to normal.
+  const iAmRep = !!realUser && (c.raisedById===realUser.userId || c.ownerId===realUser.userId);
+  const priorityHtml = !isResolved ? ((isCustComp||isAdmin) ? `<div class="d-sec"><div class="d-sec-label">Priority</div><div style="margin-top:8px;">
+      <button class="btn btn-ghost btn-sm" style="${c.priority==='Urgent'?'border-color:var(--red);color:var(--red);':''}" onclick="compTogglePriority('${c.id}')">${c.priority==='Urgent'?'⚑ Urgent — click to make normal':'⚑ Mark urgent'}</button></div></div>`
+    : (iAmRep ? `<div class="d-sec"><div class="d-sec-label">Priority</div><div style="margin-top:8px;">${c.priority==='Urgent'
+        ? '<span style="font-size:12px;color:var(--red);">⚑ Marked URGENT — only Customer Compliance can set it back to normal.</span>'
+        : `<button class="btn btn-ghost btn-sm" style="border-color:var(--red);color:var(--red);" onclick="compTogglePriority('${c.id}')">⚑ Mark urgent</button>`}</div></div>` : '')) : '';
   document.getElementById('dTitle').textContent=c.co;
   renderDrawerTabs('none');
   const caseHtml = `
     <div class="d-sec"><div class="d-sec-label">Case Details</div>
       <div class="field-grid">
-        <div class="field-box"><div class="field-label">Case ID</div><div class="field-val">${c.id}</div></div>
+        <div class="field-box"><div class="field-label">Case ID</div><div class="field-val">${c.id}${ccUrgentBadge(c)}</div></div>
         <div class="field-box"><div class="field-label">Type</div><div class="field-val"><span class="status ${c.typeCls}">${c.type}</span></div></div>
         <div class="field-box"><div class="field-label">Status</div><div class="field-val"><span class="status ${c.sCls}">${c.status}</span></div></div>
         <div class="field-box"><div class="field-label">SLA</div><div class="field-val sla ${c.slaCls}">${c.sla}</div></div>
@@ -4716,13 +4784,13 @@ function openCompCase(id) {
     ${startHtml}
     ${assignHtml}
     ${reassignHtml}
-    ${msgHtml}
+    ${priorityHtml}
     ${(isCustComp||isAdmin) ? `    <div class="d-sec"><div class="d-sec-label">Activity</div>
       <div class="tl-item"><div class="tl-kind">OPEN</div><div class="tl-text">Case opened — routed to ${c.assigned}<div class="tl-time">Today</div></div></div>
       <div class="tl-item"><div class="tl-kind">RAISE</div><div class="tl-text">Submitted by ${c.by} via account check<div class="tl-time">Today</div></div></div>
     </div>` : ''}
 `;
-  compDrawer = { caseId:c.id, companyId:c.companyId, name:c.co, caseHtml, showTabs:(isCustComp||isAdmin)&&!!c.companyId };
+  compDrawer = { caseId:c.id, companyId:c.companyId, name:c.co, caseHtml, showTabs:(isCustComp||isAdmin)&&!!c.companyId, staff:(isCustComp||isAdmin), canWrite:((isCustComp||isAdmin||iAmRep) && !isResolved), isRep:iAmRep, resolved:isResolved };
   compShowTab('case');
   openDrawer();
 }
@@ -4751,14 +4819,17 @@ function compApplyDecision(caseId, companyId) {
 let compDrawer = null;
 function compTabsBar(active){
   const t=(k,l)=>`<div class="dtab${active===k?' active':''}" onclick="compShowTab('${k}')">${l}</div>`;
-  document.getElementById('drawerTabsBar').innerHTML = t('case','Case')+t('emails','Emails')+t('activity','Activity');
+  const n = compDrawer ? convN('customer', compDrawer.caseId) : 0;
+  const conv = t('conv','Conversation<span id="cuTabConvN">'+(n>0?' ('+n+')':'')+'</span>');
+  document.getElementById('drawerTabsBar').innerHTML = (compDrawer && compDrawer.showTabs) ? t('case','Case')+conv+t('emails','Emails')+t('activity','Activity') : t('case','Case')+conv;
 }
 function compShowTab(tab){
   const d = compDrawer; if(!d) return;
   const body = document.getElementById('dBody');
-  if(d.showTabs) compTabsBar(tab); else document.getElementById('drawerTabsBar').innerHTML='';
+  compTabsBar(tab);
   d.tab = tab;
-  if(tab==='case'){ body.innerHTML = d.caseHtml; compLoadMessages(d.caseId); return; }
+  if(tab==='case'){ body.innerHTML = d.caseHtml; return; }
+  if(tab==='conv'){ compRenderConvShell(d); compLoadMessages(d.caseId); convMarkRead('customer', d.caseId); return; }
   if(tab==='emails'){
     body.innerHTML = `<div class="d-sec"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
       <div class="d-sec-label" style="margin:0;">Emails to ${esc(d.name)}</div>
@@ -4861,6 +4932,31 @@ const COMP_PRESETS = [
   'Credit check is in progress. Expect an update by end of day.',
   'Need more information — please call the customer and confirm billing details.',
 ];
+// C-053: two-way conversation between the rep and Customer Compliance (everyone above the rep can read it)
+function custConvBadge(c) { const n = convN('customer', c.id); return n>0 ? ` <span class="conv-badge" title="${n} unread message${n===1?'':'s'}">💬 ${n}</span>` : ''; }
+function compRenderConvShell(d) {
+  const body = document.getElementById('dBody');
+  let composer = '';
+  if(d.canWrite && d.staff) {
+    composer = `<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px;">
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${COMP_PRESETS.map((p,i)=>`<span class="fchip" style="cursor:pointer;font-size:11.5px;" onclick="compPickPreset(${i})">${esc(p.length>34?p.slice(0,34)+'…':p)}</span>`).join('')}</div>
+      <textarea id="compMsgText" placeholder="Write to the rep…" style="width:100%;min-height:70px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;box-sizing:border-box;"></textarea>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:7px;">
+        <label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="compMsgInternal" style="accent-color:var(--amber);"> 🔒 Internal note (rep cannot see)</label>
+        <button class="btn btn-primary btn-sm" id="compMsgBtn" style="margin-left:auto;" onclick="compSendMessage('${d.caseId}')">Send</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">The rep and Team Leader are notified in the CRM, and an email goes from your own mailbox (copied to the compliance list as the record).</div></div>`;
+  } else if(d.canWrite && d.isRep) {
+    composer = `<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px;">
+      <textarea id="compMsgText" placeholder="Write your reply to Customer Compliance…" style="width:100%;min-height:62px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;box-sizing:border-box;"></textarea>
+      <div style="text-align:right;margin-top:7px;"><button class="btn btn-primary btn-sm" id="compMsgBtn" onclick="compSendMessage('${d.caseId}')">Send reply</button></div></div>`;
+  } else if(d.resolved) {
+    composer = '<div style="font-size:12px;color:var(--text-faint);border-top:1px solid var(--border);padding-top:10px;margin-top:6px;">This case is finished.</div>';
+  } else {
+    composer = '<div style="font-size:12px;color:var(--text-faint);border-top:1px solid var(--border);padding-top:10px;margin-top:6px;">You can read this conversation. Only the rep on the case and Customer Compliance can write in it.</div>';
+  }
+  body.innerHTML = `<div class="d-sec" style="margin-top:0;"><div class="d-sec-label">Conversation</div><div id="compMsgList" style="margin-top:10px;"><div style="padding:24px 0;text-align:center;color:var(--text-faint);font-size:13px;">Loading…</div></div>${composer}</div>`;
+}
 async function compLoadMessages(caseId) {
   const box = document.getElementById('compMsgList'); if(!box) return;
   try {
@@ -4871,21 +4967,46 @@ async function compLoadMessages(caseId) {
 }
 function compRenderMessages(rows) {
   const box = document.getElementById('compMsgList'); if(!box) return;
-  box.innerHTML = rows.length ? rows.map(m=>`<div class="tl-item"><div class="tl-kind">MSG</div><div class="tl-text">${esc(m.message_text)}<div class="tl-time">${esc(m.from_name||'Compliance')} · ${new Date(m.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</div></div></div>`).join('')
-    : `<div style="font-size:12px;color:var(--text-faint);padding:6px 0;">No updates sent yet.</div>`;
+  rows = Array.isArray(rows) ? rows : [];
+  const when = ts=>new Date(String(ts).endsWith('Z')?ts:ts+'Z').toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  box.innerHTML = rows.length ? rows.map(m=>{
+    const rep = m.kind==='reply', note = !!m.is_internal || m.kind==='note';
+    const bg = note ? 'rgba(245,158,11,0.12)' : (rep ? 'var(--surface-2)' : 'rgba(212,98,26,0.10)');
+    const bd = note ? 'var(--amber)' : 'var(--border)';
+    return `<div style="display:flex;justify-content:${rep?'flex-start':'flex-end'};margin-bottom:9px;"><div style="max-width:86%;background:${bg};border:1px solid ${bd};border-radius:8px;padding:8px 11px;">
+      <div style="font-size:10.5px;color:var(--text-faint);margin-bottom:3px;"><b style="color:var(--text);">${esc(m.from_name||'Compliance')}</b> · ${esc(when(m.created_at))}${note?' · <span style="color:var(--amber);">🔒 Internal note — the rep cannot see this</span>':''}</div>
+      <div style="font-size:13px;white-space:pre-wrap;word-break:break-word;">${esc(m.message_text)}</div></div></div>`;
+  }).join('') : `<div style="font-size:12px;color:var(--text-faint);padding:14px 0;text-align:center;">No messages yet.</div>`;
+  box.scrollTop = box.scrollHeight;
 }
 function compPickPreset(i) { const t=document.getElementById('compMsgText'); if(t){ t.value = COMP_PRESETS[i]; t.focus(); } }
 async function compSendMessage(caseId) {
   const t = document.getElementById('compMsgText'); const text = (t.value||'').trim();
   if(!text) { showToast('Type a message first.'); return; }
-  const btn = document.getElementById('compMsgBtn'); btn.disabled = true; btn.textContent = 'Sending…';
+  const internal = !!(document.getElementById('compMsgInternal') && document.getElementById('compMsgInternal').checked);
+  const btn = document.getElementById('compMsgBtn'); const oldLbl = btn.textContent; btn.disabled = true; btn.textContent = 'Sending…';
   try {
-    const res = await apiFetch(`/api/compliance-cases/${encodeURIComponent(caseId)}/messages`, { method:'POST', body: JSON.stringify({ text }) });
+    const res = await apiFetch(`/api/compliance-cases/${encodeURIComponent(caseId)}/messages`, { method:'POST', body: JSON.stringify({ text, internal }) });
     const j = await res.json().catch(()=>({}));
     if(!res.ok) { showToast(j.error || 'Could not send.'); return; }
-    t.value=''; compRenderMessages(j); showToast('Sent to the rep and their Team Leader.');
+    window.__ticketMailWarn = false;
+    if(j.mail) { try { await sendTicketMailFromMe(j.mail); } catch(e) {} }
+    t.value=''; compRenderMessages(j.messages);
+    showToast((internal ? 'Internal note saved.' : 'Sent.') + (j.mail ? ticketMailNote() : ''));
   } catch(e) { showToast('Could not send.'); }
-  finally { btn.disabled = false; btn.textContent = 'Send to rep'; }
+  finally { btn.disabled = false; btn.textContent = oldLbl; }
+}
+async function compTogglePriority(caseId) {
+  const c = realComplianceCases.find(x=>x.id===caseId); if(!c) return;
+  const pr = c.priority==='Urgent' ? 'Normal' : 'Urgent';
+  try {
+    const res = await apiFetch(`/api/compliance-cases/${encodeURIComponent(caseId)}/priority`, { method:'PATCH', body: JSON.stringify({ priority: pr }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not change the priority.'); return; }
+    await loadRealComplianceCases();
+    showToast(pr==='Urgent' ? 'Marked URGENT — leaders notified.' : 'Back to normal priority.');
+    openCompCase(caseId);
+  } catch(e) { showToast('Could not change the priority.'); }
 }
 
 async function compHoldCase(caseId, reason) {
@@ -5380,7 +5501,7 @@ function openAddCo() {
   fillSelect(document.getElementById('addCoTimezone'), US_TIMEZONES, '— Not yet known —');
   document.getElementById('addCoLoadFreq').innerHTML = '<option value="">— Not yet known —</option>' + LOAD_FREQUENCIES.map(o=>`<option>${o}</option>`).join('');
   document.getElementById('addCoLoadVolume').innerHTML = '<option value="">— Not yet known —</option>' + LOAD_VOLUMES.map(o=>`<option>${o}</option>`).join('');
-  ['addCoHqCity','addCoHqState','addCoHqZip','addCoCommodity'].forEach(id=>document.getElementById(id).value='');
+  ['addCoHqAddress','addCoHqCity','addCoHqState','addCoHqZip','addCoCommodity'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
   addCoDraftLanes = [];
   addCoDraftEquipment = [];
   document.getElementById('addCoLaneEntry').value = '';
@@ -5521,6 +5642,7 @@ function addCoContinueToContact() {
     location: document.getElementById('addCoLocation').value || (myLocations()[0] || ''),
     industry: document.getElementById('addCoIndustry').value,
     bizType: document.getElementById('addCoBizType').value,
+    hqAddress: (document.getElementById('addCoHqAddress')||{value:''}).value.trim(),
     hqCity: document.getElementById('addCoHqCity').value.trim(),
     hqState: document.getElementById('addCoHqState').value.trim(),
     hqZip: document.getElementById('addCoHqZip').value.trim(),
@@ -5568,7 +5690,7 @@ function addCoFinish(withContact) {
   customers.push({
     id:newId, name:d.name, domain:d.domain,
     location: d.location, industry:d.industry, bizType:d.bizType,
-    hqCity:d.hqCity, hqState:d.hqState, hqZip:d.hqZip,
+    hqAddress:d.hqAddress||'', hqCity:d.hqCity, hqState:d.hqState, hqZip:d.hqZip,
     employeeRange:d.employeeRange, revenueRange:d.revenueRange, timezone:d.timezone,
     commodity:d.commodity, lanes:d.lanesList.join(', '), lanesList:d.lanesList,
     loadFreq:d.loadFreq, loadVolume:d.loadVolume,
@@ -5586,7 +5708,7 @@ function addCoFinish(withContact) {
       method:'POST',
       body: JSON.stringify({
         name:d.name, domain:d.domain, noWebsite: !!d.noWebsite, location:d.location, industry:d.industry,
-        bizType:d.bizType, hqCity:d.hqCity, hqState:d.hqState, hqZip:d.hqZip,
+        bizType:d.bizType, hqAddress:d.hqAddress||'', hqCity:d.hqCity, hqState:d.hqState, hqZip:d.hqZip,
         employeeRange:d.employeeRange, revenueRange:d.revenueRange, timezone:d.timezone,
         commodity:d.commodity, lanes:d.lanesList, loadFreq:d.loadFreq, loadVolume:d.loadVolume,
         equipment:d.equipmentList,
@@ -6168,6 +6290,7 @@ function updateNavBadges() {
   // same treatment the Customer Compliance badge above got.
   const carrierBadge = document.getElementById('navCarrierBadge');
   if(carrierBadge) carrierBadge.textContent = realCarrierChecks.filter(c=>!c.resolvedAt).length;
+  if(typeof convRenderBadges==='function') convRenderBadges();
 }
 
 // ── PROSPECT COMPANIES VIEW ───────────────────────────────────
@@ -6299,7 +6422,21 @@ function ticketMailNote() {
   return w ? ' ⚠ The email to Compliance was NOT sent — click "Connect Mailbox" (Microsoft sign-in needed) or tell them directly. They can still see it in the CRM.' : '';
 }
 
-async function submitForCompliance(id) {
+// C-053: ask for the priority first (real sign-in only)
+function submitForCompliance(id) {
+  const c = customers.find(x=>x.id===id); if(!c) return;
+  if(!realUser) return submitForComplianceGo(id, 'Normal');
+  window.__custSubmitId = id;
+  document.getElementById('custSubmitSub').textContent = c.name + ' — Customer Eligibility review.';
+  document.getElementById('custSubmitPri').value = 'Normal';
+  document.getElementById('custSubmitModal').classList.add('open');
+}
+function custSubmitCancel() { document.getElementById('custSubmitModal').classList.remove('open'); }
+function custSubmitGo() {
+  const id = window.__custSubmitId; const pr = document.getElementById('custSubmitPri').value === 'Urgent' ? 'Urgent' : 'Normal';
+  custSubmitCancel(); submitForComplianceGo(id, pr);
+}
+async function submitForComplianceGo(id, priority) {
   const c = customers.find(x=>x.id===id);
   if(!c) return;
   const caseId = 'CEL-'+Math.floor(Math.random()*9000+1000);
@@ -6308,7 +6445,7 @@ async function submitForCompliance(id) {
     try {
       const res = await apiFetch('/api/compliance-cases', {
         method: 'POST',
-        body: JSON.stringify({ caseId, caseType: 'Customer Eligibility', companyId: id, slaHours: 48, }),
+        body: JSON.stringify({ caseId, caseType: 'Customer Eligibility', companyId: id, slaHours: 48, priority: priority==='Urgent' ? 'Urgent' : 'Normal' }),
       });
       if(!res.ok) { showToast('Could not submit for Compliance — please try again.'); return; }
       window.__ticketMailWarn = false;
@@ -6973,16 +7110,10 @@ function umToggleLoc(id, loc, on) {
   saveAssignedLocationsReal(id, u.assignedLocations);
   showToast(`${locationName(loc)} ${on?'added to':'removed from'} ${u.name}.`);
 }
-async function umSetCarrierAway(userId, on) {
+function umSetCarrierAway(userId, on) {
   const u = usersDB.find(x=>x.id===userId); if(!u) return;
-  try {
-    const res = await apiFetch('/api/carrier-away', { method:'PATCH', body: JSON.stringify({ userId, away: !!on }) });
-    const j = await res.json().catch(()=>({}));
-    if(!res.ok) { showToast(j.error || 'Could not change the away switch.'); openUserDrawer(userId); return; }
-    u.carrierAway = !!on;
-    showToast(on ? `${u.name} marked away${j.moved?' - '+j.moved+' open MC(s) moved to others':''}.` : `${u.name} is back in the rotation.`);
-    loadRealCarrierChecks();
-  } catch(e) { showToast('Could not change the away switch.'); }
+  if(on) { ccAwayOpen(userId, 'Mark '+u.name+' away'); return; }
+  ccAwaySend(userId, false, null);
 }
 function umDrawerAddLoc(id, loc) { addAssignedLoc(id, loc); openUserDrawer(id); }
 function umDrawerRemoveLoc(id, loc) { removeAssignedLoc(id, loc); openUserDrawer(id); }
@@ -7133,7 +7264,7 @@ ${multiLoc && isGlobal ? '' : `        <div class="field-box">
       </div>
       <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;margin-bottom:10px;">
         <input type="checkbox" ${u.carrierAway?'checked':''} style="accent-color:var(--accent);" onchange="umSetCarrierAway('${u.id}',this.checked)">
-        <span>🏖 <b>Away / on leave</b> — skipped by the round robin; their open MCs move to the rest of the office</span>
+        <span>🏖 <b>Away / on leave</b> — skipped by the round robin until the date you choose; their open MCs move to the rest of the office${u.carrierAway&&u.carrierAwayUntil?` <b style="color:var(--amber);">(back ${esc(ccWhen(u.carrierAwayUntil))})</b>`:''}</span>
       </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
         <input type="checkbox" ${u.isCarrierManager?'checked':''} style="accent-color:var(--accent);" onchange="umSetCarrierManager('${u.id}',this.checked)">
@@ -7698,13 +7829,117 @@ function submitNewUser() {
 }
 
 // ── CO FIELD UPDATER ─────────────────────────────────────────
+// ── C-053: street address pick-list (Google Places, "new" API, called straight from the browser) ──
+// The key comes from the Function App setting GOOGLE_MAPS_API_KEY via /api/app-config. If it is empty the
+// street box simply works as a normal text box. One session token per typed address keeps Google billing to one search.
+let _mapsKey = null;
+async function coMapsKey() {
+  if(_mapsKey !== null) return _mapsKey;
+  _mapsKey = '';
+  try { const r = await apiFetch('/api/app-config'); if(r.ok) { const j = await r.json(); _mapsKey = j.mapsKey || ''; } } catch(e) {}
+  return _mapsKey;
+}
+let _acBox = null, _acTok = null, _acTimer = null, _acSeq = 0;
+function coAcHide() { if(_acBox) _acBox.style.display = 'none'; }
+function coAddrInit(input, coId) {
+  if(input.dataset.ac === '1') return;
+  input.dataset.ac = '1';
+  input.setAttribute('autocomplete','off');
+  input.addEventListener('input', ()=>{
+    clearTimeout(_acTimer);
+    const q = input.value.trim();
+    if(q.length < 4) { coAcHide(); return; }
+    _acTimer = setTimeout(()=>coAcSearch(input, coId, q), 280);
+  });
+  input.addEventListener('blur', ()=>setTimeout(coAcHide, 250));
+  input.addEventListener('keydown', e=>{ if(e.key==='Escape') coAcHide(); });
+}
+function coAcShow(input, items) {
+  if(!_acBox) {
+    _acBox = document.createElement('div');
+    _acBox.style.cssText = 'position:fixed;z-index:500;background:var(--surface-1,#fff);border:1px solid var(--border);border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.25);max-height:240px;overflow-y:auto;font-size:13px;';
+    document.body.appendChild(_acBox);
+  }
+  const r = input.getBoundingClientRect();
+  _acBox.style.left = r.left+'px'; _acBox.style.top = (r.bottom+2)+'px'; _acBox.style.width = Math.max(r.width, 280)+'px';
+  _acBox.style.background = getComputedStyle(document.body).getPropertyValue('--surface-2') || '#fff';
+  _acBox.innerHTML = '';
+  items.forEach(it=>{
+    const d = document.createElement('div');
+    d.style.cssText = 'padding:8px 11px;cursor:pointer;border-bottom:1px solid var(--border);color:var(--text);';
+    d.textContent = it.text;
+    d.addEventListener('mousedown', ev=>{ ev.preventDefault(); coAcPick(input, it); });
+    d.addEventListener('mouseover', ()=>{ d.style.background='var(--surface-3)'; });
+    d.addEventListener('mouseout', ()=>{ d.style.background=''; });
+    _acBox.appendChild(d);
+  });
+  _acBox.style.display = items.length ? 'block' : 'none';
+}
+async function coAcSearch(input, coId, q) {
+  const key = await coMapsKey(); if(!key) return;
+  if(!_acTok) _acTok = (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now())+Math.random();
+  const seq = ++_acSeq;
+  try {
+    const res = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
+      method:'POST', headers:{'Content-Type':'application/json','X-Goog-Api-Key':key},
+      body: JSON.stringify({ input:q, sessionToken:_acTok, includedRegionCodes:['us','ca','mx'], includedPrimaryTypes:['street_address','premise','subpremise','route'] }),
+    });
+    if(!res.ok || seq !== _acSeq) return;
+    const j = await res.json();
+    const items = (j.suggestions||[]).filter(x=>x.placePrediction).slice(0,6).map(x=>({ id:x.placePrediction.placeId, text:(x.placePrediction.text&&x.placePrediction.text.text)||'', coId }));
+    coAcShow(input, items);
+  } catch(e) { /* offline or key restricted - the box stays a plain text box */ }
+}
+async function coAcPick(input, it) {
+  coAcHide();
+  const key = await coMapsKey(); if(!key) return;
+  try {
+    const res = await fetch('https://places.googleapis.com/v1/places/'+encodeURIComponent(it.id)+'?sessionToken='+encodeURIComponent(_acTok||''), {
+      headers:{'X-Goog-Api-Key':key,'X-Goog-FieldMask':'addressComponents'},
+    });
+    _acTok = null;
+    if(!res.ok) return;
+    const j = await res.json();
+    const a = coParseAddress(j.addressComponents||[]);
+    if(!a.street && !a.city) return;
+    coApplyAddress(it.coId, a, input);
+  } catch(e) { _acTok = null; }
+}
+function coParseAddress(comps) {
+  const get = (type, short)=>{ const c = comps.find(x=>(x.types||[]).includes(type)); return c ? (short ? c.shortText : c.longText) || '' : ''; };
+  const num = get('street_number'), route = get('route', true) || get('route'), sub = get('subpremise');
+  return {
+    street: [num, route].filter(Boolean).join(' ') + (sub ? ' #'+sub.replace(/^#/,'') : ''),
+    city: get('locality') || get('postal_town') || get('sublocality_level_1') || get('sublocality') || get('administrative_area_level_3'),
+    state: get('administrative_area_level_1', true),
+    zip: get('postal_code'),
+  };
+}
+function coApplyAddress(coId, a, input) {
+  if(!coId) { // Add Company window
+    input.value = a.street;
+    const set = (id,v)=>{ const e=document.getElementById(id); if(e) e.value = v||''; };
+    set('addCoHqCity', a.city); set('addCoHqState', a.state); set('addCoHqZip', a.zip);
+    return;
+  }
+  const c = customers.find(x=>x.id===coId); if(!c) return;
+  c.hqAddress = a.street; c.hqCity = a.city||'—'; c.hqState = a.state||'—'; c.hqZip = a.zip||'—';
+  c.lastUpdated = 'Just now'; c.updatedBy = currentUserName(); c.updatedAt = nowStamp();
+  persistCompanyField(coId, 'hqAddress', a.street);
+  persistCompanyField(coId, 'hqCity', a.city||'—'); persistCompanyField(coId, 'hqState', a.state||'—'); persistCompanyField(coId, 'hqZip', a.zip||'—');
+  const set = (id,v)=>{ const e=document.getElementById(id); if(e) e.value = (v==='—'?'':v)||''; };
+  input.value = a.street; set('hqCity-'+coId, c.hqCity); set('hqState-'+coId, c.hqState); set('hqZip-'+coId, c.hqZip);
+  logActivity(coId,'STATUS',`Headquarters address updated to <strong>${esc([a.street,a.city,a.state,a.zip].filter(Boolean).join(', '))}</strong> by ${esc(currentUserName())}.`);
+  showToast('Address filled in: '+[a.street,a.city,a.state,a.zip].filter(Boolean).join(', '));
+}
+
 function updateCoField(id, field, value) {
   const c = customers.find(x=>x.id===id);
   if(!c) return;
   const labels = {
     ff:'FF #', mc:'MC #', dot:'DOT #',
     industry:'Industry', bizType:'Business Type',
-    hqCity:'Headquarters City', hqState:'Headquarters State', hqZip:'Headquarters ZIP',
+    hqAddress:'Street Address', hqCity:'Headquarters City', hqState:'Headquarters State', hqZip:'Headquarters ZIP',
     employeeRange:'Number of Employees', revenueRange:'Annual Revenue', timezone:'Time Zone',
     commodity:'Commodity / Freight Type', lanes:'Typical Lanes', loadFreq:'Load Frequency', loadVolume:'Load Volume', equipment:'Preferred Equipment',
     linkedinUrl:'LinkedIn', facebookUrl:'Facebook', twitterUrl:'Twitter / X',
@@ -7712,7 +7947,7 @@ function updateCoField(id, field, value) {
   // Social links stay blank when cleared rather than the usual '—'
   // placeholder — an anchor tag pointing at the text "—" would be a
   // broken link, not an empty field.
-  const blanksToEmpty = ['linkedinUrl','facebookUrl','twitterUrl'];
+  const blanksToEmpty = ['linkedinUrl','facebookUrl','twitterUrl','hqAddress'];
   c[field] = value || (blanksToEmpty.includes(field) ? '' : '—');
   c.lastUpdated = 'Just now';
   c.updatedBy = currentUserName();
@@ -8224,6 +8459,7 @@ function switchCCTab(tab, btn) {
   if(pane) pane.style.display='block';
   if(!btn) document.querySelectorAll('.cc-dtab').forEach(b=>{ if((b.getAttribute('onclick')||'').indexOf("'"+tab+"'")>-1) b.classList.add('active'); });
   if(['msgs','files','tl','hist'].includes(tab)) ccLoadTab(tab);
+  if(tab==='msgs') ccMarkConvRead();
 }
 
 // ── CARRIER COMPLIANCE CASE DRAWER ───────────────────────────
@@ -8423,6 +8659,18 @@ function openCCCase(mc, forceTab, keepPin) {
         <button class="btn btn-ghost btn-sm" style="${c.priority==='Urgent'?'border-color:var(--red);color:var(--red);':''}" onclick="ccTogglePriority('${mc}')">${c.priority==='Urgent'?'⚑ Urgent — click to make normal':'⚑ Mark urgent'}</button>
       </div>
     </div>` : '';
+  // C-053: what the broker who submitted the MC can do - raise it to Urgent, or move a Good to Go quotation on to Setup
+  const iAmBroker = ccIsMyBroker(c) && !!c.checkId;
+  const brokerHtml = iAmBroker ? `
+    <div class="d-sec">
+      <div class="d-sec-label">Your MC</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center;">
+        ${!c.resolvedAt ? (c.priority==='Urgent'
+          ? '<span style="font-size:12px;color:var(--red);">⚑ Marked URGENT — only Carrier Compliance can set it back to normal.</span>'
+          : `<button class="btn btn-ghost btn-sm" style="border-color:var(--red);color:var(--red);" onclick="ccTogglePriority('${mc}')">⚑ Mark urgent</button>`) : ''}
+        ${(c.resolvedAt && c.type==='quotation' && c.ccStatus==='Good to Go') ? `<button class="btn btn-primary btn-sm" onclick="ccSetupOpen('${mc}')">➜ Move to Setup</button><span style="font-size:11.5px;color:var(--text-faint);">Good to go — ready to set this carrier up?</span>` : ''}
+      </div>
+    </div>` : '';
   const reopenHtml = (workerNow && c.resolvedAt) ? `
     <div class="d-sec">
       <div class="d-sec-label">Reopen this check</div>
@@ -8466,7 +8714,7 @@ function openCCCase(mc, forceTab, keepPin) {
       <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span class="status ${c.stageCls}">${c.stage}</span>
         <span data-sla="${mcKey}" style="font-size:12px;color:${slaColour};font-family:var(--mono);">${c.sla}</span>
-        ${ccWorkBadge(c)}${ccUrgentBadge(c)}${c.reopenCount?`<span style="font-size:11px;color:var(--text-faint);">reopened ${c.reopenCount}×</span>`:''}${c.ccStatus?` ${statusBadge}`:''}
+        ${ccWorkBadge(c)}${ccUrgentBadge(c)}${c.reopenCount?`<span style="font-size:11px;color:var(--text-faint);">reopened ${c.reopenCount}×</span>`:''}${(c.ccStatus && c.ccStatus!=='Info Requested')?` ${statusBadge}`:''}
       </div>
       ${isSetup ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <span style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;">Onboarding:</span>
@@ -8478,6 +8726,7 @@ function openCCCase(mc, forceTab, keepPin) {
     </div>
     ${dispSection}
     ${(isCoiSpec && isSetup) ? '' : (c.resolvedAt && ccStaffRole() ? (reopenHtml || '') : flowHtml + actionHtml)}
+    ${brokerHtml}
   `;
 
   // ── CARRIER ONBOARDING PANE ──
@@ -8505,7 +8754,7 @@ function openCCCase(mc, forceTab, keepPin) {
       <button class="cc-dtab${activeTab==='overview'?' active':''}" onclick="switchCCTab('overview',this)">Overview</button>
       ${isSetup ? `<button class="cc-dtab${activeTab==='onboard'?' active':''}" onclick="switchCCTab('onboard',this)">Carrier Onboarding</button>` : ''}
       ${isSetup && (isCarrCC || isCoiSpec || isAdmin) ? `<button class="cc-dtab${activeTab==='coi'?' active':''}" onclick="switchCCTab('coi',this)">COI Verification</button>` : ''}
-      <button class="cc-dtab${activeTab==='msgs'?' active':''}" onclick="switchCCTab('msgs',this)">Conversation</button>
+      <button class="cc-dtab${activeTab==='msgs'?' active':''}" onclick="switchCCTab('msgs',this)">Conversation<span id="ccTabConvN">${ccConvTabN(c)}</span></button>
       <button class="cc-dtab${activeTab==='files'?' active':''}" onclick="switchCCTab('files',this)">Files</button>
       <button class="cc-dtab${activeTab==='tl'?' active':''}" onclick="switchCCTab('tl',this)">Timeline</button>
       ${ccStaffRole() ? `<button class="cc-dtab${activeTab==='hist'?' active':''}" onclick="switchCCTab('hist',this)">History</button>` : ''}
@@ -11022,7 +11271,7 @@ function mapCompany(c) {
   return {
     id: c.company_id, name: c.name, domain: String(c.domain||'').endsWith('.invalid') ? '' : (c.domain || ''), noWebsite: String(c.domain||'').endsWith('.invalid'),
     location: c.location_id || '', industry: c.industry_id || '', bizType: c.business_type_id || '',
-    hqCity: c.hq_city || '', hqState: c.hq_state || '', hqZip: c.hq_zip || '',
+    hqAddress: c.hq_address || '', hqCity: c.hq_city || '', hqState: c.hq_state || '', hqZip: c.hq_zip || '',
     employeeRange: c.employee_range_id || '', revenueRange: c.revenue_range_id || '',
     timezone: c.timezone_id || '', commodity: c.commodity || '', lanes: c.lanes || '',
     lanesList: Array.isArray(c.lanesList) ? c.lanesList : (c.lanes ? c.lanes.split(',').map(s=>s.trim()).filter(Boolean) : []),
@@ -11256,6 +11505,7 @@ function mapComplianceCase(r) {
     status: r.status, sCls: CASE_STATUS_CLASS[r.status] || 's-pending',
     assigned: r.assigned_to_name || '—', sla: sla.text, slaCls: sla.cls,
     by: r.raised_by_name || '—',
+    priority: r.priority === 'Urgent' ? 'Urgent' : 'Normal', raisedById: r.raised_by_user_id || null, ownerId: r.company_owner_id || null,
     resolvedAt: r.resolved_at ? new Date(r.resolved_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : null,
     creditCap: r.credit_cap, blacklistReason: r.blacklist_reason,
     pickedUpBy: r.picked_up_by_name || '', pickedUpAt: r.picked_up_at ? new Date(r.picked_up_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '',
@@ -11277,6 +11527,7 @@ async function loadRealComplianceCases() {
 function applyComplianceRows(rows) {
   realComplianceCases = rows.map(mapComplianceCase);
   renderCustCompView();
+  convStartPolling();
   // Also runs here (not just from loadRealCompanies()) because the two loads happen in
   // parallel — without this the sidebar badge could be left reading a stale count.
   updateNavBadges();
@@ -11418,6 +11669,78 @@ function ccWorkBadge(c) {
   return `<span class="status ${cls}">${c.workStatus||'New'}</span>`;
 }
 function ccUrgentBadge(c) { return c.priority==='Urgent' ? ' <span style="background:var(--red);color:#fff;border-radius:3px;padding:1px 5px;font-size:9.5px;font-weight:700;letter-spacing:0.05em;vertical-align:middle;">URGENT</span>' : ''; }
+// ── C-053: unread conversation counts (carrier + customer) ──
+const CONV = { carrier:{}, customer:{}, timer:null };
+const convN = (kind,id)=>Number((CONV[kind]||{})[id])||0;
+function ccConvBadge(c) { const n = c && c.checkId ? convN('carrier', c.checkId) : 0; return n>0 ? ` <span class="conv-badge" title="${n} unread message${n===1?'':'s'}">💬 ${n}</span>` : ''; }
+function ccConvTabN(c) { const n = c && c.checkId ? convN('carrier', c.checkId) : 0; return n>0 ? ` (${n})` : ''; }
+function convRenderBadges() {
+  const sum = (o)=>Object.values(o||{}).reduce((a,b)=>a+(Number(b)||0),0);
+  const cn = sum(CONV.carrier), un = sum(CONV.customer);
+  const a = document.getElementById('navCarrierMsg'), b = document.getElementById('navCustMsg');
+  if(a) { a.textContent = cn>0 ? '💬 '+cn : ''; a.style.display = cn>0 ? '' : 'none'; }
+  if(b) { b.textContent = un>0 ? '💬 '+un : ''; b.style.display = un>0 ? '' : 'none'; }
+}
+async function convLoadUnread() {
+  if(!realUser) return;
+  try {
+    const res = await apiFetch('/api/conv-unread');
+    if(!res.ok) return;
+    const j = await res.json();
+    CONV.carrier = j.carrier || {}; CONV.customer = j.customer || {};
+    convRenderBadges();
+    const t = document.getElementById('ccTabConvN'); const c = (typeof ccCur==='function') ? ccCur() : null;
+    if(t && c) t.textContent = ccConvTabN(c);
+    const t2 = document.getElementById('cuTabConvN');
+    if(t2 && typeof CU_CUR!=='undefined' && CU_CUR) t2.textContent = convN('customer', CU_CUR) > 0 ? ' ('+convN('customer', CU_CUR)+')' : '';
+    if(typeof renderCCView==='function' && document.getElementById('view-carrier-compliance') && document.getElementById('view-carrier-compliance').classList.contains('active')) renderCCView();
+    if(typeof renderCustCompView==='function' && document.getElementById('view-customer-compliance') && document.getElementById('view-customer-compliance').classList.contains('active')) renderCustCompView();
+  } catch(e) { /* ignore */ }
+}
+function convStartPolling() { if(CONV.timer) return; CONV.timer = setInterval(()=>{ if(!document.hidden) convLoadUnread(); }, 60000); convLoadUnread(); }
+async function convMarkRead(kind, id) {
+  if(!realUser || !id) return;
+  const had = convN(kind, id) > 0;
+  if(CONV[kind]) CONV[kind][id] = 0;
+  try { await apiFetch('/api/conv-read', { method:'POST', body: JSON.stringify({ kind, id }) }); } catch(e) {}
+  if(had) {
+    convRenderBadges();
+    const t = document.getElementById(kind==='carrier'?'ccTabConvN':'cuTabConvN'); if(t) t.textContent = '';
+    if(kind==='carrier' && typeof renderCCView==='function') { try { renderCCView(); } catch(e) {} }
+    if(kind==='customer' && typeof renderCustCompView==='function') { try { renderCustCompView(); } catch(e) {} }
+  }
+}
+function ccMarkConvRead() { const c = ccCur(); if(c && c.checkId) convMarkRead('carrier', c.checkId); }
+
+// ── C-053: broker moves a Good to Go quotation on to Setup ──
+function ccSetupOpen(mc) {
+  const c = ccFind(mc); if(!c) return;
+  CC_TK.setupMc = mc;
+  ['cst-dn','cst-dp','cst-de','cst-pd','cst-lt','cst-co'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  const co = document.getElementById('cst-co'); if(co && c.commodity) co.value = c.commodity;
+  const lt = document.getElementById('cst-lt'); if(lt && c.loadtype) { for(const o of lt.options) if(o.value===c.loadtype||o.text===c.loadtype) lt.value=o.value; }
+  document.getElementById('ccSetupSub').textContent = `${c.mc} · ${c.carrier||''}. This MC stays the same ticket with the same conversation. Carrier Compliance gets a fresh 15-minute timer for the Setup.`;
+  document.getElementById('ccSetupModal').classList.add('open');
+}
+function ccSetupClose() { document.getElementById('ccSetupModal').classList.remove('open'); }
+async function ccSetupSend() {
+  const c = ccFind(CC_TK.setupMc); if(!c) return;
+  const v = id=>(document.getElementById(id).value||'').trim();
+  const body = { dispatcherName:v('cst-dn'), dispatcherPhone:v('cst-dp'), dispatcherEmail:v('cst-de'), pickupDate:v('cst-pd'), loadType:v('cst-lt'), commodity:v('cst-co') };
+  if(Object.values(body).some(x=>!x)) { showToast('Please fill in every field for Setup.'); return; }
+  try {
+    const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/to-setup', { method:'PATCH', body: JSON.stringify(body) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not move to Setup.'); return; }
+    window.__ticketMailWarn = false;
+    if(j.mail) { try { await sendTicketMailFromMe(j.mail); } catch(e) {} }
+    ccSetupClose();
+    CC_TK.events = null;
+    await loadRealCarrierChecks();
+    showToast(c.mc+' moved to Setup — Carrier Compliance has been told.' + (j.mail ? ticketMailNote() : ''));
+    openCCCase(c.mc, 'overview', true);
+  } catch(e) { showToast('Could not move to Setup.'); }
+}
 function ccWhen(ts) {
   if(!ts) return '';
   const d = new Date(String(ts).endsWith('Z') ? ts : ts+'Z');
@@ -11427,19 +11750,57 @@ function ccCanManageTpl() { return currentRole==='Admin' || (currentRole==='Carr
 function ccHeadExtras() {
   if(!realUser) return '';
   let h = '';
-  if(currentRole==='Carrier Compliance') h += `<button class="btn btn-ghost btn-sm" id="ccAwayBtn" onclick="ccToggleAway()" title="When you are away, new MCs skip you and your open MCs move to the rest of the office">${realUser.carrierAway?'🏖 I am away — click to come back':'🏖 Mark me away'}</button>`;
+  if(currentRole==='Carrier Compliance') h += `<button class="btn btn-ghost btn-sm" id="ccAwayBtn" onclick="ccToggleAway()" title="When you are away, new MCs skip you and your open MCs move to the rest of the office">${realUser.carrierAway?('🏖 Away'+(realUser.carrierAwayUntil?' until '+esc(ccWhen(realUser.carrierAwayUntil)):'')+' — click to come back'):'🏖 Mark me away'}</button>`;
   if(ccCanManageTpl()) h += `<button class="btn btn-ghost btn-sm" onclick="openCcTplManager()">✎ Templates</button>`;
   return h;
 }
-async function ccToggleAway() {
+// C-053: timed away. Coming back is one click; going away asks until when.
+let CC_AWAY_TARGET = null;
+function ccToggleAway() {
   if(!realUser) return;
-  const want = !realUser.carrierAway;
+  if(realUser.carrierAway) { ccAwaySend(null, false, null); return; }
+  ccAwayOpen(null, 'Mark me away');
+}
+function ccAwayOpen(userId, title) {
+  CC_AWAY_TARGET = userId || null;
+  document.getElementById('ccAwayTitle').textContent = title || 'Mark away';
+  ccAwayPreset(3);
+  document.getElementById('ccAwayModal').classList.add('open');
+}
+function ccAwayPreset(days) {
+  const d = new Date(Date.now() + days*86400000); d.setHours(8,0,0,0);
+  if(d.getTime() <= Date.now()) d.setTime(Date.now() + days*86400000);
+  const pad = n=>String(n).padStart(2,'0');
+  document.getElementById('ccAwayUntil').value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function ccAwayCancel() {
+  document.getElementById('ccAwayModal').classList.remove('open');
+  if(CC_AWAY_TARGET && typeof openUserDrawer==='function') { try { openUserDrawer(CC_AWAY_TARGET); } catch(e) {} }
+  CC_AWAY_TARGET = null;
+}
+async function ccAwayConfirm() {
+  const v = document.getElementById('ccAwayUntil').value;
+  const d = v ? new Date(v) : null;
+  if(!d || isNaN(d.getTime()) || d.getTime() <= Date.now()) { showToast('Pick a date and time in the future.'); return; }
+  const target = CC_AWAY_TARGET; CC_AWAY_TARGET = null;
+  document.getElementById('ccAwayModal').classList.remove('open');
+  await ccAwaySend(target, true, d.toISOString());
+}
+async function ccAwaySend(userId, want, untilIso) {
+  const body = { away: want }; if(userId) body.userId = userId; if(want && untilIso) body.until = untilIso;
   try {
-    const res = await apiFetch('/api/carrier-away', { method:'PATCH', body: JSON.stringify({ away: want }) });
+    const res = await apiFetch('/api/carrier-away', { method:'PATCH', body: JSON.stringify(body) });
     const j = await res.json().catch(()=>({}));
-    if(!res.ok) { showToast(j.error || 'Could not change the away switch.'); return; }
-    realUser.carrierAway = want;
-    showToast(want ? 'You are marked away.' + (j.moved ? ` ${j.moved} open MC(s) moved to others.` : '') : 'Welcome back — you are in the rotation again.');
+    if(!res.ok) { showToast(j.error || 'Could not change the away switch.'); if(userId && typeof openUserDrawer==='function') openUserDrawer(userId); return; }
+    if(userId) {
+      const u = usersDB.find(x=>x.id===userId);
+      if(u) { u.carrierAway = want; u.carrierAwayUntil = want ? untilIso : null; }
+      showToast(want ? `${u?u.name:'Person'} marked away until ${ccWhen(untilIso)}${j.moved?' - '+j.moved+' open MC(s) moved to others':''}.` : `${u?u.name:'Person'} is back in the rotation.`);
+      if(typeof openUserDrawer==='function') openUserDrawer(userId);
+    } else {
+      realUser.carrierAway = want; realUser.carrierAwayUntil = want ? untilIso : null;
+      showToast(want ? `You are marked away until ${ccWhen(untilIso)}.` + (j.moved ? ` ${j.moved} open MC(s) moved to others.` : '') : 'Welcome back — you are in the rotation again.');
+    }
     await loadRealCarrierChecks();
   } catch(e) { showToast('Could not change the away switch.'); }
 }
@@ -11481,6 +11842,7 @@ async function ccAfterOpen(c, tab) {
     }
   }
   if(['msgs','files','tl','hist'].includes(tab)) ccLoadTab(tab);
+  if(tab==='msgs') ccMarkConvRead();
 }
 // ── conversation ──
 function ccRenderMsgs() {
@@ -11535,8 +11897,10 @@ async function ccSendMsg() {
     const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/messages', { method:'POST', body: JSON.stringify({ text: txt, internal }) });
     const j = await res.json().catch(()=>({}));
     if(!res.ok) { showToast(j.error || 'Could not send.'); return; }
+    window.__ticketMailWarn = false;
+    if(j.mail) { try { await sendTicketMailFromMe(j.mail); } catch(e) {} }
     CC_TK.events = null; await ccEnsureEvents(true); ccRenderMsgs(); ccRenderTimeline();
-    showToast(internal ? 'Internal note saved.' : (j.resumed ? 'Reply sent — the timer is running again.' : 'Sent.'));
+    showToast((internal ? 'Internal note saved.' : (j.resumed ? 'Reply sent — the timer is running again.' : 'Sent.')) + (j.mail ? ticketMailNote() : ''));
     if(j.resumed) loadRealCarrierChecks();
   } catch(e) { showToast('Could not send.'); }
 }
@@ -11547,6 +11911,13 @@ async function ccOpenInfoModal(mc, notRelevant) {
   document.getElementById('ccInfoTitle').textContent = notRelevant ? 'Ask again — that was not what we asked' : 'Request information from the broker';
   document.getElementById('ccInfoSub').textContent = `${c.mc} · ${c.carrier||''} · to ${c.broker}. The timer pauses until the broker replies. They are notified in the CRM and an email goes from your own mailbox.`;
   document.getElementById('ccInfoMsg').value = ''; document.getElementById('ccInfoCc').value = '';
+  { const er = document.getElementById('ccInfoErr'); if(er) er.style.display = 'none'; }
+  // C-053: "Not what I asked" starts with the previous request already in the box - edit it if needed and press Send
+  if(notRelevant) {
+    try { await ccEnsureEvents(); } catch(e) {}
+    const prev = (CC_TK.events||[]).filter(e=>e.event_type==='info_request' || e.event_type==='not_relevant').slice(-1)[0];
+    if(prev && prev.body) document.getElementById('ccInfoMsg').value = prev.body;
+  }
   const sel = document.getElementById('ccInfoTpl'); sel.innerHTML = '<option value="">— Type your own —</option>';
   document.getElementById('ccInfoModal').classList.add('open');
   const tpl = (await ccLoadTemplates()).filter(t=>t.kind==='info');
@@ -11560,7 +11931,7 @@ function ccCloseInfoModal() { document.getElementById('ccInfoModal').classList.r
 async function ccSendInfoRequest() {
   const c = ccFind(CC_TK.infoMc); if(!c) return;
   const message = document.getElementById('ccInfoMsg').value.trim();
-  if(message.length < 3) { showToast('Please type what information you need.'); return; }
+  if(message.length < 3) { const er = document.getElementById('ccInfoErr'); if(er) { er.textContent = 'Please type what information you need before sending.'; er.style.display = 'block'; } document.getElementById('ccInfoMsg').focus(); return; }
   const cc = document.getElementById('ccInfoCc').value.split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean);
   try {
     const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/info-request', { method:'POST', body: JSON.stringify({ message, cc, notRelevant: CC_TK.infoNot }) });
@@ -11973,6 +12344,7 @@ function applyCarrierRows(rows) {
   realCarrierChecks = rows.map(mapCarrierCheck);
   renderCCView();
   updateNavBadges();
+  convStartPolling();
 }
 // Every Carrier Compliance action below goes through this shared
 // helper: PATCH/POST, then reload the queue so every screen (Active
@@ -12127,6 +12499,7 @@ async function finishLogin() {
       isCarrierManager: me.isCarrierManager === true,
       carrierLeadLocations: me.carrierLeadLocations || [],
       carrierAway: me.carrierAway === true,
+      carrierAwayUntil: me.carrierAwayUntil || null,
       moduleAccess: me.moduleAccess || null, // Admin's Module Access ticks (null = old server, treat as all on)
     };
     applyRealUser(realUser);
