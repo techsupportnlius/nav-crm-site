@@ -914,6 +914,14 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       Manage Lists
     </div>
+    <div class="nav-item" id="navSecurity" data-view="security" onclick="nav(this,'security','Security')">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Security
+    </div>
+    <div class="nav-item" id="navNotifAdmin" data-view="notif-admin" onclick="nav(this,'notif-admin','Notifications')">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      Notifications
+    </div>
   </div>
   <div class="sidebar-bottom">
     <div class="nav-item" style="color:var(--text-faint);">
@@ -1301,6 +1309,41 @@ thead th.cb-th{width:36px;padding:0 10px;}
 </div>
 
 <!-- MANAGE LISTS -->
+<div class="view" id="view-security">
+  <div class="view-header"><div><div class="view-title">Security</div>
+    <div class="view-subtitle">Who exported what, and possible screenshot attempts. Export is limited to Admin and Compliance.</div></div></div>
+  <div style="padding:20px;max-width:1100px;">
+    <div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;background:var(--surface);font-size:12.5px;margin-bottom:16px;">
+      <b>Alert email (for later)</b> — every export, blocked export and possible screenshot shows in the CRM bell for all Admins and is logged below. Email alerts to this address will start once the shared sender mailbox is connected; until then this box is only saved.<br>
+      <input id="secAlertAddr" type="email" placeholder="e.g. security@nlius.com" style="width:100%;max-width:420px;margin-top:8px;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);">
+      <button class="btn btn-primary btn-sm" onclick="secSave()">Save</button> <span id="secMsg" style="margin-left:8px;"></span>
+      <div style="color:var(--text-faint);margin-top:8px;">Screenshot alerts are best-effort: they catch the Print Screen key and common shortcuts. Phone photos and screen recordings cannot be detected.</div>
+    </div>
+    <table class="data-table" style="width:100%"><thead><tr><th>When</th><th>Event</th><th>Person</th><th>Role</th><th>Details</th></tr></thead><tbody id="secTbody"></tbody></table>
+  </div>
+</div>
+<div class="view" id="view-notif-admin">
+  <div class="view-header"><div><div class="view-title">Notifications</div>
+    <div class="view-subtitle">Choose which events notify people, and set the safety limits for email. Changes are recorded below.</div></div>
+    <div><button class="btn btn-primary" onclick="notifAdminSave()">Save changes</button> <span id="naMsg" style="margin-left:8px;font-size:12.5px;"></span></div></div>
+  <div style="padding:20px;max-width:1100px;font-size:12.5px;">
+    <div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;background:var(--surface);margin-bottom:16px;">
+      <b>Safety &amp; sender</b>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:10px;">
+        <label>Sender mailbox (shown as the sender of automatic emails)<br><input id="naSender" type="email" placeholder="e.g. crm@nlius.com" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"></label>
+        <label>Max emails per person per day<br><input id="naLimit" type="number" min="1" max="500" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"></label>
+        <label><input id="naTest" type="checkbox"> <b>Test mode</b> — every email goes only to the test address<br>
+          <input id="naTestAddr" type="email" placeholder="your own email" style="width:100%;margin-top:4px;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"></label>
+      </div>
+      <div style="color:var(--text-faint);margin-top:8px;">The email switches below are saved now and start working when email sending is switched on in the next update. Nothing new is emailed yet. The "In-CRM" switch takes effect within about a minute.</div>
+    </div>
+    <table class="data-table" style="width:100%"><thead><tr><th>Event</th><th>In-CRM bell</th><th>Email</th><th>Also email when Urgent</th><th>Also tell Team Leader / Location Head</th></tr></thead><tbody id="naRules"></tbody></table>
+    <h3 style="margin:22px 0 8px;font-size:14px;">Change history</h3>
+    <table class="data-table" style="width:100%"><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody id="naHist"></tbody></table>
+    <h3 style="margin:22px 0 8px;font-size:14px;">Sent-email log</h3>
+    <table class="data-table" style="width:100%"><thead><tr><th>When</th><th>Event</th><th>To</th><th>Subject</th><th>Status</th></tr></thead><tbody id="naLog"></tbody></table>
+  </div>
+</div>
 <div class="view" id="view-manage-lists">
   <div class="view-header">
     <div>
@@ -3053,6 +3096,8 @@ function nav(el, view, label) {
   if(view==='customer-compliance') { renderCustCompView(); loadEmailRequests(); }
   if(view==='user-management') renderUserManagement();
   if(view==='manage-lists') renderManageLists();
+  if(view==='security') secLoad();
+  if(view==='notif-admin') notifAdminLoad();
   if(view==='mail') renderMailView();
   if(view==='bulk-email') { bulkLoadSettings(); bulkLoadHistory(); }
   if(view==='carrier-lanes') renderCarrierLanesReport();
@@ -3135,7 +3180,7 @@ function updateSidebarForRole() {
   // should not be able to bulk-export that list to a file — Export stays
   // Admin-only (Customer/Carrier Compliance don't have Export buttons on
   // these screens to begin with).
-  const exportBlocked = isSalesRep || isTL || isOpsMgr || isOpsHead || isLocHead;
+  const exportBlocked = !canExport();
 
   const show = (id, visible) => { const el=document.getElementById(id); if(el) el.style.display=visible?'':'none'; };
 
@@ -3153,6 +3198,8 @@ function updateSidebarForRole() {
   // User Management + Admin section: Admin only
   show('navUserMgmt',    isAdmin);
   show('navManageLists', isAdmin);
+  show('navSecurity', isAdmin);
+  show('navNotifAdmin', isAdmin);
   show('navAdminSection', isAdmin);
   // Reports: Admin, Location Head, TL only
   const reportsNav = document.querySelector('[data-view="reports"]');
@@ -3174,6 +3221,8 @@ function updateSidebarForRole() {
   const restricted = {
     'view-user-management': !isAdmin,
     'view-manage-lists': !isAdmin,
+    'view-security': !isAdmin,
+    'view-notif-admin': !isAdmin,
     'view-carrier-compliance': isCC || !carrierAccessOn(),
     'view-customer-compliance': isCarrCC || !modOn('custCompliance'),
     'view-deals': !modOn('prospects'),
@@ -3200,7 +3249,7 @@ function updateCoHeader() {
   // Export on Active Customers: same restriction as Prospect Companies —
   // Sales Rep, Team Leader, Operations Manager and Location Head don't
   // get a bulk-export button here; Admin still does.
-  const exportBtn = currentRole==='Admin' ? '<button class="btn btn-ghost" onclick="exportCustomers()">Export</button>' : '';
+  const exportBtn = canExport() ? '<button class="btn btn-ghost" onclick="exportCustomers()">Export</button>' : '';
   if(currentRole==='Sales Rep') {
     btns.innerHTML=`<button class="btn btn-ghost" onclick="openAddContactModal(null,'active')">+ Add Contact</button>${exportBtn}<button class="btn btn-check" onclick="openCheck()">🔍 Company Check</button><button class="btn btn-primary" onclick="openAddCo()">+ Add Company</button>`;
     carrierTab.style.display='none';
@@ -4447,7 +4496,7 @@ function renderCCView() {
   if(ccViewMode === 'history') {
     ccNote.style.display='none';
     if(!isSalesRep) {
-      ccHead.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="exportCCHistory()">Export</button>`;
+      ccHead.innerHTML=canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportCCHistory()">Export</button>`:'';
     } else {
       ccHead.innerHTML=`<button class="btn btn-primary btn-sm" onclick="openSubmitMC()">+ Submit MC</button>`;
     }
@@ -4557,7 +4606,7 @@ function renderCCView() {
   } else if(isCoiSpec) {
     ccNote.style.display='block';
     ccNote.textContent='COI Specialist view — all active MCs · Setup cases include Carrier Onboarding & COI tabs';
-    ccHead.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="exportCCQueue()">Export</button>`;
+    ccHead.innerHTML=canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportCCQueue()">Export</button>`:'';
     document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Type</th><th>Submitted by</th><th>Lane</th><th>SLA</th><th>COI Status</th><th>Onboarding</th></tr>`;
     document.getElementById('ccTbody').innerHTML = activeCases.length ? activeCases.map(c=>{
       const rowCls = (c.slaCls==='sla-over'?'tr-sla-over':c.slaCls==='sla-critical'?'tr-sla-critical':'') + (c.priority==='Urgent'?' tr-urgent':'');
@@ -4581,7 +4630,7 @@ function renderCCView() {
       `<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">No cases match your filter.</td></tr>`;
   } else {
     ccNote.style.display='none';
-    ccHead.innerHTML=ccHeadExtras()+`<button class="btn btn-ghost btn-sm" onclick="exportCCQueue()">Export</button><button class="btn btn-primary" onclick="openSubmitMC()">+ Submit MC</button>`;
+    ccHead.innerHTML=ccHeadExtras()+(canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportCCQueue()">Export</button>`:'')+`<button class="btn btn-primary" onclick="openSubmitMC()">+ Submit MC</button>`;
     document.getElementById('ccThead').innerHTML=`<tr><th>MC #</th><th>Carrier</th><th>Stage</th><th>Office</th><th>Owner</th><th>Submitted by</th><th>Lane</th><th>SLA</th><th>When</th></tr>`;
     document.getElementById('ccTbody').innerHTML = activeCases.length ? activeCases.map(c=>{
       const rowCls = (c.slaCls==='sla-over'?'tr-sla-over':c.slaCls==='sla-critical'?'tr-sla-critical':'') + (c.priority==='Urgent'?' tr-urgent':'');
@@ -4621,7 +4670,7 @@ function renderCustCompView() {
   // ── HISTORY MODE ───────────────────────────────────────────
   if(compViewMode === 'history') {
     note.style.display='none';
-    hdr.innerHTML = isAdmin ? `<button class="btn btn-ghost btn-sm" onclick="exportCompHistory()">Export</button>` : '';
+    hdr.innerHTML = canExport() ? `<button class="btn btn-ghost btn-sm" onclick="exportCompHistory()">Export</button>` : '';
     let rows = realComplianceCases.filter(c=>c.resolvedAt);
     const compHBase = rows;
     rows = ddApply('comph', rows, COMP_DD);
@@ -4666,7 +4715,7 @@ function renderCustCompView() {
     hdr.innerHTML='';
   } else {
     note.style.display='none';
-    hdr.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="exportCompCases()">Export</button>`;
+    hdr.innerHTML = canExport() ? `<button class="btn btn-ghost btn-sm" onclick="exportCompCases()">Export</button>` : '';
   }
 
   // Apply comp filter
@@ -8119,14 +8168,84 @@ function toCsvValue(v) {
   const s = String(v==null ? '' : v).replace(/<[^>]*>/g,'');
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
+// C-057: only Admin and the compliance roles may export; every export is logged and Admin is emailed.
+function canExport() { return ['Admin','Carrier Compliance','Customer Compliance','COI Specialist'].includes(currentRole); }
+async function secLog(kind, detail) {
+  if(!realUser) return;
+  try {
+    await apiFetch('/api/security-event', {method:'POST', body: JSON.stringify({kind, detail})}); // the server sends the alert email itself
+  } catch(e) {}
+}
 async function downloadCsv(filename, headers, rows) {
+  if(!canExport()) { showToast('Export is only available to Admin and Compliance.'); secLog('export', 'Blocked: '+filename); return; }
   if(!rows.length) { showToast('Nothing to export in the current view.'); return; }
   const csv = [headers.join(',')]
     .concat(rows.map(r=>r.map(toCsvValue).join(',')))
     .join('\n');
   const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
   const ok = await saveFile(filename, blob);
+  if(ok) secLog('export', filename+' — '+rows.length+' rows');
   if(ok) showToast(`Exported ${rows.length} row${rows.length===1?'':'s'}.`);
+}
+// C-057: best-effort "possible screenshot" alert (Print Screen / common shortcuts only; phone photos and screen recordings cannot be detected)
+let _shotLast = 0;
+function shotFire() {
+  if(!realUser || Date.now()-_shotLast < 30000) return;
+  _shotLast = Date.now();
+  const v = document.querySelector('.view.active');
+  secLog('screenshot', 'Screen: '+((v&&v.id||'').replace('view-','')||'unknown'));
+}
+document.addEventListener('keyup', (e)=>{ if((e.key||'').toLowerCase()==='printscreen') shotFire(); });
+document.addEventListener('keydown', (e)=>{
+  const k=(e.key||'').toLowerCase();
+  if(e.metaKey && e.shiftKey && (k==='s' || ['3','4','5'].includes(e.key))) shotFire(); // Win+Shift+S, Mac Cmd+Shift+3/4/5
+});
+// C-057: Admin Security page
+async function secLoad() {
+  const tb=document.getElementById('secTbody'); if(!tb) return;
+  if(!realUser){ tb.innerHTML='<tr><td colspan="5">Sign in with a real account to see the log.</td></tr>'; return; }
+  try {
+    const g = await (await apiFetch('/api/security-settings')).json(); document.getElementById('secAlertAddr').value = g.alertAddress||'';
+    const j = await (await apiFetch('/api/security-events')).json();
+    const lab={export:'Export',export_blocked:'Blocked export',screenshot:'Possible screenshot'};
+    const esc2=t=>String(t==null?'':t).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    tb.innerHTML=(j.events||[]).map(e=>`<tr><td>${esc2(new Date(e.created_at).toLocaleString())}</td><td>${lab[e.kind]||esc2(e.kind)}</td><td>${esc2(e.user_name)}</td><td>${esc2(e.role)}</td><td>${esc2(e.detail)}</td></tr>`).join('') || '<tr><td colspan="5">Nothing logged yet.</td></tr>';
+  } catch(e) { tb.innerHTML='<tr><td colspan="5">Could not load.</td></tr>'; }
+}
+async function secSave() {
+  const m=document.getElementById('secMsg');
+  try {
+    const res=await apiFetch('/api/security-settings',{method:'PUT',body:JSON.stringify({alertAddress:document.getElementById('secAlertAddr').value})});
+    const j=await res.json().catch(()=>({}));
+    m.textContent=res.ok?'Saved.':(j.error||'Could not save.'); m.style.color=res.ok?'var(--green,#2a8)':'var(--red,#c33)';
+  } catch(e){ m.textContent='Could not save.'; }
+}
+// C-058: Admin > Notifications
+let _naRules = [];
+async function notifAdminLoad() {
+  const rb=document.getElementById('naRules'); if(!rb) return;
+  if(!realUser){ rb.innerHTML='<tr><td colspan="5">Sign in with a real account.</td></tr>'; return; }
+  const e2=t=>String(t==null?'':t).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  try {
+    const j = await (await apiFetch('/api/notif-settings')).json();
+    _naRules = j.rules||[];
+    document.getElementById('naSender').value=j.settings.sender||''; document.getElementById('naLimit').value=j.settings.dailyLimit;
+    document.getElementById('naTest').checked=!!j.settings.testMode; document.getElementById('naTestAddr').value=j.settings.testAddress||'';
+    const cb=(k,f,v)=>`<td><input type="checkbox" data-k="${k}" data-f="${f}" ${v?'checked':''}></td>`;
+    rb.innerHTML=_naRules.map(r=>`<tr><td>${e2(r.label)}</td>${cb(r.kind,'in_app',r.in_app)}${cb(r.kind,'email',r.email)}${cb(r.kind,'urgent',r.urgent)}${cb(r.kind,'escalate',r.escalate)}</tr>`).join('')||`<tr><td colspan="5">${e2(j.note||'No rules yet.')}</td></tr>`;
+    document.getElementById('naHist').innerHTML=(j.history||[]).map(h=>`<tr><td>${e2(new Date(h.created_at).toLocaleString())}</td><td>${e2(h.by_name)}</td><td>${e2(h.what)}</td></tr>`).join('')||'<tr><td colspan="3">No changes yet.</td></tr>';
+    document.getElementById('naLog').innerHTML=(j.log||[]).map(h=>`<tr><td>${e2(new Date(h.created_at).toLocaleString())}</td><td>${e2(h.kind)}</td><td>${e2(h.to_email)}</td><td>${e2(h.subject)}</td><td>${e2(h.status)}</td></tr>`).join('')||'<tr><td colspan="5">No emails sent yet.</td></tr>';
+  } catch(e) { rb.innerHTML='<tr><td colspan="5">Could not load.</td></tr>'; }
+}
+async function notifAdminSave() {
+  const m=document.getElementById('naMsg'); const rules={};
+  document.querySelectorAll('#naRules input[type=checkbox]').forEach(c=>{ const k=c.dataset.k; (rules[k]=rules[k]||{kind:k})[c.dataset.f]=c.checked; });
+  try {
+    const res=await apiFetch('/api/notif-settings',{method:'PUT',body:JSON.stringify({rules:Object.values(rules),settings:{sender:document.getElementById('naSender').value,dailyLimit:document.getElementById('naLimit').value,testMode:document.getElementById('naTest').checked,testAddress:document.getElementById('naTestAddr').value}})});
+    const j=await res.json().catch(()=>({}));
+    m.textContent=res.ok?('Saved'+(j.changed?` (${j.changed} change${j.changed===1?'':'s'} recorded).`:'.')):(j.error||'Could not save.'); m.style.color=res.ok?'var(--green,#2a8)':'var(--red,#c33)';
+    if(res.ok) notifAdminLoad();
+  } catch(e){ m.textContent='Could not save.'; m.style.color='var(--red,#c33)'; }
 }
 function stamp() { return new Date().toISOString().slice(0,10); }
 
