@@ -2502,7 +2502,7 @@ async function loadRealActivity(companyId) {
       by: r.created_by_name || resolveUserName(r.created_by_user_id),
       time: r.created_at ? new Date(r.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '',
       ts: r.created_at || 0,
-      reminder: r.reminder_at || null,
+      reminder: r.reminder_at || null, staffOnly: !!r.staff_only,
     }));
     realActivityLoaded.add(companyId);
   } catch(e) {
@@ -4983,6 +4983,84 @@ async function ccAsgSaveHours() {
 function ccAsgLabel(a) {
   return a.full_name+' · '+a.role+(a.open_cases!=null?' · '+a.open_cases+' open':'')+(a.away?' · AWAY':'');
 }
+// ── C-067: compliance activity box + customer documents checklist ──────────────
+async function compAddActivity() {
+  const d = compDrawer; if(!d || !d.companyId) return;
+  const text = (document.getElementById('compActText')||{}).value; const t = (text||'').trim();
+  if(!t) { showToast('Write something first.'); return; }
+  const kind = (document.getElementById('compActKind')||{}).value || 'NOTE';
+  const remOn = !!(document.getElementById('compActRem')||{}).checked; const dt = (document.getElementById('compActDt')||{}).value;
+  if(remOn && !dt) { showToast('Pick a date and time for the reminder.'); return; }
+  const show = !!(document.getElementById('compActShow')||{}).checked;
+  try {
+    const res = await apiFetch('/api/companies/'+d.companyId+'/activity', { method:'POST', body: JSON.stringify({ kind, text: esc(t), reminderAt: remOn ? new Date(dt).toISOString() : null, staffOnly: !show }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not save.'); return; }
+    showToast(remOn ? 'Saved with a reminder.' : (show ? 'Saved — the sales rep can see it.' : 'Saved — only Compliance can see it.'));
+    compShowTab('activity');
+  } catch(e) { showToast('Could not save.'); }
+}
+async function docsLoad(companyId, boxId) {
+  const box = document.getElementById(boxId); if(!box) return;
+  try {
+    const res = await apiFetch('/api/companies/'+companyId+'/docs');
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok || !j.ready) { box.innerHTML = '<div style="font-size:12.5px;color:var(--text-faint);">'+esc(j.note||j.error||'Could not load.')+'</div>'; return; }
+    box.innerHTML = docsHtml(j, companyId);
+  } catch(e) { box.innerHTML = '<div style="font-size:12.5px;color:var(--text-faint);">Could not load.</div>'; }
+}
+function docsHtml(j, id) {
+  const head = j.complete ? '<span class="status s-active">Documentation complete</span>' : `<span class="status s-pending">Documentation pending · ${j.pending} left</span>`;
+  const rows = j.docs.map(d=>{
+    const b = (st,label)=>`<button class="btn btn-sm ${d.status===st?'btn-primary':'btn-ghost'}" onclick="docsSet(${id},'${d.key}','${st}')">${label}</button>`;
+    const files = d.files.map(f=>`<div style="display:flex;gap:8px;align-items:center;font-size:12px;margin-top:5px;"><a style="color:var(--accent);cursor:pointer;" onclick="docsDownload(${id},${f.fileId},this.textContent)">${esc(f.name)}</a><span style="color:var(--text-faint);">${fmtBytes(f.size)} · ${esc(f.by||'')} · ${crDate(f.at)}</span><a style="color:var(--red);cursor:pointer;margin-left:auto;" onclick="docsRemove(${id},${f.fileId})">remove</a></div>`).join('');
+    return `<div class="field-box" style="margin-bottom:8px;"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><div class="field-label" style="margin:0;flex:1;min-width:120px;">${esc(d.label)}</div>${b('Pending','Pending')}${b('Done','Done')}${b('Skipped','Skip')}</div>`
+      + (d.updatedBy?`<div style="font-size:10.5px;color:var(--text-faint);margin-top:3px;">${d.status==='Skipped'?'Skipped':esc(d.status)} · ${esc(d.updatedBy)} · ${crDate(d.updatedAt)}</div>`:'')
+      + files + `<div style="margin-top:6px;"><input type="file" id="docsFile_${d.key}" style="display:none" onchange="docsUpload(${id},'${d.key}',this)"><button class="btn btn-ghost btn-sm" onclick="document.getElementById('docsFile_${d.key}').click()">＋ Attach file</button></div></div>`;
+  }).join('');
+  return `<div style="margin-bottom:10px;">${head}</div>${rows}`
+    + (j.storageReady ? '' : '<div style="font-size:11.5px;color:var(--text-faint);">File uploads are not switched on yet (the storage link is missing). The Pending / Done / Skip buttons still work.</div>')
+    + '<div style="font-size:11.5px;color:var(--text-faint);margin-top:6px;">Only Customer Compliance and Admin can see this. Documentation is complete when every document is Done or Skipped.</div>';
+}
+async function docsSet(id, key, status) {
+  try {
+    const res = await apiFetch('/api/companies/'+id+'/docs/'+key, { method:'PUT', body: JSON.stringify({ status }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not save.'); return; }
+    docsLoad(id, 'compDocsBox');
+  } catch(e) { showToast('Could not save.'); }
+}
+async function docsUpload(id, key, input) {
+  const f = input && input.files && input.files[0]; if(!f) return;
+  if(f.size > 10*1024*1024) { showToast('Files can be up to 10 MB.'); input.value=''; return; }
+  const b64 = await new Promise((ok, bad)=>{ const r = new FileReader(); r.onload = ()=>ok(String(r.result).split(',')[1]||''); r.onerror = bad; r.readAsDataURL(f); });
+  showToast('Uploading…');
+  try {
+    const res = await apiFetch('/api/companies/'+id+'/docs/'+key+'/files', { method:'POST', body: JSON.stringify({ name: f.name, contentType: f.type||'application/octet-stream', dataBase64: b64 }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not upload.'); input.value=''; return; }
+    showToast('File added. Mark the document Done when it is complete.'); docsLoad(id, 'compDocsBox');
+  } catch(e) { showToast('Could not upload.'); }
+}
+async function docsDownload(id, fileId, name) {
+  try {
+    const res = await apiFetch('/api/companies/'+id+'/docs/files/'+fileId);
+    if(!res.ok) { const j = await res.json().catch(()=>({})); showToast(j.error || 'Could not open the file.'); return; }
+    const blob = await res.blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name || 'file'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  } catch(e) { showToast('Could not open the file.'); }
+}
+async function docsRemove(id, fileId) {
+  if(!confirm('Remove this file from the list?')) return;
+  try {
+    const res = await apiFetch('/api/companies/'+id+'/docs/files/'+fileId, { method:'DELETE' });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not remove.'); return; }
+    docsLoad(id, 'compDocsBox');
+  } catch(e) { showToast('Could not remove.'); }
+}
+function creditSaveAllianzLimit(id) { creditCall('/api/companies/'+id+'/credit','PATCH',{allianzLimit:document.getElementById('crAlLimit'+id).value},'Allianz-approved limit saved.',id); }
 // C-053: the people a case can be assigned to (the general user list never contained Customer Compliance staff)
 let compAssignees = null;
 function compFillAssignees() {
@@ -5022,7 +5100,7 @@ function compTabsBar(active){
   const t=(k,l)=>`<div class="dtab${active===k?' active':''}" onclick="compShowTab('${k}')">${l}</div>`;
   const n = compDrawer ? convN('customer', compDrawer.caseId) : 0;
   const conv = t('conv','Conversation<span id="cuTabConvN">'+(n>0?' ('+n+')':'')+'</span>');
-  document.getElementById('drawerTabsBar').innerHTML = (compDrawer && compDrawer.showTabs) ? t('case','Case')+conv+t('emails','Emails')+t('activity','Activity') : t('case','Case')+conv;
+  document.getElementById('drawerTabsBar').innerHTML = (compDrawer && compDrawer.showTabs) ? t('case','Case')+conv+t('emails','Emails')+t('activity','Activity')+(compDrawer.staff?t('docs','Documents'):'') : t('case','Case')+conv;
 }
 function compShowTab(tab){
   const d = compDrawer; if(!d) return;
@@ -5039,14 +5117,28 @@ function compShowTab(tab){
       <div id="custEmailLog">Loading…</div></div>`;
     custLoadEmailLog(d.caseId); return;
   }
-  body.innerHTML = '<div class="d-sec"><div class="d-sec-label">Activity</div><div id="compActList">Loading…</div></div>';
+  if(tab==='docs'){
+    body.innerHTML = '<div class="d-sec"><div class="d-sec-label">Documents</div><div id="compDocsBox">Loading…</div></div>';
+    docsLoad(d.companyId,'compDocsBox'); return;
+  }
+  const inp = 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:8px 10px;font-size:13px;font-family:var(--sans);box-sizing:border-box;';
+  const composer = (d.staff && realUser && d.companyId) ? `<div class="d-sec"><div class="d-sec-label">Add to activity</div>
+      <textarea id="compActText" placeholder="Log a call, a note or a follow-up for this customer…" style="${inp}resize:vertical;min-height:64px;"></textarea>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:8px 0;font-size:12px;">
+        <select id="compActKind" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px 6px;"><option value="NOTE">Note</option><option value="CALL">Call</option></select>
+        <label><input type="checkbox" id="compActRem" onchange="document.getElementById('compActDt').style.display=this.checked?'inline-block':'none'"> Remind me</label>
+        <input type="datetime-local" id="compActDt" style="display:none;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 6px;">
+        <label><input type="checkbox" id="compActShow"> Show to the sales rep</label></div>
+      <div style="font-size:11px;color:var(--text-faint);margin-bottom:6px;">Without the tick, only Customer Compliance and Admin can see this entry.</div>
+      <button class="btn btn-primary btn-sm" onclick="compAddActivity()">Save</button></div>` : '';
+  body.innerHTML = composer + '<div class="d-sec"><div class="d-sec-label">Activity</div><div id="compActList">Loading…</div></div>';
   compLoadActivity(d);
 }
 async function compLoadActivity(d){
   const box = document.getElementById('compActList');
   let items = [];
   try { if(realUser) await loadRealActivity(d.companyId); } catch(e){}
-  (activityDB[d.companyId]||[]).forEach(e=>items.push({ts:e.ts||0, kind:e.kind, html:e.text, by:e.by, time:e.time}));
+  (activityDB[d.companyId]||[]).forEach(e=>items.push({ts:e.ts||0, kind:e.kind, html:e.text, by:e.by, time:e.time, priv:!!e.staffOnly}));
   try {
     const res = realUser ? await apiFetch('/api/compliance-cases/'+encodeURIComponent(d.caseId)+'/email-log') : null;
     if(res && res.ok) (await res.json()).forEach(r=>items.push({ts:r.sent_at, kind:'EMAIL', by:r.full_name||'', time:new Date(r.sent_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}),
@@ -5054,7 +5146,7 @@ async function compLoadActivity(d){
   } catch(e){}
   if(!compDrawer || compDrawer.caseId!==d.caseId || compDrawer.tab!=='activity') return;
   items.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
-  box.innerHTML = items.length ? items.map(e=>`<div class="tl-item"><div class="tl-kind">${esc(e.kind)}</div><div class="tl-text">${e.html}<div class="tl-time">${esc(e.by||'')}${e.by&&e.time?' · ':''}${esc(e.time||'')}</div></div></div>`).join('') : '<div style="color:var(--text-faint);font-size:13px;">No activity yet.</div>';
+  box.innerHTML = items.length ? items.map(e=>`<div class="tl-item"><div class="tl-kind">${esc(e.kind)}</div><div class="tl-text">${e.html}${e.priv?' <span style="font-size:10px;color:var(--amber);">🔒 compliance only</span>':''}<div class="tl-time">${esc(e.by||'')}${e.by&&e.time?' · ':''}${esc(e.time||'')}</div></div></div>`).join('') : '<div style="color:var(--text-faint);font-size:13px;">No activity yet.</div>';
 }
 
 // Every one of these goes through resolveComplianceCase(), which PATCHes
@@ -8526,9 +8618,10 @@ function creditHtml(d, id) {
   const hist = (st.history||[]).length ? (st.history).map(h=>`<div style="font-size:11.5px;color:var(--text-faint);">${esc(new Date(h.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))} · ${esc(h.by_name||'')} · ${esc(h.kind)}: ${esc(h.old_value||'—')} → ${esc(h.new_value||'—')}</div>`).join('') : '<div style="font-size:11.5px;color:var(--text-faint);">No changes recorded yet.</div>';
   return `<div class="field-grid">${base}</div>
     <div class="field-grid" style="margin-top:10px;">
-      <div class="field-box"><div class="field-label">Set credit limit ($)</div><div style="display:flex;gap:6px;"><input id="crLimit${id}" type="number" min="0" step="1000" value="${d.creditLimit==null?'':d.creditLimit}" style="flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:5px 8px;"><button class="btn btn-ghost btn-sm" onclick="creditSaveLimit(${id})">Save</button></div></div>
+      <div class="field-box"><div class="field-label">Credit limit shown to the sales rep ($)</div><div style="display:flex;gap:6px;"><input id="crLimit${id}" type="number" min="0" step="1000" value="${d.creditLimit==null?'':d.creditLimit}" style="flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:5px 8px;"><button class="btn btn-ghost btn-sm" onclick="creditSaveLimit(${id})">Save</button></div></div>
       <div class="field-box"><div class="field-label">Allianz grade <span style="color:var(--text-faint);">(1 = best, 10 = highest risk · Compliance only)</span></div><div style="display:flex;gap:6px;"><select id="crGrade${id}" style="flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:5px 8px;">${gradeOpts}</select><button class="btn btn-ghost btn-sm" onclick="creditSaveGrade(${id})">Save</button></div>
         ${st.allianzCheckedAt?`<div style="font-size:10.5px;color:var(--text-faint);margin-top:3px;">Set ${crDate(st.allianzCheckedAt)}${st.allianzBy?' by '+esc(st.allianzBy):''}</div>`:''}</div>
+      <div class="field-box"><div class="field-label">Allianz-approved credit limit ($) <span style="color:var(--text-faint);">(what Allianz approves · Compliance only)</span></div><div style="display:flex;gap:6px;"><input id="crAlLimit${id}" type="number" min="0" step="1000" value="${st.allianzLimit==null?'':st.allianzLimit}" style="flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:5px 8px;"><button class="btn btn-ghost btn-sm" onclick="creditSaveAllianzLimit(${id})">Save</button></div></div>
     </div>
     <div class="field-box" style="margin-top:10px;"><div class="field-label">Recheck every <b id="crPerVal${id}">${st.periodDays}</b> days ${st.customPeriod?'':'<span style="color:var(--text-faint);">(standard)</span>'}</div>
       <input id="crPer${id}" type="range" min="${st.minDays}" max="${st.maxDays}" step="5" value="${st.periodDays}" oninput="document.getElementById('crPerVal${id}').textContent=this.value" style="width:100%;">
@@ -12243,6 +12336,24 @@ setInterval(()=>{
     if(ids.size) refreshCompanies([...ids], true);
   } catch(e) {}
 }, 3*60*1000);
+// C-066: quietly re-read the two compliance queues so other people's new / reopened / changed cases show up without pressing F5.
+// The queue you are looking at refreshes about every 45 seconds, the other one about every 3 minutes (so sidebar counts stay right).
+let _qrTick = 0, _qrBusy = false;
+async function quietQueueRefresh(force) {
+  if(_qrBusy || !realUser || (document.hidden && !force)) return;
+  _qrBusy = true;
+  try {
+    const on = id => { const v = document.getElementById(id); return !!(v && v.classList.contains('active')); };
+    const carrierOn = on('view-carrier-compliance'), custOn = on('view-customer-compliance');
+    _qrTick++;
+    const all = force || _qrTick % 4 === 0;
+    if(carrierOn || all) { const res = await apiFetch('/api/carrier-checks'); if(res.ok) { const rows = await res.json(); ncPut('carrier', rows); applyCarrierRows(rows); } }
+    if((custOn || all) && (currentRole==='Admin' || currentRole==='Customer Compliance' || modOn('custCompliance'))) { const res = await apiFetch('/api/compliance-cases'); if(res.ok) { const rows = await res.json(); ncPut('compliance', rows); applyComplianceRows(rows); } }
+  } catch(e) { /* try again next time */ }
+  _qrBusy = false;
+}
+setInterval(()=>quietQueueRefresh(false), 45000);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) quietQueueRefresh(true); });
 function convStartPolling() { if(CONV.timer) return; CONV.timer = setInterval(()=>{ if(!document.hidden) convLoadUnread(); }, 60000); convLoadUnread(); }
 async function convMarkRead(kind, id) {
   if(!realUser || !id) return;
