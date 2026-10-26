@@ -1796,6 +1796,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <div class="ol-c-row" id="ec-vis-wrap" style="display:none;"><label>Who sees</label><select id="ec-vis" onchange="custVisChanged()" style="flex:1;background:transparent;border:0;color:inherit;font:inherit;padding:6px 4px;"><option value="normal">Normal — broker / sales rep is copied</option><option value="docs">Documents — broker is NOT copied</option></select></div>
     <div class="ol-c-row" id="ec-cc-wrap"><label>Cc</label><input id="ec-cc"></div>
     <div id="ec-vis-note" style="display:none;font-size:12px;padding:4px 10px;"></div>
+    <div class="ol-c-row" id="ec-tpl-wrap" style="display:none;"><label>Template</label><select id="ec-tpl" onchange="custTplPick()" style="flex:1;background:transparent;border:0;color:inherit;font:inherit;padding:6px 4px;"><option value="">— pick a template —</option></select><a id="ec-tpl-manage" onclick="custTplOpen()" style="display:none;cursor:pointer;font-size:12px;text-decoration:underline;padding:0 8px;">Manage</a></div>
     <div class="ol-c-row"><label>Subject</label><input id="ec-subject" placeholder="Add a subject"></div>
     <div class="ol-rt" id="ec-rt">
       <button type="button" class="ol-rb" title="Bold" onmousedown="event.preventDefault();olFmt('bold')"><b>B</b></button>
@@ -2108,6 +2109,35 @@ thead th.cb-th{width:36px;padding:0 10px;}
 </div>
 
 <!-- C-053: CUSTOMER REVIEW SUBMIT MODAL -->
+<div class="modal-overlay" id="compFieldModal">
+  <div class="modal" style="max-width:460px;">
+    <h3 id="cfmTitle" style="margin-bottom:6px;"></h3>
+    <p id="cfmSub" style="font-size:12px;color:var(--text-faint);margin-bottom:12px;"></p>
+    <div class="addco-field"><label id="cfmLabel">Value</label>
+      <textarea id="cfmInput" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:8px 10px;font-size:13px;font-family:var(--sans);resize:vertical;min-height:60px;box-sizing:border-box;"></textarea></div>
+    <div id="cfmErr" style="color:var(--red);font-size:12px;min-height:16px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="document.getElementById('compFieldModal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-primary" id="cfmGo" onclick="compFieldSave()">Save</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="custTplModal">
+  <div class="modal" style="max-width:640px;">
+    <h3 style="margin-bottom:6px;">Customer email templates</h3>
+    <p style="font-size:12px;color:var(--text-faint);margin-bottom:10px;">Type <b>{first name}</b> and <b>{company}</b> in the text — the CRM fills them in when a template is picked. Everyone in Customer Compliance can use these; only the Compliance Manager and Admin can change them.</p>
+    <div id="custTplList" style="max-height:200px;overflow:auto;margin-bottom:10px;"></div>
+    <div class="addco-field"><label>Title</label><input id="ctTitle" type="text" placeholder="e.g. Need credit application"></div>
+    <div class="addco-field"><label>Subject (optional)</label><input id="ctSubject" type="text" placeholder="e.g. {company} — credit application"></div>
+    <div class="addco-field"><label>Text</label><textarea id="ctBody" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:8px 10px;font-size:13px;font-family:var(--sans);resize:vertical;min-height:110px;box-sizing:border-box;" placeholder="Hi {first name},&#10;&#10;..."></textarea></div>
+    <div id="ctErr" style="color:var(--red);font-size:12px;min-height:16px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="document.getElementById('custTplModal').classList.remove('open')">Close</button>
+      <button class="btn btn-ghost" onclick="custTplClear()">New</button>
+      <button class="btn btn-primary" onclick="custTplSave()">Save template</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="custSubmitModal">
   <div class="modal" style="max-width:420px;">
     <h3 style="margin-bottom:6px;">Submit for Compliance review</h3>
@@ -4832,6 +4862,7 @@ function openCompCase(id) {
         ${(()=>{ const cl = (relatedCo && relatedCo.creditLimit!=null) ? relatedCo.creditLimit : c.creditLimit; const canEdit=(isCustComp||isAdmin)&&c.companyId&&relatedCo; return (cl!=null||canEdit) ? `<div class="field-box"><div class="field-label">Credit Limit</div><div class="field-val">${cl!=null?'$'+Number(cl).toLocaleString('en-US'):'<span style="color:var(--text-faint);">Not set</span>'}${canEdit?` <a style="font-size:11.5px;color:var(--accent);cursor:pointer;margin-left:6px;" onclick="openCreditEdit(${c.companyId})">${cl!=null?'Change':'Set'}</a>`:''}</div></div>` : ''; })()}
       </div>
     </div>
+    ${c.companyId ? `<div class="d-sec" id="compCoSec"><div class="d-sec-label">Company details</div><div id="compCoBody" style="font-size:13px;color:var(--text-faint);">Loading…</div></div>` : ''}
     ${startHtml}
     ${assignHtml}
     ${reassignHtml}
@@ -4892,7 +4923,7 @@ function compShowTab(tab){
   const body = document.getElementById('dBody');
   compTabsBar(tab);
   d.tab = tab;
-  if(tab==='case'){ body.innerHTML = d.caseHtml; compFillAssignees(); return; }
+  if(tab==='case'){ body.innerHTML = d.caseHtml; compFillAssignees(); if(d.companyId) compLoadCompany(d.caseId); return; }
   if(tab==='conv'){ compRenderConvShell(d); compLoadMessages(d.caseId); convMarkRead('customer', d.caseId); return; }
   if(tab==='emails'){
     body.innerHTML = `<div class="d-sec"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
@@ -6530,7 +6561,7 @@ async function submitForComplianceGo(id, priority) {
         method: 'POST',
         body: JSON.stringify({ caseId, caseType: 'Customer Eligibility', companyId: id, slaHours: 48, priority: priority==='Urgent' ? 'Urgent' : 'Normal' }),
       });
-      if(!res.ok) { showToast('Could not submit for Compliance — please try again.'); return; }
+      if(!res.ok) { let m=''; try { const j=await res.json(); m=(j&&j.error)||''; } catch(e){} showToast(m || 'Could not submit for Compliance — please try again.'); return; }
       window.__ticketMailWarn = false;
       try { const j = await res.json(); if(j && j.mail) await sendTicketMailFromMe(j.mail); } catch(e){}
     } catch(e) {
@@ -8247,6 +8278,117 @@ async function notifAdminSave() {
     if(res.ok) notifAdminLoad();
   } catch(e){ m.textContent='Could not save.'; m.style.color='var(--red,#c33)'; }
 }
+// ── C-059: company details on a customer case ──────────────────────────────
+let compCoData = null;
+async function compLoadCompany(caseId) {
+  const box = document.getElementById('compCoBody'); if(!box) return;
+  if(!realUser) { box.textContent = 'Sign in with a real account to see the company details.'; return; }
+  try {
+    const res = await apiFetch('/api/compliance-cases/'+encodeURIComponent(caseId)+'/company');
+    if(!res.ok) { box.textContent = 'Company details are not available to you on this case.'; return; }
+    compCoData = await res.json();
+    if(!compDrawer || compDrawer.caseId!==caseId || compDrawer.tab!=='case') return;
+    compRenderCompany();
+  } catch(e) { box.textContent = 'Could not load the company details.'; }
+}
+function compRenderCompany() {
+  const box = document.getElementById('compCoBody'); const d = compCoData; if(!box || !d) return;
+  const co = d.company||{}, e2 = esc;
+  const btn = (kind, label, cur, extra) => d.canEdit
+    ? `<button class="btn btn-ghost btn-sm" style="padding:1px 7px;font-size:11px;" onclick="compFieldOpen('edit',${JSON.stringify(kind).replace(/"/g,'&quot;')},${JSON.stringify(label).replace(/"/g,'&quot;')},${JSON.stringify(cur||'').replace(/"/g,'&quot;')},${extra||'null'})">✎ Edit</button>`
+    : (d.canRequest ? `<button class="btn btn-ghost btn-sm" style="padding:1px 7px;font-size:11px;" onclick="compFieldOpen('request',${JSON.stringify(kind).replace(/"/g,'&quot;')},${JSON.stringify(label).replace(/"/g,'&quot;')},${JSON.stringify(cur||'').replace(/"/g,'&quot;')},null)">Request correction</button>` : '');
+  const fld = (label, val, kind) => `<div class="field-box"><div class="field-label">${e2(label)}</div><div class="field-val">${val?e2(val):'<span style="color:var(--text-faint);">— not filled in —</span>'}${kind?`<div style="margin-top:3px;">${btn(kind,label,val)}</div>`:''}</div></div>`;
+  const cityLine = [co.hq_city, co.hq_state, co.hq_zip].filter(Boolean).join(', ');
+  const contacts = (d.contacts||[]).map(c=>`<tr><td style="padding:5px 8px;">${e2(c.full_name||'')}</td><td style="padding:5px 8px;">${e2(c.title||'')}</td>
+      <td style="padding:5px 8px;">${e2(c.phone||c.cell_phone||'')} ${btn('contact:phone','Phone for '+(c.full_name||'contact'),c.phone||'',c.contact_id)}</td>
+      <td style="padding:5px 8px;">${e2(c.email||'')} ${btn('contact:email','Email for '+(c.full_name||'contact'),c.email||'',c.contact_id)}</td></tr>`).join('') || '<tr><td colspan="4" style="padding:8px;color:var(--text-faint);">No contacts saved on this company.</td></tr>';
+  const edits = (d.edits||[]).length ? `<div class="field-label" style="margin-top:12px;">Recent changes to these details</div>` + d.edits.map(x=>`<div style="font-size:11.5px;color:var(--text-faint);">${e2(new Date(x.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}))} · ${e2(x.by_name||'')} changed ${e2(x.field_name)}: “${e2(x.old_value||'')}” → “${e2(x.new_value||'')}”</div>`).join('') : '';
+  box.innerHTML = `<div class="field-grid">
+    ${fld('Company', co.name)}${fld('Website', co.domain&&!/\.invalid$/.test(co.domain)?co.domain:'')}
+    ${fld('Street address', co.hq_address, 'hq_address')}${fld('City / State / ZIP', cityLine)}
+    ${fld('Commodity', co.commodity, 'commodity')}${fld('Payment category', co.paycat_id)}
+    ${fld('MC number', co.mc_number, 'mc_number')}${fld('DOT number', co.dot_number, 'dot_number')}${fld('FF number', co.ff_number, 'ff_number')}
+    ${fld('Account owner', co.owner_name)}</div>
+    <div class="field-label" style="margin-top:12px;">Contacts</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;"><tr style="color:var(--text-faint);text-align:left;"><th style="padding:4px 8px;">Name</th><th style="padding:4px 8px;">Title</th><th style="padding:4px 8px;">Phone</th><th style="padding:4px 8px;">Email</th></tr>${contacts}</table>
+    ${co.remarks?`<div class="field-label" style="margin-top:12px;">Rep's remarks</div><div style="font-size:13px;">${e2(co.remarks)}</div>`:''}
+    ${d.canRequest?'<div style="font-size:11.5px;color:var(--text-faint);margin-top:8px;">Read-only for you. If something is wrong, use “Request correction” and the Compliance Manager will fix it.</div>':''}
+    ${edits}`;
+}
+let _cfm = null;
+function compFieldOpen(mode, kind, label, cur, contactId) {
+  _cfm = { mode, kind, label, contactId };
+  document.getElementById('cfmTitle').textContent = mode==='edit' ? 'Change '+label : 'Request a correction';
+  document.getElementById('cfmSub').textContent = mode==='edit' ? 'The change is saved on the company and recorded with your name.' : label+' — currently: '+(cur||'(empty)')+'. Say what is wrong; the Compliance Manager will be told.';
+  document.getElementById('cfmLabel').textContent = mode==='edit' ? 'New value' : 'What needs to be fixed?';
+  document.getElementById('cfmInput').value = mode==='edit' ? (cur||'') : '';
+  document.getElementById('cfmErr').textContent = '';
+  document.getElementById('cfmGo').textContent = mode==='edit' ? 'Save' : 'Send to Compliance Manager';
+  document.getElementById('compFieldModal').classList.add('open');
+}
+async function compFieldSave() {
+  const x = _cfm; if(!x || !compDrawer) return;
+  const val = document.getElementById('cfmInput').value.trim(); const err = document.getElementById('cfmErr');
+  if(x.mode==='request' && !val) { err.textContent = 'Please say what needs to be fixed.'; return; }
+  try {
+    let res;
+    if(x.mode==='edit') {
+      const body = x.contactId ? {contactId:x.contactId, field:x.kind.replace('contact:',''), value:val} : {field:x.kind, value:val};
+      res = await apiFetch('/api/compliance-cases/'+encodeURIComponent(compDrawer.caseId)+'/company', {method:'PATCH', body:JSON.stringify(body)});
+    } else {
+      res = await apiFetch('/api/compliance-cases/'+encodeURIComponent(compDrawer.caseId)+'/correction', {method:'POST', body:JSON.stringify({field:x.label, note:val})});
+    }
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { err.textContent = j.error || 'Could not save.'; return; }
+    document.getElementById('compFieldModal').classList.remove('open');
+    showToast(x.mode==='edit' ? 'Saved.' : 'Sent to '+(j.sentTo||'the Compliance Manager')+'.');
+    if(x.mode==='edit') { refreshCompanies([compDrawer.companyId]); if(x.contactId) { try { await loadRealContacts(compDrawer.companyId); } catch(e){} } }
+    compLoadCompany(compDrawer.caseId);
+  } catch(e) { err.textContent = 'Could not save.'; }
+}
+
+// ── C-060: customer email templates ─────────────────────────────────────────
+let custTpls = [], custTplCanManage = false, _ctEditId = null;
+async function custTplLoad() {
+  const wrap = document.getElementById('ec-tpl-wrap'); if(!wrap) return;
+  if(!realUser) return;
+  try {
+    const res = await apiFetch('/api/customer-templates'); if(!res.ok) return;
+    const j = await res.json(); custTpls = j.templates||[]; custTplCanManage = !!j.canManage;
+    document.getElementById('ec-tpl').innerHTML = '<option value="">— pick a template —</option>' + custTpls.map(t=>`<option value="${t.template_id}">${esc(t.title)}</option>`).join('');
+    document.getElementById('ec-tpl-manage').style.display = custTplCanManage ? '' : 'none';
+    wrap.style.display = (custTpls.length || custTplCanManage) ? 'flex' : 'none';
+  } catch(e){}
+}
+function custTplFill(txt) {
+  const c = customers.find(x=>x.id===(emailComposeContext&&emailComposeContext.companyId));
+  const first = ((contactsDB[c&&c.id]||[])[0]||{}); const fn = (first.first || (first.name||'').split(' ')[0] || 'there');
+  return String(txt||'').replace(/\{first name\}/gi, fn).replace(/\{company\}/gi, c?c.name:'your company');
+}
+function custTplPick() {
+  const id = document.getElementById('ec-tpl').value; if(!id || !emailComposeContext) return;
+  const t = custTpls.find(x=>String(x.template_id)===String(id)); if(!t) return;
+  if(t.subject) document.getElementById('ec-subject').value = custTplFill(t.subject);
+  document.getElementById('ec-body').value = custTplFill(t.body).trimEnd() + '\n\n' + (emailComposeContext.tplTail||'').replace(/^\n+/,'');
+  olLoadRich();
+}
+function custTplOpen() { custTplClear(); custTplRenderList(); document.getElementById('custTplModal').classList.add('open'); }
+function custTplClear() { _ctEditId=null; ['ctTitle','ctSubject','ctBody'].forEach(i=>document.getElementById(i).value=''); document.getElementById('ctErr').textContent=''; }
+function custTplRenderList() {
+  document.getElementById('custTplList').innerHTML = custTpls.length ? custTpls.map(t=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${esc(t.title)}</span><span><a style="cursor:pointer;text-decoration:underline;" onclick="custTplEdit(${t.template_id})">Edit</a> · <a style="cursor:pointer;text-decoration:underline;color:var(--red);" onclick="custTplDelete(${t.template_id})">Delete</a></span></div>`).join('') : '<div style="font-size:12.5px;color:var(--text-faint);">No templates yet. Add the first one below.</div>';
+}
+function custTplEdit(id) { const t=custTpls.find(x=>x.template_id===id); if(!t) return; _ctEditId=id; document.getElementById('ctTitle').value=t.title; document.getElementById('ctSubject').value=t.subject||''; document.getElementById('ctBody').value=t.body; }
+async function custTplSave() {
+  const body = {title:document.getElementById('ctTitle').value, subject:document.getElementById('ctSubject').value, body:document.getElementById('ctBody').value}; const err=document.getElementById('ctErr');
+  try {
+    const res = await apiFetch('/api/customer-templates'+(_ctEditId?'/'+_ctEditId:''), {method:_ctEditId?'PUT':'POST', body:JSON.stringify(body)});
+    const j = await res.json().catch(()=>({})); if(!res.ok) { err.textContent=j.error||'Could not save.'; return; }
+    custTplClear(); await custTplLoad(); custTplRenderList(); showToast('Template saved.');
+  } catch(e){ err.textContent='Could not save.'; }
+}
+async function custTplDelete(id) {
+  try { const res = await apiFetch('/api/customer-templates/'+id, {method:'DELETE'}); if(!res.ok) { showToast('Could not delete.'); return; } await custTplLoad(); custTplRenderList(); } catch(e){}
+}
 function stamp() { return new Date().toISOString().slice(0,10); }
 
 // Reads the rows currently rendered in a table body, so the export always
@@ -9611,6 +9753,7 @@ function olSyncFromRich() {
 
 function closeEmailCompose() {
   document.getElementById('emailComposeModal').classList.remove('open');
+  { const w=document.getElementById('ec-tpl-wrap'); if(w) w.style.display='none'; }
   { const sb = document.querySelector('#emailComposeModal .btn-primary'); if(sb) { sb.disabled = false; sb.textContent = '➤ Send'; } }
   emailComposeContext = null;
   emailAttachments = [];
@@ -12506,6 +12649,8 @@ function openCustomerEmail(companyId, caseId){
   if(emailComposeContext && emailComposeContext.type==='custcomp'){
     emailComposeContext.brokerEmail = custBrokerEmail(companyId);
     emailComposeContext.caseId = caseId;
+    { const ta=document.getElementById('ec-body'); emailComposeContext.tplTail = ta ? ta.value.replace(/^[^\n]*\n\n/,'') : ''; }
+    custTplLoad();
     document.getElementById('ec-vis').value='normal';
     document.getElementById('ec-vis-wrap').style.display='flex';
     document.getElementById('ec-cc-wrap').style.display='flex';
