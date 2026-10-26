@@ -8447,12 +8447,9 @@ function creditHtml(d, id) {
       <div class="field-box"><div class="field-label">Allianz grade <span style="color:var(--text-faint);">(1 = best, 10 = highest risk · Compliance only)</span></div><div style="display:flex;gap:6px;"><select id="crGrade${id}" style="flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:5px 8px;">${gradeOpts}</select><button class="btn btn-ghost btn-sm" onclick="creditSaveGrade(${id})">Save</button></div>
         ${st.allianzCheckedAt?`<div style="font-size:10.5px;color:var(--text-faint);margin-top:3px;">Set ${crDate(st.allianzCheckedAt)}${st.allianzBy?' by '+esc(st.allianzBy):''}</div>`:''}</div>
     </div>
-    <div class="field-box" style="margin-top:10px;"><div class="field-label">Recheck every <b id="crPerVal${id}">${st.periodDays}</b> days ${st.customPeriod?'<span style="color:var(--text-faint);">(this customer only)</span>':'<span style="color:var(--text-faint);">(company-wide default)</span>'}</div>
+    <div class="field-box" style="margin-top:10px;"><div class="field-label">Recheck every <b id="crPerVal${id}">${st.periodDays}</b> days ${st.customPeriod?'':'<span style="color:var(--text-faint);">(standard)</span>'}</div>
       <input id="crPer${id}" type="range" min="${st.minDays}" max="${st.maxDays}" step="5" value="${st.periodDays}" oninput="document.getElementById('crPerVal${id}').textContent=this.value" style="width:100%;">
-      <div style="display:flex;gap:6px;margin-top:4px;"><button class="btn btn-ghost btn-sm" onclick="creditSavePeriod(${id},false)">Save for this customer</button>${st.customPeriod?`<button class="btn btn-ghost btn-sm" onclick="creditSavePeriod(${id},true)">Use the default (${st.defaultDays})</button>`:''}</div></div>
-    <div class="field-box" style="margin-top:10px;"><div class="field-label">Company-wide default recheck period: <b id="crDefVal${id}">${st.defaultDays}</b> days</div>
-      <input id="crDef${id}" type="range" min="${st.minDays}" max="${st.maxDays}" step="5" value="${st.defaultDays}" oninput="document.getElementById('crDefVal${id}').textContent=this.value" style="width:100%;">
-      <button class="btn btn-ghost btn-sm" style="margin-top:4px;" onclick="creditSaveDefault(${id})">Save default for all customers</button></div>
+      <div style="display:flex;gap:6px;margin-top:4px;"><button class="btn btn-ghost btn-sm" onclick="creditSavePeriod(${id},false)">Save</button>${st.customPeriod?`<button class="btn btn-ghost btn-sm" onclick="creditSavePeriod(${id},true)">Back to ${st.defaultDays} days</button>`:''}</div></div>
     ${act}
     <div class="field-label" style="margin-top:12px;">Credit history</div>${hist}`;
 }
