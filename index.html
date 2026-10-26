@@ -2109,6 +2109,23 @@ thead th.cb-th{width:36px;padding:0 10px;}
 </div>
 
 <!-- C-053: CUSTOMER REVIEW SUBMIT MODAL -->
+<div class="modal-overlay" id="recheckModal">
+  <div class="modal" style="max-width:460px;">
+    <h3 style="margin-bottom:6px;">Send for a credit recheck</h3>
+    <p id="rcSub" style="font-size:12px;color:var(--text-faint);margin-bottom:12px;"></p>
+    <div class="addco-field"><label>Reason</label>
+      <select id="rcReason" onchange="recheckReasonChanged()" style="background:var(--surface-3);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;border-radius:5px;padding:9px 12px;width:100%;outline:none;">
+        <option>Routine recheck</option><option>Needs more credit</option><option>Payment terms change</option><option>Other</option></select>
+      <div id="rcRoutineNote" style="font-size:11.5px;color:var(--text-faint);margin-top:4px;"></div></div>
+    <div class="addco-field" id="rcLimitWrap" style="display:none;"><label>Credit limit you are asking for ($)</label><input id="rcLimit" type="number" min="1" step="1000" placeholder="e.g. 40000"><div id="rcCurLimit" style="font-size:11.5px;color:var(--text-faint);margin-top:4px;"></div></div>
+    <div class="addco-field"><label>Note for Compliance <span id="rcNoteReq" style="color:var(--text-faint);">(optional)</span></label>
+      <textarea id="rcNote" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:8px 10px;font-size:13px;font-family:var(--sans);resize:vertical;min-height:70px;box-sizing:border-box;" placeholder="e.g. Customer will ship about 30 loads a month from January."></textarea></div>
+    <div class="addco-field"><label>Priority</label>
+      <select id="rcPri" style="background:var(--surface-3);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;border-radius:5px;padding:9px 12px;width:100%;outline:none;"><option value="Normal">Normal</option><option value="Urgent">Urgent — flagged and shown at the top</option></select></div>
+    <div id="rcErr" style="color:var(--red);font-size:12px;min-height:16px;"></div>
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="document.getElementById('recheckModal').classList.remove('open')">Cancel</button><button class="btn btn-primary" id="rcGo" onclick="recheckGo()">Send to Compliance</button></div>
+  </div>
+</div>
 <div class="modal-overlay" id="compFieldModal">
   <div class="modal" style="max-width:460px;">
     <h3 id="cfmTitle" style="margin-bottom:6px;"></h3>
@@ -3561,6 +3578,7 @@ function switchDrawerTab(tab, type) {
 
 function renderCustomerDetails(id) {
   setTimeout(()=>loadEmailAccessBox(id), 0);
+  setTimeout(()=>creditLoad(id,'creditSec'), 0); // C-061
   const c = customers.find(x=>x.id===id);
   if(!c) return;
 
@@ -3644,7 +3662,7 @@ function renderCustomerDetails(id) {
   const drawerEquipList = c.equipmentList || [];
   const drawerEquipChips = EQUIPMENT_TYPES.map(v=>`<button type="button" class="fchip${drawerEquipList.includes(v)?' active':''}" ${canEditProfile?`onclick="toggleCoEquipment(${c.id},'${v.replace(/'/g,"\\'")}')"`:'disabled style="cursor:default;"'}>${v}</button>`).join('');
 
-  document.getElementById('dBody').innerHTML = prospectWindowPanel(c) + complianceBarHtml + flagHtml + `
+  document.getElementById('dBody').innerHTML = prospectWindowPanel(c) + complianceBarHtml + flagHtml + (!isProspectRecord && realUser ? `<div class="d-sec" id="creditSec"><div class="d-sec-label">Credit</div><div style="font-size:12.5px;color:var(--text-faint);">Loading…</div></div>` : '') + `
     <div class="d-sec">
       <div class="d-sec-label">Internal Assignment</div>
       <div class="field-grid">
@@ -4863,6 +4881,11 @@ function openCompCase(id) {
       </div>
     </div>
     ${c.companyId ? `<div class="d-sec" id="compCoSec"><div class="d-sec-label">Company details</div><div id="compCoBody" style="font-size:13px;color:var(--text-faint);">Loading…</div></div>` : ''}
+    ${c.type==='Customer Recheck' ? `<div class="d-sec"><div class="d-sec-label">Recheck request</div><div class="field-grid">
+        <div class="field-box"><div class="field-label">Reason</div><div class="field-val">${esc(c.reqReason||'—')}</div></div>
+        ${c.requestedLimit!=null ? `<div class="field-box"><div class="field-label">Credit limit requested</div><div class="field-val">$${Number(c.requestedLimit).toLocaleString('en-US')}</div></div>` : ''}</div>
+        ${c.requestNote ? `<div style="font-size:13px;margin-top:8px;"><span style="color:var(--text-faint);font-size:11px;">Rep's note:</span> ${esc(c.requestNote)}</div>` : ''}</div>` : ''}
+    ${((isCustComp||isAdmin) && c.companyId) ? `<div class="d-sec" id="compCreditSec"><div class="d-sec-label">Credit</div><div style="font-size:12.5px;color:var(--text-faint);">Loading…</div></div>` : ''}
     ${startHtml}
     ${assignHtml}
     ${reassignHtml}
@@ -4923,7 +4946,7 @@ function compShowTab(tab){
   const body = document.getElementById('dBody');
   compTabsBar(tab);
   d.tab = tab;
-  if(tab==='case'){ body.innerHTML = d.caseHtml; compFillAssignees(); if(d.companyId) compLoadCompany(d.caseId); return; }
+  if(tab==='case'){ body.innerHTML = d.caseHtml; compFillAssignees(); if(d.companyId) { compLoadCompany(d.caseId); if(d.staff) creditLoad(d.companyId,'compCreditSec'); } return; }
   if(tab==='conv'){ compRenderConvShell(d); compLoadMessages(d.caseId); convMarkRead('customer', d.caseId); return; }
   if(tab==='emails'){
     body.innerHTML = `<div class="d-sec"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
@@ -8389,6 +8412,110 @@ async function custTplSave() {
 async function custTplDelete(id) {
   try { const res = await apiFetch('/api/customer-templates/'+id, {method:'DELETE'}); if(!res.ok) { showToast('Could not delete.'); return; } await custTplLoad(); custTplRenderList(); } catch(e){}
 }
+// ── C-061 / C-062: Credit section, recheck timer, recheck + credit-increase request ──────────────────────────
+let creditData = {};
+const crDate = (x)=> x ? new Date(x).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+const crMoney = (n)=> n==null ? '—' : '$'+Number(n).toLocaleString('en-US');
+async function creditLoad(companyId, boxId) {
+  const box = document.getElementById(boxId); if(!box || !realUser) return;
+  try {
+    const res = await apiFetch('/api/companies/'+companyId+'/credit');
+    if(!res.ok) { box.style.display='none'; return; }
+    const d = await res.json(); creditData[companyId] = d;
+    if(!document.getElementById(boxId)) return;
+    box.innerHTML = '<div class="d-sec-label">Credit</div>' + creditHtml(d, companyId);
+  } catch(e) { box.style.display='none'; }
+}
+function creditNextText(d) {
+  if(!d.checkedAt) return '<span style="color:var(--orange,#d4621a);">Not checked in the CRM yet — a recheck is due</span>';
+  if(d.due) return `<span style="color:var(--red);">Due now${d.daysLeft<0?` (${-d.daysLeft} day${d.daysLeft===-1?'':'s'} overdue)`:''}</span>`;
+  return crDate(d.nextDue)+` <span style="color:var(--text-faint);">(in ${d.daysLeft} day${d.daysLeft===1?'':'s'})</span>`;
+}
+function creditHtml(d, id) {
+  const f = (l,v)=>`<div class="field-box"><div class="field-label">${l}</div><div class="field-val">${v}</div></div>`;
+  const st = d.staff;
+  const base = f('Credit limit', crMoney(d.creditLimit)) + f('Payment terms', esc(d.paycat||'—')) + f('Last checked', d.checkedAt?crDate(d.checkedAt):'—') + f('Next recheck', creditNextText(d));
+  let act;
+  if(d.openCase) act = `<div style="font-size:12px;color:var(--text-faint);margin-top:8px;">A Compliance case is already open (${esc(d.openCase.caseId)}).</div>`;
+  else act = `<div style="margin-top:8px;"><button class="btn btn-primary btn-sm" onclick="recheckOpen(${id})">${st?'Start a recheck':'Send for recheck / ask for more credit'}</button></div>`;
+  if(!st) return `<div class="field-grid">${base}</div>${act}`;
+  const gradeOpts = '<option value="">Not graded</option>' + [1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${st.allianzGrade===n?' selected':''}>${n}</option>`).join('');
+  const hist = (st.history||[]).length ? (st.history).map(h=>`<div style="font-size:11.5px;color:var(--text-faint);">${esc(new Date(h.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))} · ${esc(h.by_name||'')} · ${esc(h.kind)}: ${esc(h.old_value||'—')} → ${esc(h.new_value||'—')}</div>`).join('') : '<div style="font-size:11.5px;color:var(--text-faint);">No changes recorded yet.</div>';
+  return `<div class="field-grid">${base}</div>
+    <div class="field-grid" style="margin-top:10px;">
+      <div class="field-box"><div class="field-label">Set credit limit ($)</div><div style="display:flex;gap:6px;"><input id="crLimit${id}" type="number" min="0" step="1000" value="${d.creditLimit==null?'':d.creditLimit}" style="flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:5px 8px;"><button class="btn btn-ghost btn-sm" onclick="creditSaveLimit(${id})">Save</button></div></div>
+      <div class="field-box"><div class="field-label">Allianz grade <span style="color:var(--text-faint);">(1 = best, 10 = highest risk · Compliance only)</span></div><div style="display:flex;gap:6px;"><select id="crGrade${id}" style="flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:5px 8px;">${gradeOpts}</select><button class="btn btn-ghost btn-sm" onclick="creditSaveGrade(${id})">Save</button></div>
+        ${st.allianzCheckedAt?`<div style="font-size:10.5px;color:var(--text-faint);margin-top:3px;">Set ${crDate(st.allianzCheckedAt)}${st.allianzBy?' by '+esc(st.allianzBy):''}</div>`:''}</div>
+    </div>
+    <div class="field-box" style="margin-top:10px;"><div class="field-label">Recheck every <b id="crPerVal${id}">${st.periodDays}</b> days ${st.customPeriod?'<span style="color:var(--text-faint);">(this customer only)</span>':'<span style="color:var(--text-faint);">(company-wide default)</span>'}</div>
+      <input id="crPer${id}" type="range" min="${st.minDays}" max="${st.maxDays}" step="5" value="${st.periodDays}" oninput="document.getElementById('crPerVal${id}').textContent=this.value" style="width:100%;">
+      <div style="display:flex;gap:6px;margin-top:4px;"><button class="btn btn-ghost btn-sm" onclick="creditSavePeriod(${id},false)">Save for this customer</button>${st.customPeriod?`<button class="btn btn-ghost btn-sm" onclick="creditSavePeriod(${id},true)">Use the default (${st.defaultDays})</button>`:''}</div></div>
+    <div class="field-box" style="margin-top:10px;"><div class="field-label">Company-wide default recheck period: <b id="crDefVal${id}">${st.defaultDays}</b> days</div>
+      <input id="crDef${id}" type="range" min="${st.minDays}" max="${st.maxDays}" step="5" value="${st.defaultDays}" oninput="document.getElementById('crDefVal${id}').textContent=this.value" style="width:100%;">
+      <button class="btn btn-ghost btn-sm" style="margin-top:4px;" onclick="creditSaveDefault(${id})">Save default for all customers</button></div>
+    ${act}
+    <div class="field-label" style="margin-top:12px;">Credit history</div>${hist}`;
+}
+async function creditCall(path, method, body, okMsg, id) {
+  try {
+    const res = await apiFetch(path, {method, body: JSON.stringify(body)});
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not save.'); return false; }
+    showToast(okMsg); await creditReload(id); return true;
+  } catch(e) { showToast('Could not save.'); return false; }
+}
+function creditReload(id) {
+  const boxId = document.getElementById('compCreditSec') ? 'compCreditSec' : 'creditSec';
+  refreshCompanies([id], true);
+  return creditLoad(id, boxId);
+}
+function creditSaveLimit(id) {
+  const v = document.getElementById('crLimit'+id).value;
+  if(v==='' || Number(v)<0) { showToast('Enter the credit limit as a number, 0 or more.'); return; }
+  creditCall('/api/companies/'+id+'/credit-limit','PATCH',{creditLimit:Number(v)},'Credit limit saved.',id);
+}
+function creditSaveGrade(id) { creditCall('/api/companies/'+id+'/credit','PATCH',{allianzGrade:document.getElementById('crGrade'+id).value},'Allianz grade saved.',id); }
+function creditSavePeriod(id, reset) { creditCall('/api/companies/'+id+'/credit','PATCH',{recheckDays: reset ? null : Number(document.getElementById('crPer'+id).value)},'Recheck period saved.',id); }
+function creditSaveDefault(id) { creditCall('/api/recheck-settings','PUT',{defaultDays:Number(document.getElementById('crDef'+id).value)},'Default recheck period saved for all customers.',id); }
+
+function recheckOpen(id) {
+  const c = customers.find(x=>x.id===id); const d = creditData[id]; if(!c || !d) return;
+  window.__recheckId = id;
+  const staff = !!d.staff;
+  document.getElementById('rcSub').textContent = c.name + ' — Customer recheck.';
+  const sel = document.getElementById('rcReason'); const routine = sel.options[0];
+  routine.disabled = !staff && !d.withinWindow;
+  sel.value = routine.disabled ? 'Needs more credit' : 'Routine recheck';
+  document.getElementById('rcRoutineNote').textContent = routine.disabled ? 'A routine recheck opens on '+crDate(new Date(new Date(d.nextDue).getTime()-d.dueWindowDays*86400000))+'. If the customer needs more credit sooner, choose "Needs more credit".' : '';
+  document.getElementById('rcLimit').value=''; document.getElementById('rcNote').value=''; document.getElementById('rcPri').value='Normal'; document.getElementById('rcErr').textContent='';
+  document.getElementById('rcCurLimit').textContent = 'Current limit: '+crMoney(d.creditLimit);
+  recheckReasonChanged();
+  document.getElementById('recheckModal').classList.add('open');
+}
+function recheckReasonChanged() {
+  const r = document.getElementById('rcReason').value;
+  document.getElementById('rcLimitWrap').style.display = r==='Needs more credit' ? '' : 'none';
+  document.getElementById('rcNoteReq').textContent = r==='Other' ? '(required)' : '(optional)';
+}
+async function recheckGo() {
+  const id = window.__recheckId; const err = document.getElementById('rcErr'); const btn = document.getElementById('rcGo');
+  const reason = document.getElementById('rcReason').value;
+  const body = { caseId:'CEL-'+Math.floor(Math.random()*9000+1000), caseType:'Customer Recheck', companyId:id, slaHours:48,
+    priority: document.getElementById('rcPri').value==='Urgent'?'Urgent':'Normal', reason, note: document.getElementById('rcNote').value.trim() };
+  if(reason==='Needs more credit') body.requestedLimit = Number(document.getElementById('rcLimit').value);
+  btn.disabled = true; err.textContent = '';
+  try {
+    window.__ticketMailWarn = false;
+    const res = await apiFetch('/api/compliance-cases', {method:'POST', body: JSON.stringify(body)});
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { err.textContent = j.error || 'Could not send for recheck.'; btn.disabled = false; return; }
+    if(j && j.mail) { try { await sendTicketMailFromMe(j.mail); } catch(e){} }
+    document.getElementById('recheckModal').classList.remove('open'); btn.disabled = false;
+    await Promise.all([refreshCompanies([id]), loadRealComplianceCases()]);
+    creditLoad(id, document.getElementById('compCreditSec') ? 'compCreditSec' : 'creditSec');
+    showToast('Sent to Compliance for a recheck.' + ticketMailNote());
+  } catch(e) { err.textContent = 'Could not send for recheck.'; btn.disabled = false; }
+}
 function stamp() { return new Date().toISOString().slice(0,10); }
 
 // Reads the rows currently rendered in a table body, so the export always
@@ -11807,7 +11934,7 @@ function applyCompanyRows(rows) {
 // Leader/Sales Rep, each scoped to what they're allowed to see) sees
 // here survives a refresh.
 let realComplianceCases = [];
-const CASE_TYPE_CLASS = { 'Customer Eligibility': 's-check', 'Account Conflict': 's-pending' };
+const CASE_TYPE_CLASS = { 'Customer Eligibility': 's-check', 'Customer Recheck': 's-check', 'Account Conflict': 's-pending' };
 const CASE_STATUS_CLASS = {
   'New': 's-prospect', 'Awaiting Info': 's-pending', 'In Review': 's-check',
   'Approved': 's-active', 'Approved - Prepaid Only': 's-limited', 'Approved - Limited Credit': 's-limited',
@@ -11830,6 +11957,7 @@ function mapComplianceCase(r) {
     status: r.status, sCls: CASE_STATUS_CLASS[r.status] || 's-pending',
     assigned: r.assigned_to_name || '—', sla: sla.text, slaCls: sla.cls,
     by: r.raised_by_name || '—',
+    reqReason: r.request_reason || '', requestedLimit: r.requested_limit != null ? Number(r.requested_limit) : null, requestNote: r.request_note || '',
     priority: r.priority === 'Urgent' ? 'Urgent' : 'Normal', raisedById: r.raised_by_user_id || null, ownerId: r.company_owner_id || null,
     resolvedAt: r.resolved_at ? new Date(r.resolved_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : null,
     creditCap: r.credit_cap, blacklistReason: r.blacklist_reason,
