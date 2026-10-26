@@ -1107,7 +1107,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
 <div class="view" id="view-customer-compliance">
   <div class="view-header">
     <div><div class="view-title">Customer Compliance</div><div class="view-subtitle">Customer eligibility checks and account-conflict queries</div></div>
-    <div class="view-header-right"><button class="btn btn-ghost btn-sm" id="custMbBtn" style="display:none;" onclick="openCcSettings('customer')">✉ Email settings</button><span id="custCompHeaderBtns" style="display:contents;"></span></div>
+    <div class="view-header-right"><span id="ccAsgBtns" style="display:contents;"></span><button class="btn btn-ghost btn-sm" id="custMbBtn" style="display:none;" onclick="openCcSettings('customer')">✉ Email settings</button><span id="custCompHeaderBtns" style="display:contents;"></span></div>
   </div>
   <div id="emailReqBox"></div>
   <div class="filter-bar">
@@ -2109,6 +2109,18 @@ thead th.cb-th{width:36px;padding:0 10px;}
 </div>
 
 <!-- C-053: CUSTOMER REVIEW SUBMIT MODAL -->
+<div class="modal-overlay" id="ccAsgModal">
+  <div class="modal" style="max-width:760px;">
+    <h3 style="margin-bottom:4px;">Case assignment</h3>
+    <p style="font-size:12px;color:var(--text-faint);margin-bottom:10px;">New cases go to the <b>Main</b> people first (fewest open cases wins). <b>Backup</b> people only get a case when every Main person is away. People who are not in the pool never get cases automatically — you can still assign by hand. Changes save as soon as you tick or choose.</p>
+    <div id="ccAsgWarn" style="font-size:12px;color:var(--red);margin-bottom:8px;"></div>
+    <table class="data-table" style="width:100%;font-size:12.5px;"><thead><tr><th>Person</th><th>Open cases</th><th>In pool</th><th>Tier</th><th>Away</th></tr></thead><tbody id="ccAsgRows"></tbody></table>
+    <div style="margin-top:12px;font-size:12.5px;">Alert me if an assigned case is not started after <input id="ccAsgHours" type="number" min="1" max="48" style="width:60px;padding:4px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"> hour(s) <button class="btn btn-ghost btn-sm" onclick="ccAsgSaveHours()">Save</button> <span id="ccAsgMsg" style="margin-left:6px;"></span></div>
+    <h4 style="margin:14px 0 6px;font-size:13px;">Recent changes</h4>
+    <div id="ccAsgHist" style="max-height:140px;overflow:auto;font-size:11.5px;color:var(--text-faint);"></div>
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="document.getElementById('ccAsgModal').classList.remove('open')">Close</button></div>
+  </div>
+</div>
 <div class="modal-overlay" id="recheckModal">
   <div class="modal" style="max-width:460px;">
     <h3 style="margin-bottom:6px;">Send for a credit recheck</h3>
@@ -4854,7 +4866,7 @@ function openCompCase(id) {
       <div style="display:flex;gap:8px;align-items:center;">
         <select id="compAssignSel" style="flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:6px 10px;color:var(--text);font-size:13px;font-family:var(--sans);">
           <option value="">— Choose a Customer Compliance person…</option>
-          ${(compAssignees||[]).map(a=>`<option value="${a.user_id}">${esc(a.full_name+' · '+a.role)}</option>`).join('')}
+          ${(compAssignees||[]).map(a=>`<option value="${a.user_id}">${esc(ccAsgLabel(a))}</option>`).join('')}
         </select>
         <button class="btn btn-ghost btn-sm" onclick="compAssignCase('${c.id}')">Assign</button>
       </div></div>` : '';
@@ -4874,7 +4886,7 @@ function openCompCase(id) {
         <div class="field-box"><div class="field-label">Type</div><div class="field-val"><span class="status ${c.typeCls}">${c.type}</span></div></div>
         <div class="field-box"><div class="field-label">Status</div><div class="field-val"><span class="status ${c.sCls}">${c.status}</span></div></div>
         <div class="field-box"><div class="field-label">SLA</div><div class="field-val sla ${c.slaCls}">${c.sla}</div></div>
-        ${(isCustComp||isAdmin) ? `<div class="field-box"><div class="field-label">Assigned To</div><div class="field-val">${c.assigned}</div></div>` : ''}
+        ${(isCustComp||isAdmin) ? `<div class="field-box"><div class="field-label">Assigned To</div><div class="field-label">Assigned To</div><div class="field-val">${c.assigned}${(c.autoAssigned && c.status==='New') ? ' <span style="font-size:10.5px;color:var(--text-faint);">(assigned automatically)</span>' : ''}</div></div>` : ''}
         <div class="field-box"><div class="field-label">Raised By</div><div class="field-val">${c.by}</div></div>
         ${(c.pickedUpBy && (isCustComp||isAdmin)) ? `<div class="field-box"><div class="field-label">Working on it</div><div class="field-val">${esc(c.pickedUpBy)}<div style="font-size:10.5px;color:var(--text-faint);">since ${esc(c.pickedUpAt)}</div></div></div>` : ''}
         ${(()=>{ const cl = (relatedCo && relatedCo.creditLimit!=null) ? relatedCo.creditLimit : c.creditLimit; const canEdit=(isCustComp||isAdmin)&&c.companyId&&relatedCo; return (cl!=null||canEdit) ? `<div class="field-box"><div class="field-label">Credit Limit</div><div class="field-val">${cl!=null?'$'+Number(cl).toLocaleString('en-US'):'<span style="color:var(--text-faint);">Not set</span>'}${canEdit?` <a style="font-size:11.5px;color:var(--accent);cursor:pointer;margin-left:6px;" onclick="openCreditEdit(${c.companyId})">${cl!=null?'Change':'Set'}</a>`:''}</div></div>` : ''; })()}
@@ -4900,11 +4912,82 @@ function openCompCase(id) {
   openDrawer();
   if(document.getElementById('compAssignSel')) compLoadAssignees();
 }
+// ── C-065: automatic case assignment (Main / Backup, Away) ─────────────────────
+let ccAsg = null, ccAsgAt = 0;
+async function ccAsgInit(force) {
+  const box = document.getElementById('ccAsgBtns'); if(!box) return;
+  if(!realUser || !(currentRole==='Admin' || currentRole==='Customer Compliance')) { box.innerHTML=''; return; }
+  if(!force && Date.now()-ccAsgAt < 30000) return;
+  ccAsgAt = Date.now();
+  try {
+    const res = await apiFetch('/api/case-assignment'); if(!res.ok) return;
+    ccAsg = await res.json(); ccAsgRender();
+  } catch(e) { /* leave the buttons as they are */ }
+}
+function ccAsgRender() {
+  const box = document.getElementById('ccAsgBtns'); if(!box || !ccAsg) return;
+  if(!ccAsg.ready) { box.innerHTML = ccAsg.canManage ? '<span style="font-size:11.5px;color:var(--text-faint);margin-right:8px;">Case assignment: run add_case_assignment.sql</span>' : ''; return; }
+  const away = !!(ccAsg.me && ccAsg.me.away);
+  box.innerHTML = `<button class="btn btn-ghost btn-sm" style="${away?'border-color:var(--red);color:var(--red);':''}" onclick="ccAsgToggleAway()" title="Away = you are skipped for new cases">${away?'○ Away — click to come back':'● Available — click to go away'}</button>`
+    + (ccAsg.canManage ? ' <button class="btn btn-ghost btn-sm" onclick="ccAsgOpen()">⚙ Case assignment</button>' : '');
+}
+async function ccAsgToggleAway() {
+  const away = !(ccAsg && ccAsg.me && ccAsg.me.away);
+  try {
+    const res = await apiFetch('/api/case-assignment/person', { method:'PUT', body: JSON.stringify({ userId: realUser.userId, away }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { showToast(j.error || 'Could not change your status.'); return; }
+    let msg = away ? 'You are marked Away. You will be skipped for new cases.' : 'You are marked available again.';
+    if(away && j.result && (j.result.moved||j.result.started||j.result.nobody)) msg += ` ${j.result.moved||0} unstarted case(s) moved to others.`;
+    showToast(msg); ccAsgInit(true); loadRealComplianceCases();
+  } catch(e) { showToast('Could not change your status.'); }
+}
+async function ccAsgOpen() {
+  document.getElementById('ccAsgModal').classList.add('open');
+  await ccAsgModalLoad();
+}
+async function ccAsgModalLoad() {
+  const rows = document.getElementById('ccAsgRows'); rows.innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
+  try {
+    const res = await apiFetch('/api/case-assignment'); const j = await res.json();
+    if(!res.ok || !j.ready || !j.people) { rows.innerHTML = '<tr><td colspan="5">'+esc(j.note||j.error||'Could not load.')+'</td></tr>'; return; }
+    ccAsg = j; ccAsgRender();
+    document.getElementById('ccAsgWarn').textContent = (j.warnings||[]).join(' ');
+    document.getElementById('ccAsgHours').value = j.unstartedHours;
+    rows.innerHTML = j.people.map(p=>`<tr><td>${esc(p.name)}<div style="font-size:10.5px;color:var(--text-faint);">${esc(p.role)}</div></td><td>${p.openCases}</td>
+      <td><input type="checkbox" ${p.inPool?'checked':''} onchange="ccAsgSet('${p.userId}',{inPool:this.checked})"></td>
+      <td><select ${p.inPool?'':'disabled'} onchange="ccAsgSet('${p.userId}',{tier:Number(this.value)})" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px;">
+        ${[[1,'Main'],[2,'Backup'],[3,'Backup 2']].map(t=>`<option value="${t[0]}" ${p.tier===t[0]?'selected':''}>${t[1]}</option>`).join('')}</select></td>
+      <td><input type="checkbox" ${p.away?'checked':''} onchange="ccAsgSet('${p.userId}',{away:this.checked})"></td></tr>`).join('');
+    document.getElementById('ccAsgHist').innerHTML = (j.history||[]).map(h=>`<div>${esc(new Date(h.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}))} · ${esc(h.by_name||'')}${h.for_name?' → '+esc(h.for_name):''}: ${esc(h.what)}</div>`).join('') || 'No changes yet.';
+  } catch(e) { rows.innerHTML = '<tr><td colspan="5">Could not load.</td></tr>'; }
+}
+async function ccAsgSet(userId, patch) {
+  try {
+    const res = await apiFetch('/api/case-assignment/person', { method:'PUT', body: JSON.stringify(Object.assign({ userId }, patch)) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) showToast(j.error || 'Could not save.');
+    else if(j.result && j.result.assignedWaiting) showToast(j.result.assignedWaiting+' waiting case(s) handed out.');
+  } catch(e) { showToast('Could not save.'); }
+  compAssignees = null; await ccAsgModalLoad(); loadRealComplianceCases();
+}
+async function ccAsgSaveHours() {
+  const m = document.getElementById('ccAsgMsg');
+  try {
+    const res = await apiFetch('/api/case-assignment/settings', { method:'PUT', body: JSON.stringify({ unstartedHours: document.getElementById('ccAsgHours').value }) });
+    const j = await res.json().catch(()=>({}));
+    m.textContent = res.ok ? 'Saved.' : (j.error||'Could not save.'); m.style.color = res.ok ? 'var(--green,#2a8)' : 'var(--red,#c33)';
+    if(res.ok) ccAsgModalLoad();
+  } catch(e) { m.textContent = 'Could not save.'; }
+}
+function ccAsgLabel(a) {
+  return a.full_name+' · '+a.role+(a.open_cases!=null?' · '+a.open_cases+' open':'')+(a.away?' · AWAY':'');
+}
 // C-053: the people a case can be assigned to (the general user list never contained Customer Compliance staff)
 let compAssignees = null;
 function compFillAssignees() {
   const sel = document.getElementById('compAssignSel');
-  if(sel && compAssignees && compAssignees.length) sel.innerHTML = '<option value="">— Choose a Customer Compliance person…</option>' + compAssignees.map(a=>`<option value="${a.user_id}">${esc(a.full_name+' · '+a.role)}</option>`).join('');
+  if(sel && compAssignees && compAssignees.length) sel.innerHTML = '<option value="">— Choose a Customer Compliance person…</option>' + compAssignees.map(a=>`<option value="${a.user_id}">${esc(ccAsgLabel(a))}</option>`).join('');
 }
 async function compLoadAssignees() {
   if(compAssignees === null) {
@@ -11955,7 +12038,7 @@ function mapComplianceCase(r) {
     assigned: r.assigned_to_name || '—', sla: sla.text, slaCls: sla.cls,
     by: r.raised_by_name || '—',
     reqReason: r.request_reason || '', requestedLimit: r.requested_limit != null ? Number(r.requested_limit) : null, requestNote: r.request_note || '',
-    priority: r.priority === 'Urgent' ? 'Urgent' : 'Normal', raisedById: r.raised_by_user_id || null, ownerId: r.company_owner_id || null,
+    priority: r.priority === 'Urgent' ? 'Urgent' : 'Normal', autoAssigned: !!r.auto_assigned, raisedById: r.raised_by_user_id || null, ownerId: r.company_owner_id || null,
     resolvedAt: r.resolved_at ? new Date(r.resolved_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : null,
     creditCap: r.credit_cap, blacklistReason: r.blacklist_reason,
     pickedUpBy: r.picked_up_by_name || '', pickedUpAt: r.picked_up_at ? new Date(r.picked_up_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '',
@@ -11977,6 +12060,7 @@ async function loadRealComplianceCases() {
 function applyComplianceRows(rows) {
   realComplianceCases = rows.map(mapComplianceCase);
   renderCustCompView();
+  ccAsgInit();
   convStartPolling();
   // Also runs here (not just from loadRealCompanies()) because the two loads happen in
   // parallel — without this the sidebar badge could be left reading a stale count.
