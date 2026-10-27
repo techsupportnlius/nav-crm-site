@@ -186,6 +186,24 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13
 .dd-bar:empty{display:none;}
 .dd-sel{background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text-muted);font-size:12px;font-family:var(--sans);padding:5px 8px;cursor:pointer;max-width:200px;}
 .dd-sel.on{border-color:var(--accent);color:var(--accent);}
+.dd-pill{background:var(--surface-2);border:1px solid var(--border);border-radius:999px;color:var(--text-muted);font-size:12px;font-family:var(--sans);padding:5px 12px;cursor:pointer;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dd-pill:hover{border-color:var(--accent);}
+.dd-pill.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft,var(--surface-2));font-weight:600;}
+.dd-pop{min-width:220px;max-width:300px;padding:6px;}
+.dd-pop .dd-find{width:100%;padding:6px 8px;margin-bottom:4px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:12.5px;}
+.dd-pop .dd-list{max-height:260px;overflow:auto;}
+.dd-pop .dd-opt{display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:5px;cursor:pointer;font-size:12.5px;}
+.dd-pop .dd-opt:hover{background:var(--surface-2);}
+.dd-pop .dd-foot{border-top:1px solid var(--border);margin-top:4px;padding-top:4px;text-align:right;}
+.lk-n{font-size:11px;background:var(--surface-3,var(--surface-2));color:var(--text-muted);border-radius:999px;padding:1px 7px;font-weight:600;}
+.lk-tab.on .lk-n{background:var(--accent);color:#fff;}
+.lk-adv-hide{display:none!important;}
+.dd-pop .dd-list,.dd-pop .dd-foot{padding:0;}
+.dd-pop .dd-list:hover,.dd-pop .dd-foot:hover{background:none;}
+.lk-advp{position:fixed;z-index:9000;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.22);width:min(640px,calc(100vw - 24px));padding:14px 16px;font-size:13px;max-height:80vh;overflow:auto;}
+.lk-advp select,.lk-advp input{padding:5px 7px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:12.5px;}
+.lk-advp .lk-r{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;}
+.lk-advp .lk-r input.lk-v{flex:1;min-width:110px;}
 .dd-clear{background:transparent;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:4px 6px;}
 .dd-count{font-size:11.5px;color:var(--text-faint);margin-left:auto;}
 .fchip{padding:4px 10px;font-size:12px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;transition:all 0.1s;}
@@ -949,6 +967,10 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
       Bulk Email
     </div>
+    <div class="nav-item" id="navNotes" data-view="notes" onclick="nav(this,'notes','My Notes')">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="13" y2="18"/></svg>
+      My Notes
+    </div>
     <div class="nav-section-label">Reporting</div>
     <div class="nav-item" data-view="reports" onclick="nav(this,'reports','Reports')">
       <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
@@ -971,6 +993,10 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <div class="nav-item" id="navNotifAdmin" data-view="notif-admin" onclick="nav(this,'notif-admin','Notifications')">
       <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
       Notifications
+    </div>
+    <div class="nav-item" id="navNotesAdmin" data-view="notes-admin" onclick="nav(this,'notes-admin','Notes settings')">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/></svg>
+      Notes settings
     </div>
   </div>
   <div class="sidebar-bottom">
@@ -1084,7 +1110,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
   <div class="contacts-table-wrap">
     <table>
       <thead><tr>
-        <th>First name</th><th>Last name</th><th>Title</th><th>Company</th><th>Phone</th><th>Cell</th><th>Email</th><th>Added</th>
+        <th>First name</th><th>Last name</th><th>Title</th><th>Company</th><th>Phone</th><th>Cell</th><th>Email</th><th>Added</th><th>Action</th>
       </tr></thead>
       <tbody id="ctTbody"></tbody>
     </table>
@@ -1394,6 +1420,48 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <table class="data-table" style="width:100%"><thead><tr><th>When</th><th>Event</th><th>To</th><th>Subject</th><th>Status</th></tr></thead><tbody id="naLog"></tbody></table>
   </div>
 </div>
+<div class="view" id="view-notes">
+  <div class="view-header"><div><div class="view-title">My Notes</div>
+    <div class="view-subtitle">Your own notes. Private to you unless you choose to share one. Link a note to a company, set a reminder, or pin it to the top.</div></div></div>
+  <div style="padding:20px;max-width:900px;font-size:13px;">
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--surface);margin-bottom:18px;">
+      <textarea id="nnBody" rows="3" maxlength="4000" placeholder="Write a note..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font:inherit;resize:vertical;"></textarea>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-top:8px;">
+        <div style="position:relative;flex:1;min-width:200px;">
+          <input id="nnCoQ" placeholder="Link to a company (optional)" autocomplete="off" oninput="notesCoSearch()" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);">
+          <div id="nnCoList" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:220px;overflow:auto;box-shadow:0 6px 18px rgba(0,0,0,.2);"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;color:var(--text-muted);">Remind me <input id="nnRemind" type="datetime-local" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);"></label>
+        <label style="display:flex;align-items:center;gap:5px;color:var(--text-muted);"><input id="nnPin" type="checkbox"> Pin</label>
+        <button class="btn btn-primary btn-sm" onclick="notesAdd()">Add note</button>
+      </div>
+    </div>
+    <div id="notesList">Loading...</div>
+    <div id="notesSharedWrap" style="display:none;"><h3 style="margin:22px 0 8px;font-size:14px;">Shared with me</h3><div id="notesShared"></div></div>
+  </div>
+</div>
+<div class="view" id="view-notes-admin">
+  <div class="view-header"><div><div class="view-title">Notes settings</div>
+    <div class="view-subtitle">Decide who may share notes, and whether Admin can read personal notes.</div></div>
+    <div><button class="btn btn-primary" onclick="notesAdminSave()">Save changes</button> <span id="nsMsg" style="margin-left:8px;font-size:12.5px;"></span></div></div>
+  <div style="padding:20px;max-width:760px;font-size:13px;">
+    <div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;background:var(--surface);margin-bottom:16px;">
+      <b>Who may share a note with others?</b>
+      <div style="margin-top:8px;line-height:2;">
+        <label><input type="radio" name="nsMode" value="nobody" onchange="notesAdminModeChanged()"> Nobody - notes stay private to the person who wrote them</label><br>
+        <label><input type="radio" name="nsMode" value="anyone" onchange="notesAdminModeChanged()"> Anyone - every user can share their own notes</label><br>
+        <label><input type="radio" name="nsMode" value="roles" onchange="notesAdminModeChanged()"> Only these roles:</label>
+        <div id="nsRoles" style="margin-left:24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:2px 12px;"></div>
+      </div>
+      <div style="color:var(--text-faint);margin-top:8px;">When sharing is allowed, the writer picks who: named people, a whole team, or everyone in a role. People they share with can read the note but not change it.</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;background:var(--surface);">
+      <label><input id="nsAdminRead" type="checkbox" onchange="notesAdminReadChanged()"> <b>Admin can read everyone's personal notes</b></label>
+      <div style="color:var(--text-faint);margin-top:6px;">Recommended: OFF. People write more honestly when notes are truly private. Switch this on only if your company policy needs it.</div>
+      <div id="nsAll" style="margin-top:12px;"></div>
+    </div>
+  </div>
+</div>
 <div class="view" id="view-manage-lists">
   <div class="view-header">
     <div>
@@ -1461,7 +1529,12 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <h3>⏱ Prospects need attention</h3>
     <p style="margin-bottom:6px;">These prospects are close to the end of their working window, are waiting on an extension decision, or have no owner.</p>
     <div id="prospectAlertBody" style="max-height:340px;overflow:auto;"></div>
-    <div class="modal-actions"><button class="btn btn-primary" onclick="closeProspectAlerts()">Got it</button></div>
+    <div class="modal-actions" style="align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:12px;color:var(--text-faint);margin-right:auto;">Snooze:</span>
+      <button class="btn btn-ghost btn-sm" onclick="snoozePopup('prospectAlerts',120)">2 hours</button>
+      <button class="btn btn-ghost btn-sm" onclick="snoozePopup('prospectAlerts',1440)">1 day</button>
+      <button class="btn btn-ghost btn-sm" onclick="snoozePopup('prospectAlerts',2880)">2 days</button>
+      <button class="btn btn-ghost btn-sm" onclick="snoozePopup('prospectAlerts',10080)">7 days</button>
+      <button class="btn btn-primary" onclick="closeProspectAlerts()">Got it</button></div>
   </div>
 </div>
 
@@ -1842,9 +1915,10 @@ thead th.cb-th{width:36px;padding:0 10px;}
     </div>
     <p class="ol-c-sub" id="emailComposeSubhead">Review and edit before sending.</p>
     <div class="ol-c-row"><label>From</label><input id="ec-from" readonly><select id="ec-from-sel" style="display:none;flex:1;background:transparent;border:0;color:inherit;font:inherit;padding:6px 4px;" onchange="ccFromChanged()"></select></div>
-    <div class="ol-c-row"><label>To</label><input id="ec-to" placeholder="Separate several addresses with commas"></div>
+    <div class="ol-c-row"><label>To</label><input id="ec-to" placeholder="Separate several addresses with commas"><span class="ec-ccl" style="white-space:nowrap;font-size:12.5px;padding-right:6px;"><a onclick="ecShowCc()" style="color:var(--accent);cursor:pointer;margin-right:8px;">Cc</a><a onclick="ecShowBcc()" style="color:var(--accent);cursor:pointer;">Bcc</a></span></div>
     <div class="ol-c-row" id="ec-vis-wrap" style="display:none;"><label>Who sees</label><select id="ec-vis" onchange="custVisChanged()" style="flex:1;background:transparent;border:0;color:inherit;font:inherit;padding:6px 4px;"><option value="normal">Normal — broker / sales rep is copied</option><option value="docs">Documents — broker is NOT copied</option></select></div>
     <div class="ol-c-row" id="ec-cc-wrap"><label>Cc</label><input id="ec-cc"></div>
+    <div class="ol-c-row" id="ec-bcc-wrap" style="display:none;"><label>Bcc</label><input id="ec-bcc" placeholder="Hidden recipients - separate several with commas"></div>
     <div id="ec-vis-note" style="display:none;font-size:12px;padding:4px 10px;"></div>
     <div class="ol-c-row" id="ec-tpl-wrap" style="display:none;"><label>Template</label><select id="ec-tpl" onchange="custTplPick()" style="flex:1;background:transparent;border:0;color:inherit;font:inherit;padding:6px 4px;"><option value="">— pick a template —</option></select><a id="ec-tpl-manage" onclick="custTplOpen()" style="display:none;cursor:pointer;font-size:12px;text-decoration:underline;padding:0 8px;">Manage</a></div>
     <div class="ol-c-row"><label>Subject</label><input id="ec-subject" placeholder="Add a subject"></div>
@@ -3111,9 +3185,7 @@ function showReminderCard(r) {
     <div class="rem-txt">${esc(remPlain(r.text_html)) || 'Follow up'}</div>
     <div class="rem-btns">
       <button class="btn btn-primary btn-sm" onclick="openReminderCompany(${r.activity_id},${r.company_id})">Open</button>
-      <button class="btn btn-ghost btn-sm" onclick="snoozeReminderCard(${r.activity_id},10)">10 min</button>
-      <button class="btn btn-ghost btn-sm" onclick="snoozeReminderCard(${r.activity_id},60)">1 hour</button>
-      <button class="btn btn-ghost btn-sm" onclick="snoozeReminderCard(${r.activity_id},-1)">Tomorrow</button>
+      <select class="field-select" style="max-width:120px;padding:4px 6px;font-size:12px;" onchange="if(this.value){snoozeReminderCard(${r.activity_id},Number(this.value));}"><option value="">Snooze...</option><option value="10">10 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="1440">1 day</option><option value="2880">2 days</option><option value="10080">7 days</option></select>
     </div>`;
   remWrap().appendChild(el);
 }
@@ -3146,6 +3218,172 @@ function openReminderCompany(activityId, companyId) {
   setTimeout(()=>{ openCustomerDrawer(co.id); }, 80);
 }
 setInterval(()=>{ pollDueReminders(); }, 30*1000);
+/* ===== C-074: My Notes ===== */
+let notesData = { notes:[], shared:[], settings:{ canShare:false } };
+let notesEditId = null;
+let nnCoId = null;
+function notesFmt(ts){ try { return new Date(ts).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); } catch(e){ return ''; } }
+async function notesLoad(){
+  const box = document.getElementById('notesList'); if(!box) return;
+  if(!realUser){ box.textContent = 'Sign in with your real account to use notes.'; return; }
+  try {
+    const r = await apiFetch('/api/notes'); const j = await r.json().catch(()=>({}));
+    if(!r.ok){ box.textContent = j.error || 'Could not load your notes.'; return; }
+    notesData = j; notesRender();
+  } catch(e){ box.textContent = 'Could not load your notes.'; }
+}
+function notesRender(){
+  const box = document.getElementById('notesList');
+  const list = notesData.notes||[];
+  if(!list.length) box.innerHTML = '<div style="color:var(--text-faint);padding:10px 0;">No notes yet. Write your first one above.</div>';
+  else box.innerHTML = list.map(n=>{
+    if(notesEditId===n.note_id) return '<div style="border:1px solid var(--accent);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--surface);"><textarea id="neText" rows="4" maxlength="4000" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font:inherit;resize:vertical;">'+esc(n.body)+'</textarea><div style="margin-top:8px;display:flex;gap:8px;"><button class="btn btn-primary btn-sm" onclick="notesSaveEdit('+n.note_id+')">Save</button><button class="btn btn-ghost btn-sm" onclick="notesEditId=null;notesRender()">Cancel</button></div></div>';
+    const sh = (n.shares||[]).length;
+    return '<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--surface);'+(n.pinned?'border-left:3px solid var(--accent);':'')+(n.done?'opacity:.6;':'')+'">'
+      +'<div style="display:flex;gap:10px;align-items:flex-start;"><input type="checkbox" '+(n.done?'checked ':'')+'onchange="notesPatch('+n.note_id+',{done:this.checked})" title="Tick off" style="margin-top:3px;">'
+      +'<div style="flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;'+(n.done?'text-decoration:line-through;':'')+'">'+esc(n.body)+'</div>'
+      +'<div style="display:flex;gap:4px;flex-shrink:0;"><button class="btn btn-ghost btn-sm" title="'+(n.pinned?'Unpin':'Pin to top')+'" onclick="notesPatch('+n.note_id+',{pinned:'+(!n.pinned)+'})">'+(n.pinned?'Unpin':'Pin')+'</button>'
+      +'<button class="btn btn-ghost btn-sm" onclick="notesEditId='+n.note_id+';notesRender()">Edit</button>'
+      +(notesData.settings&&notesData.settings.canShare?'<button class="btn btn-ghost btn-sm" onclick="notesOpenShare('+n.note_id+')">Share'+(sh?' ('+sh+')':'')+'</button>':'')
+      +'<button class="btn btn-ghost btn-sm" onclick="notesDelete('+n.note_id+')">Delete</button></div></div>'
+      +'<div style="margin:6px 0 0 24px;font-size:11.5px;color:var(--text-faint);display:flex;gap:12px;flex-wrap:wrap;">'
+      +(n.company_id?'<a style="color:var(--accent);cursor:pointer;" onclick="notesOpenCompany('+Number(n.company_id)+')">&#127970; '+esc(n.company_name||'Company')+'</a>':'')
+      +(n.remind_at?'<span>&#9200; '+esc(notesFmt(n.remind_at))+'</span>':'')
+      +'<span>Updated '+esc(notesFmt(n.updated_at))+'</span>'+(sh?'<span>Shared</span>':'<span>Private</span>')+'</div></div>';
+  }).join('');
+  const sw = document.getElementById('notesSharedWrap'), sb = document.getElementById('notesShared');
+  const sl = notesData.shared||[];
+  if(sw){ sw.style.display = sl.length ? '' : 'none'; sb.innerHTML = sl.map(n=>'<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--surface);"><div style="white-space:pre-wrap;word-break:break-word;">'+esc(n.body)+'</div><div style="margin-top:6px;font-size:11.5px;color:var(--text-faint);">From '+esc(n.owner_name||'a colleague')+(n.company_name?' - '+esc(n.company_name):'')+' - '+esc(notesFmt(n.updated_at))+'</div></div>').join(''); }
+}
+function notesCoSearch(){
+  const q = (document.getElementById('nnCoQ').value||'').trim().toLowerCase(), l = document.getElementById('nnCoList');
+  nnCoId = null;
+  if(q.length<2){ l.style.display='none'; return; }
+  const hits = (customers||[]).filter(c=>String(c.name||'').toLowerCase().includes(q)).slice(0,8);
+  l.innerHTML = hits.length ? hits.map(c=>'<div style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);" onmousedown="notesPickCo('+c.id+')">'+esc(c.name)+'</div>').join('') : '<div style="padding:8px 10px;color:var(--text-faint);">No company found.</div>';
+  l.style.display='block';
+}
+function notesPickCo(id){
+  const c = (customers||[]).find(x=>x.id===id); if(!c) return;
+  nnCoId = id; document.getElementById('nnCoQ').value = c.name; document.getElementById('nnCoList').style.display='none';
+}
+async function notesCall(path, method, body, okMsg){
+  try {
+    const r = await apiFetch(path, { method, body: body===undefined?undefined:JSON.stringify(body) });
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok){ showToast(j.error || 'Could not save.'); return false; }
+    if(okMsg) showToast(okMsg);
+    return true;
+  } catch(e){ showToast('Could not save.'); return false; }
+}
+async function notesAdd(){
+  const body = (document.getElementById('nnBody').value||'').trim();
+  if(!body){ showToast('Write something first.'); return; }
+  const rv = document.getElementById('nnRemind').value;
+  const ok = await notesCall('/api/notes','POST',{ body, companyId: nnCoId, remindAt: rv ? new Date(rv).toISOString() : null, pinned: document.getElementById('nnPin').checked }, 'Note added.');
+  if(!ok) return;
+  document.getElementById('nnBody').value=''; document.getElementById('nnCoQ').value=''; document.getElementById('nnRemind').value=''; document.getElementById('nnPin').checked=false; nnCoId=null;
+  notesLoad();
+}
+async function notesPatch(id, fields){ if(await notesCall('/api/notes/'+id,'PUT',fields)) notesLoad(); }
+async function notesSaveEdit(id){
+  const t = (document.getElementById('neText').value||'').trim();
+  if(!t){ showToast('A note cannot be empty.'); return; }
+  if(await notesCall('/api/notes/'+id,'PUT',{body:t},'Saved.')){ notesEditId=null; notesLoad(); }
+}
+async function notesDelete(id){
+  if(!confirm('Delete this note? This cannot be undone.')) return;
+  if(await notesCall('/api/notes/'+id,'DELETE',undefined,'Note deleted.')) notesLoad();
+}
+function notesOpenCompany(id){
+  const co = (customers||[]).find(c=>c.id===id);
+  if(!co){ showToast('That company is not on your list.'); return; }
+  const p = isProspect(co);
+  nav(document.querySelector('[data-view="'+(p?'deals':'companies')+'"]'), p?'deals':'companies', p?'Prospect Companies':'Active Customers');
+  setTimeout(()=>openCustomerDrawer(id),120);
+}
+/* sharing dialog */
+function notesCloseShare(){ const m=document.getElementById('notesShareModal'); if(m) m.remove(); }
+function notesOpenShare(id){
+  const n = (notesData.notes||[]).find(x=>x.note_id===id); if(!n) return;
+  notesCloseShare();
+  const has = (k,t)=>(n.shares||[]).some(s=>s.kind===k && String(s.target)===String(t));
+  const roles = ['Admin','Operations Head','Location Head','Operations Manager','Team Leader','Sales Rep','Customer Compliance','Carrier Compliance'];
+  const people = (realUsers||[]).filter(u=>u.userId!==realUser.userId);
+  const w = document.createElement('div'); w.id='notesShareModal';
+  w.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  const chk = (k,t,l)=>'<label style="display:flex;gap:8px;padding:3px 0;align-items:center;"><input type="checkbox" class="nsChk" data-k="'+k+'" data-t="'+esc(String(t))+'"'+(has(k,t)?' checked':'')+'> '+esc(l)+'</label>';
+  w.innerHTML='<div style="background:var(--surface,#fff);color:var(--text);border-radius:10px;max-width:560px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.3);"><div style="padding:14px 18px;border-bottom:1px solid var(--border);font-weight:600;">Share this note</div><div style="padding:12px 18px;overflow:auto;font-size:13px;"><div style="color:var(--text-faint);margin-bottom:8px;">People you tick can read this note but cannot change it. Untick everything to make it private again.</div>'
+    +'<div style="font-weight:600;margin:8px 0 2px;">Everyone in a role</div>'+roles.map(r=>chk('role',r,r)).join('')
+    +'<div style="font-weight:600;margin:12px 0 2px;">A whole team</div>'+((REAL_TEAMS||[]).length?REAL_TEAMS.map(t=>chk('team',t.id,t.name)).join(''):'<div style="color:var(--text-faint);">No teams yet.</div>')
+    +'<div style="font-weight:600;margin:12px 0 2px;">Named people</div><input id="nsFind" placeholder="Search people..." oninput="notesShareFilter()" style="width:100%;padding:6px 8px;margin-bottom:4px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);"><div id="nsPeople" style="max-height:170px;overflow:auto;">'+people.map(u=>'<div class="nsPerson" data-n="'+esc(String(u.name||'').toLowerCase())+'">'+chk('user',u.userId,(u.name||u.userId)+(u.role?' - '+u.role:''))+'</div>').join('')+'</div></div>'
+    +'<div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-ghost btn-sm" onclick="notesCloseShare()">Cancel</button><button class="btn btn-primary btn-sm" onclick="notesSaveShare('+id+')">Save</button></div></div>';
+  document.body.appendChild(w);
+}
+function notesShareFilter(){ const q=(document.getElementById('nsFind').value||'').toLowerCase(); document.querySelectorAll('#nsPeople .nsPerson').forEach(d=>{ d.style.display = d.dataset.n.includes(q)?'':'none'; }); }
+async function notesSaveShare(id){
+  const shares=[...document.querySelectorAll('.nsChk:checked')].map(c=>({kind:c.dataset.k,target:c.dataset.t}));
+  if(await notesCall('/api/notes/'+id,'PUT',{shares}, shares.length?'Sharing saved.':'Note is private.')){ notesCloseShare(); notesLoad(); }
+}
+/* due-note pop-ups (same look as follow-up reminders) */
+function showNoteCard(n){
+  if(document.getElementById('nrem-'+n.note_id)) return;
+  const el=document.createElement('div'); el.className='rem-card'; el.id='nrem-'+n.note_id;
+  el.innerHTML='<div class="rem-head"><span class="rem-title">&#128221; Note reminder &middot; '+esc(notesFmt(n.remind_at))+'</span><button class="rem-x" title="Dismiss" onclick="noteDismiss('+n.note_id+')">&#10005;</button></div>'
+   +'<div class="rem-txt">'+esc(String(n.body||'').slice(0,240))+'</div>'
+   +'<div class="rem-btns"><button class="btn btn-primary btn-sm" onclick="noteDismiss('+n.note_id+');nav(document.querySelector(\'[data-view=notes]\'),\'notes\',\'My Notes\')">Open</button>'
+   +'<select class="field-select" style="max-width:120px;padding:4px 6px;font-size:12px;" onchange="if(this.value){noteSnooze('+n.note_id+',Number(this.value));}"><option value="">Snooze...</option><option value="10">10 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="1440">1 day</option><option value="2880">2 days</option><option value="10080">7 days</option></select></div>';
+  remWrap().appendChild(el);
+}
+async function pollDueNotes(){
+  if(!realUser) return;
+  try {
+    const r = await apiFetch('/api/notes-due'); if(!r.ok) return;
+    const rows = await r.json(); const ids = new Set(rows.map(x=>x.note_id));
+    document.querySelectorAll('#remWrap [id^="nrem-"]').forEach(el=>{ if(!ids.has(Number(el.id.replace('nrem-','')))) el.remove(); });
+    rows.slice(0,3).forEach(showNoteCard);
+  } catch(e){}
+}
+function noteCardRemove(id){ const e=document.getElementById('nrem-'+id); if(e) e.remove(); }
+async function noteDismiss(id){ noteCardRemove(id); try{ await apiFetch('/api/notes/'+id+'/dismiss',{method:'POST',body:'{}'}); }catch(e){} }
+async function noteSnooze(id, minutes){ noteCardRemove(id); try{ await apiFetch('/api/notes/'+id+'/snooze',{method:'POST',body:JSON.stringify({minutes})}); showToast('Snoozed.'); }catch(e){} }
+setInterval(()=>{ pollDueNotes(); }, 45*1000);
+setTimeout(()=>{ pollDueNotes(); }, 8000);
+/* Admin: Notes settings */
+let nsRolesAll = ['Admin','Operations Head','Location Head','Operations Manager','Team Leader','Sales Rep','Customer Compliance','Carrier Compliance'];
+async function notesAdminLoad(){
+  const msg=document.getElementById('nsMsg'); if(msg) msg.textContent='';
+  try {
+    const r = await apiFetch('/api/notes-settings'); const j = await r.json().catch(()=>({}));
+    if(!r.ok){ if(msg) msg.textContent = j.error||'Could not load.'; return; }
+    document.querySelectorAll('input[name="nsMode"]').forEach(x=>{ x.checked = x.value===j.shareMode; });
+    document.getElementById('nsRoles').innerHTML = nsRolesAll.map(ro=>'<label><input type="checkbox" class="nsRoleChk" value="'+esc(ro)+'"'+((j.shareRoles||[]).includes(ro)?' checked':'')+'> '+esc(ro)+'</label>').join('');
+    document.getElementById('nsAdminRead').checked = !!j.adminRead;
+    notesAdminModeChanged(); notesAdminShowAll(!!j.adminRead);
+  } catch(e){ if(msg) msg.textContent='Could not load.'; }
+}
+function notesAdminModeChanged(){ const m=(document.querySelector('input[name="nsMode"]:checked')||{}).value; document.querySelectorAll('.nsRoleChk').forEach(c=>{ c.disabled = m!=='roles'; }); }
+function notesAdminReadChanged(){ notesAdminShowAll(false); }
+async function notesAdminShowAll(on){
+  const box=document.getElementById('nsAll'); if(!box) return;
+  if(!on){ box.innerHTML = document.getElementById('nsAdminRead').checked ? '<div style="color:var(--text-faint);">Save changes to see the notes list.</div>' : ''; return; }
+  try {
+    const r = await apiFetch('/api/notes-all'); const j = await r.json().catch(()=>({}));
+    if(!r.ok){ box.textContent = j.error||''; return; }
+    box.innerHTML = '<div style="font-weight:600;margin-bottom:6px;">All notes ('+(j.notes||[]).length+')</div>' + ((j.notes||[]).map(n=>'<div style="border-top:1px solid var(--border);padding:7px 0;"><div style="white-space:pre-wrap;">'+esc(n.body)+'</div><div style="font-size:11.5px;color:var(--text-faint);">'+esc(n.owner_name||'')+(n.company_name?' - '+esc(n.company_name):'')+' - '+esc(notesFmt(n.updated_at))+'</div></div>').join('') || '<div style="color:var(--text-faint);">No notes yet.</div>');
+  } catch(e){}
+}
+async function notesAdminSave(){
+  const mode=(document.querySelector('input[name="nsMode"]:checked')||{}).value||'nobody';
+  const roles=[...document.querySelectorAll('.nsRoleChk:checked')].map(c=>c.value);
+  if(mode==='roles' && !roles.length){ showToast('Tick at least one role, or choose Nobody.'); return; }
+  const adminRead=document.getElementById('nsAdminRead').checked;
+  const ok = await notesCall('/api/notes-settings','PUT',{shareMode:mode,shareRoles:roles,adminRead}, 'Notes settings saved.');
+  const msg=document.getElementById('nsMsg'); if(msg) msg.textContent = ok ? 'Saved.' : '';
+  if(ok) notesAdminShowAll(adminRead);
+}
+/* ===== end My Notes ===== */
+
 
 // ── "Remind me" on any activity ───────────────────────────────
 let remindCtx = null;
@@ -3236,6 +3474,8 @@ function nav(el, view, label) {
   if(view==='manage-lists') renderManageLists();
   if(view==='security') secLoad();
   if(view==='notif-admin') notifAdminLoad();
+  if(view==='notes') notesLoad();
+  if(view==='notes-admin') notesAdminLoad();
   if(view==='mail') renderMailView();
   if(view==='bulk-email') { bulkLoadSettings(); bulkLoadHistory(); }
   if(view==='carrier-lanes') renderCarrierLanesReport();
@@ -3338,6 +3578,8 @@ function updateSidebarForRole() {
   show('navManageLists', isAdmin);
   show('navSecurity', isAdmin);
   show('navNotifAdmin', isAdmin);
+  show('navNotesAdmin', isAdmin);
+  show('navNotes', !!realUser);
   show('navAdminSection', isAdmin);
   // Reports: Admin, Location Head, TL only
   const reportsNav = document.querySelector('[data-view="reports"]');
@@ -3361,6 +3603,7 @@ function updateSidebarForRole() {
     'view-manage-lists': !isAdmin,
     'view-security': !isAdmin,
     'view-notif-admin': !isAdmin,
+    'view-notes-admin': !isAdmin,
     'view-carrier-compliance': isCC || !carrierAccessOn(),
     'view-customer-compliance': isCarrCC || !modOn('custCompliance'),
     'view-deals': !modOn('prospects'),
@@ -3464,34 +3707,68 @@ function ownerLabelFor(c) {
 
 // ── DROPDOWN FILTERS (shared by every long list) ─────────────────
 const DD = {};
+const DDX = {}; // C-074: remembers the rows + definitions of each filter bar so the tick-list can open
 function ddOpts(rows, def) {
   return [...new Set(rows.map(r=>def.get(r)).filter(v=>v!=null && v!=='' && v!=='—'))].sort((a,b)=>String(a).localeCompare(String(b)));
 }
+// a filter value is a list of ticked choices (older saved views stored one text value - still understood)
+function ddVals(st, k) { const v = st ? st[k] : null; return Array.isArray(v) ? v : (v ? [v] : []); }
 function ddRender(key, boxId, rows, defs, rerender, shown) {
   const box = document.getElementById(boxId); if(!box) return;
   const st = DD[key] = DD[key] || {};
   DD[key+'_re'] = rerender;
+  DDX[key] = { rows, defs };
   const lists = defs.map(d=>ddOpts(rows,d));
   const sig = key + JSON.stringify(lists) + JSON.stringify(st) + (shown==null?'':shown);
   if(box.dataset.sig === sig) return;
   box.dataset.sig = sig;
   let html = '';
   defs.forEach((d,i)=>{
-    if(lists[i].length < 2 && !st[d.key]) return; // nothing to choose between
-    html += `<select class="dd-sel${st[d.key]?' on':''}" onchange="ddSet('${key}','${d.key}',this.value)"><option value="">${esc(d.label)}: All</option>` +
-      lists[i].map(v=>`<option value="${esc(v)}"${st[d.key]===v?' selected':''}>${esc(v)}</option>`).join('') + `</select>`;
+    const vals = ddVals(st, d.key);
+    if(lists[i].length < 2 && !vals.length) return; // nothing to choose between
+    const sum = vals.length===1 ? vals[0] : vals.length+' selected';
+    html += `<button type="button" class="dd-pill${vals.length?' on':''}" onclick="ddPop(event,'${key}','${d.key}')">${esc(d.label)}${vals.length?': '+esc(sum):''} &#9662;</button>`;
   });
-  const any = Object.values(st).some(Boolean);
+  const any = Object.values(st).some(v=>Array.isArray(v)?v.length:v);
   if(html && any) html += `<button class="dd-clear" onclick="ddClear('${key}')">✕ Clear filters</button>`;
   if(html && shown!=null) html += `<span class="dd-count">${shown} shown</span>`;
   box.innerHTML = html;
 }
 function ddApply(key, rows, defs) {
   const st = DD[key] || {};
-  return rows.filter(r=>defs.every(d=>!st[d.key] || d.get(r)===st[d.key]));
+  return rows.filter(r=>defs.every(d=>{ const v = ddVals(st, d.key); return !v.length || v.includes(String(d.get(r))); }));
 }
-function ddSet(key, k, v) { (DD[key] = DD[key] || {})[k] = v; if(DD[key+'_re']) DD[key+'_re'](); }
+function ddSet(key, k, v) { (DD[key] = DD[key] || {})[k] = v ? [v] : []; if(DD[key+'_re']) DD[key+'_re'](); }
 function ddClear(key) { DD[key] = {}; if(DD[key+'_re']) DD[key+'_re'](); }
+// tick-list pop-up
+function ddPopClose() { document.querySelectorAll('#ddPop').forEach(x=>x.remove()); }
+document.addEventListener('click', e=>{ if(!e.target.closest('#ddPop') && !e.target.closest('.dd-pill')) ddPopClose(); });
+function ddPop(ev, key, k) {
+  ev.stopPropagation();
+  const had = document.getElementById('ddPop'); const same = had && had.dataset.k === key+'|'+k; ddPopClose(); if(same) return;
+  const x = DDX[key]; if(!x) return;
+  const d = x.defs.find(q=>q.key===k); if(!d) return;
+  const opts = ddOpts(x.rows, d);
+  const cur = ddVals(DD[key], k);
+  opts.forEach(o=>{}); cur.forEach(v=>{ if(!opts.includes(v)) opts.push(v); });
+  const el = document.createElement('div'); el.id='ddPop'; el.className='lk-menu dd-pop'; el.dataset.k = key+'|'+k;
+  el.innerHTML = (opts.length>8 ? '<input class="dd-find" placeholder="Search..." autocomplete="off">' : '') +
+    '<div class="dd-list">' + opts.map(o=>`<label class="dd-opt" data-v="${esc(String(o).toLowerCase())}"><input type="checkbox" value="${esc(o)}"${cur.includes(o)?' checked':''}> <span>${esc(o)}</span></label>`).join('') + '</div>' +
+    '<div class="dd-foot"><button type="button" class="dd-clear" data-clr="1">Clear</button></div>';
+  const r = ev.currentTarget.getBoundingClientRect();
+  el.style.left = Math.max(8, Math.min(r.left, window.innerWidth-260))+'px'; el.style.top = (r.bottom+4)+'px';
+  document.body.appendChild(el);
+  const find = el.querySelector('.dd-find');
+  if(find) { find.focus(); find.oninput = ()=>{ const q = find.value.toLowerCase(); el.querySelectorAll('.dd-opt').forEach(o=>{ o.style.display = o.dataset.v.includes(q)?'':'none'; }); }; }
+  const commit = ()=>{
+    const vals = [...el.querySelectorAll('input[type=checkbox]:checked')].map(c=>c.value);
+    (DD[key] = DD[key] || {})[k] = vals;
+    if(!vals.length) delete DD[key][k];
+    if(DD[key+'_re']) DD[key+'_re']();
+  };
+  el.onchange = commit;
+  el.onclick = e=>{ e.stopPropagation(); if(e.target.dataset && e.target.dataset.clr){ el.querySelectorAll('input[type=checkbox]').forEach(c=>c.checked=false); commit(); } };
+}
 const locOf = c => (c.location && c.location!=='—') ? locationName(c.location) : '';
 const CO_DD = [
   {key:'loc', label:'Location', get:locOf},
@@ -4061,7 +4338,7 @@ function renderCustomerContacts(id) {
   const contacts = contactsDB[id] || [];
   const body = document.getElementById('dBody');
 
-  const cardsHtml = contacts.length ? contacts.map(ct=>{
+  const cardsHtml = contacts.length ? contacts.map((ct,ix)=>{
     const initials = ct.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
     const addedByTag = ct.addedBy ? `<span style="font-size:9.5px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:var(--surface-3);border:1px solid var(--border);color:var(--text-faint);margin-top:3px;display:inline-block;">Added by ${ct.addedBy}</span>` : '';
     let mailTag = '';
@@ -4088,6 +4365,7 @@ function renderCustomerContacts(id) {
         ${addedByTag}${mailTag}
       </div>
       <div class="contact-actions">
+        <button class="ca-btn" onclick="ctEditOpen(${id},${ct.contactId==null?'null':Number(ct.contactId)},${ix})">&#9998; Edit</button>
         <button class="ca-btn call" onclick="openLogCallModal(${id},'${ct.name.replace(/'/g,"\\'")}')">
           <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.45 2 2 0 0 1 3.59 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.82a16 16 0 0 0 6 6l.92-.92a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
           Call
@@ -4140,7 +4418,7 @@ function hideAddContactForm(id) {
   form.classList.remove('visible');
   if(btn) btn.style.display='';
   // Clear fields
-  ['name','title','phone','email'].forEach(f=>{
+  ['first','last','title','phone','cell','email'].forEach(f=>{
     const el = document.getElementById('acf-'+f+'-'+id);
     if(el) el.value='';
   });
@@ -4966,12 +5244,16 @@ function openCompCase(id) {
         <div class="field-box"><div class="field-label">Type</div><div class="field-val"><span class="status ${c.typeCls}">${c.type}</span></div></div>
         <div class="field-box"><div class="field-label">Status</div><div class="field-val"><span class="status ${c.sCls}">${c.status}</span></div></div>
         <div class="field-box"><div class="field-label">SLA</div><div class="field-val sla ${c.slaCls}">${c.sla}</div></div>
-        ${(isCustComp||isAdmin) ? `<div class="field-box"><div class="field-label">Assigned To</div><div class="field-label">Assigned To</div><div class="field-val">${c.assigned}${(c.autoAssigned && c.status==='New') ? ' <span style="font-size:10.5px;color:var(--text-faint);">(assigned automatically)</span>' : ''}</div></div>` : ''}
+        ${(isCustComp||isAdmin) ? `<div class="field-box"><div class="field-label">Assigned To</div><div class="field-val">${c.assigned}${(c.autoAssigned && c.status==='New') ? ' <span style="font-size:10.5px;color:var(--text-faint);">(assigned automatically)</span>' : ''}</div></div>` : ''}
         <div class="field-box"><div class="field-label">Raised By</div><div class="field-val">${c.by}</div></div>
         ${(c.pickedUpBy && (isCustComp||isAdmin)) ? `<div class="field-box"><div class="field-label">Working on it</div><div class="field-val">${esc(c.pickedUpBy)}<div style="font-size:10.5px;color:var(--text-faint);">since ${esc(c.pickedUpAt)}</div></div></div>` : ''}
-        ${(()=>{ const cl = (relatedCo && relatedCo.creditLimit!=null) ? relatedCo.creditLimit : c.creditLimit; const canEdit=(isCustComp||isAdmin)&&c.companyId&&relatedCo; return (cl!=null||canEdit) ? `<div class="field-box"><div class="field-label">Credit Limit</div><div class="field-val">${cl!=null?'$'+Number(cl).toLocaleString('en-US'):'<span style="color:var(--text-faint);">Not set</span>'}${canEdit?` <a style="font-size:11.5px;color:var(--accent);cursor:pointer;margin-left:6px;" onclick="openCreditEdit(${c.companyId})">${cl!=null?'Change':'Set'}</a>`:''}</div></div>` : ''; })()}
+        ${(()=>{ const cl = (relatedCo && relatedCo.creditLimit!=null) ? relatedCo.creditLimit : c.creditLimit; const canEdit=(isCustComp||isAdmin)&&c.companyId&&relatedCo; if(isCustComp||isAdmin) return ''; /* C-074: staff edit the limit in the Credit section only */ return (cl!=null) ? `<div class="field-box"><div class="field-label">Credit Limit</div><div class="field-val">${cl!=null?'$'+Number(cl).toLocaleString('en-US'):'<span style="color:var(--text-faint);">Not set</span>'}${canEdit?` <a style="font-size:11.5px;color:var(--accent);cursor:pointer;margin-left:6px;" onclick="openCreditEdit(${c.companyId})">${cl!=null?'Change':'Set'}</a>`:''}</div></div>` : ''; })()}
       </div>
     </div>
+    ${(c.companyId && realUser && !(isCustComp||isAdmin)) ? `<div class="d-sec" id="caseMailSec"><div class="d-sec-label">Customer emails</div>
+      <div style="font-size:12px;color:var(--text-faint);margin-bottom:8px;">Compliance may need to read your conversation with this customer. Nothing is shared unless you choose it.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="caseEmailCustomer(${c.companyId}, '${c.id}')">&#9993; Email the customer (Compliance copied)</button>
+      <button class="btn btn-ghost btn-sm" onclick="caseShareEmails('${c.id}')">Share my emails with Compliance</button></div></div>` : ''}
     ${c.companyId ? `<div class="d-sec" id="compCoSec"><div class="d-sec-label">Company details</div><div id="compCoBody" style="font-size:13px;color:var(--text-faint);">Loading…</div></div>` : ''}
     ${c.type==='Customer Recheck' ? `<div class="d-sec"><div class="d-sec-label">Recheck request</div><div class="field-grid">
         <div class="field-box"><div class="field-label">Reason</div><div class="field-val">${esc(c.reqReason||'—')}</div></div>
@@ -5194,8 +5476,9 @@ function compShowTab(tab){
       <div class="d-sec-label" style="margin:0;">Emails to ${esc(d.name)}</div>
       <button class="btn btn-primary btn-sm" onclick="openCustomerEmail(${d.companyId}, '${d.caseId}')">✉ Email customer</button></div>
       <div style="font-size:12px;color:var(--text-faint);margin-bottom:10px;">Sent from the shared customer mailbox. Only Admin and Customer Compliance can see this list.</div>
-      <div id="custEmailLog">Loading…</div></div>`;
-    custLoadEmailLog(d.caseId); return;
+      <div id="custEmailLog">Loading…</div></div>
+      <div class="d-sec"><div class="d-sec-label">Shared by the sales rep</div><div id="caseSharedBox" style="font-size:12.5px;color:var(--text-faint);">Loading…</div></div>`;
+    custLoadEmailLog(d.caseId); caseLoadShared(d.caseId); return;
   }
   if(tab==='docs'){
     body.innerHTML = '<div class="d-sec"><div class="d-sec-label">Documents</div><div id="compDocsBox">Loading…</div></div>';
@@ -5571,8 +5854,32 @@ function collectProspectAlerts() {
   });
   return out;
 }
+/* C-074: snooze for pop-ups - remembered per person on the server (browser copy is only a backup) */
+let popupSnoozes = {};
+let popupSnoozeLoaded = false;
+async function loadPopupSnoozes() {
+  try {
+    const r = await apiFetch('/api/popup-snooze');
+    if(r.ok) { const j = await r.json(); popupSnoozes = j.snoozes || {}; popupSnoozeLoaded = true; }
+  } catch(e) {}
+  if(!popupSnoozeLoaded) { try { popupSnoozes = JSON.parse(localStorage.getItem('navPopupSnoozes')||'{}'); } catch(e) { popupSnoozes = {}; } }
+}
+function popupSnoozed(key) { const t = popupSnoozes[key]; return !!(t && new Date(t).getTime() > Date.now()); }
+async function snoozePopup(key, minutes) {
+  const until = new Date(Date.now() + minutes*60000).toISOString();
+  popupSnoozes[key] = until;
+  try { localStorage.setItem('navPopupSnoozes', JSON.stringify(popupSnoozes)); } catch(e) {}
+  if(key==='prospectAlerts') closeProspectAlerts();
+  const label = minutes===120?'2 hours':minutes===1440?'1 day':minutes===2880?'2 days':'7 days';
+  try {
+    const r = await apiFetch('/api/popup-snooze', { method:'POST', body: JSON.stringify({ key, minutes }) });
+    if(!r.ok) { const j = await r.json().catch(()=>({})); showToast(j.error || 'Snoozed on this browser only.'); return; }
+  } catch(e) {}
+  showToast('Snoozed for '+label+'.');
+}
 function showProspectAlerts(force) {
   if(!realUser) return;
+  if(popupSnoozed('prospectAlerts')) return;
   const items = collectProspectAlerts();
   const openCount = canSeeWindow() ? customers.filter(c=>isProspect(c) && c.prospectStatus==='Open').length : 0;
   const sig = openCount+'#'+items.map(i=>i.type+i.c.id+(i.left!==undefined?':'+i.left:'')).join('|');
@@ -6883,7 +7190,7 @@ function ctSchedule(q){
       const res=await apiFetch('/api/search?only=contacts&limit=200&q='+encodeURIComponent(q));
       if(!res.ok) return;
       const j=await res.json();
-      ctServer={q, rows:deTagObj(j.contacts||[]).map(c=>({name:c.full_name,first:c.first_name!=null?c.first_name:ctSplitName(c.full_name).first,last:c.last_name!=null?c.last_name:ctSplitName(c.full_name).last,cell:c.cell_phone||'—',title:c.title||'—',phone:c.phone||'—',email:c.email||'',company:c.company_name,companyId:c.company_id,
+      ctServer={q, rows:deTagObj(j.contacts||[]).map(c=>({name:c.full_name,first:c.first_name!=null?c.first_name:ctSplitName(c.full_name).first,last:c.last_name!=null?c.last_name:ctSplitName(c.full_name).last,cell:c.cell_phone||'—',title:c.title||'—',phone:c.phone||'—',email:c.email||'',company:c.company_name,companyId:c.company_id,contactId:c.contact_id,
         addedAt:c.created_at?new Date(c.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}))};
       if(((document.getElementById('ctSearch')||{}).value||'').toLowerCase()===q && document.getElementById('view-contacts').classList.contains('active')) renderContactsView();
     }catch(e){ console.error('Contact search failed', e); }
@@ -6953,7 +7260,7 @@ function renderContactsView() {
   if(subtitle) subtitle.textContent = ctBig ? (search.length>=2 ? `${allContacts.length} contact${allContacts.length!==1?'s':''} found${allContacts.length>=200?' (first 200 — type more to narrow)':''}` : `Search across all ${visibleCos.length.toLocaleString()} accounts`) : `${allContacts.length} contact${allContacts.length!==1?'s':''} across ${visibleCos.length} accounts`;
 
   if(!allContacts.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">${ctBig&&search.length<2?'Type a name, email, phone or company in the search box to find contacts.':(ctBig&&ctServer.q!==search?'Searching…':(search?'No contacts match your search.':'No contacts on file yet.'))}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">${ctBig&&search.length<2?'Type a name, email, phone or company in the search box to find contacts.':(ctBig&&ctServer.q!==search?'Searching…':(search?'No contacts match your search.':'No contacts on file yet.'))}</td></tr>`;
     return;
   }
 
@@ -6970,6 +7277,7 @@ function renderContactsView() {
       <td style="font-size:12px;font-family:var(--mono);">${ct.cell||'—'}</td>
       <td style="font-size:12px;font-family:var(--mono);">${ct.email||'—'}</td>
       <td style="font-size:11px;color:var(--text-faint);">${ct.addedAt||'—'}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();ctEditOpen(${ct.companyId},${ct.contactId==null?'null':Number(ct.contactId)},-1,${esc(JSON.stringify(ct.email||'')).replace(/&quot;/g,'&#39;')})">&#9998; Edit</button></td>
     </tr>`).join('');
 }
 
@@ -7040,6 +7348,82 @@ function acValidateEmail() {
   } else { warn.style.display='none'; }
 }
 
+/* ===== C-080: phone auto-format + edit contact ===== */
+// Typing 7135550199 becomes (713) 555-0199 as you go. Numbers with letters (extensions) or a non-US +code are left alone.
+function fmtPhoneTyped(v){
+  v = String(v||'');
+  if(/[a-zA-Z#*]/.test(v)) return v;
+  if(/^\s*\+/.test(v) && !/^\s*\+\s*1/.test(v)) return v;
+  let d = v.replace(/\D/g,'');
+  if(d[0]==='1') d = d.slice(1);
+  d = d.slice(0,10);
+  if(!d) return '';
+  if(d.length<=3) return '('+d;
+  if(d.length<=6) return '('+d.slice(0,3)+') '+d.slice(3);
+  return '('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6);
+}
+document.addEventListener('input', function(e){
+  const el = e.target;
+  if(!el || el.tagName!=='INPUT' || el.type!=='tel') return;
+  const before = el.value;
+  const caret = el.selectionStart==null ? before.length : el.selectionStart;
+  const digitsBefore = before.slice(0,caret).replace(/\D/g,'').length;
+  const out = fmtPhoneTyped(before);
+  if(out===before) return;
+  el.value = out;
+  try {
+    let n=0, pos=out.length;
+    if(digitsBefore<=0) pos=0; else for(let i=0;i<out.length;i++){ if(/\d/.test(out[i])) n++; if(n>=digitsBefore){ pos=i+1; break; } }
+    if(caret>=before.length) pos=out.length;
+    el.setSelectionRange(pos,pos);
+  } catch(err){}
+});
+function ctEditClose(){ const m=document.getElementById('ctEditModal'); if(m) m.remove(); }
+function ctEditOpen(companyId, contactId, ix, emailHint){
+  let ct = null;
+  const list = contactsDB[companyId]||[];
+  if(contactId!=null) ct = list.find(x=>x.contactId===contactId) || null;
+  if(!ct && ix>=0) ct = list[ix] || null;
+  if(!ct && emailHint) ct = list.find(x=>(x.email||'')===emailHint) || null;
+  if(!ct && contactId!=null){ ct = (ctServer.rows||[]).find(x=>x.contactId===contactId) || null; }
+  if(!ct){ showToast('Could not find that contact.'); return; }
+  ctEditClose();
+  const clean = v => (v==null||v==='—') ? '' : String(v);
+  const pf = v => { const c=clean(v); return c ? fmtPhoneTyped(c) : ''; };
+  const w = document.createElement('div'); w.id='ctEditModal';
+  w.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  const f = (id,label,val,type,ph)=>'<div><label style="display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em;">'+label+'</label><input id="ce-'+id+'" type="'+(type||'text')+'" value="'+esc(clean(val))+'" placeholder="'+(ph||'')+'" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:7px 10px;color:var(--text);font-size:13px;"></div>';
+  w.innerHTML='<div style="background:var(--surface,#fff);color:var(--text);border-radius:10px;max-width:560px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.3);"><div style="padding:14px 18px;border-bottom:1px solid var(--border);font-weight:600;">Edit contact</div><div style="padding:14px 18px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+   +f('first','First name *',ct.first)+f('last','Last name',ct.last)+f('title','Title / role',ct.title)+f('phone','Phone (office)',pf(ct.phone),'tel','(713) 555-0100')+f('cell','Cell',pf(ct.cell),'tel','(713) 555-0199')+f('email','Email *',ct.email,'email','name@company.com')
+   +'</div><div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-ghost btn-sm" onclick="ctEditClose()">Cancel</button><button class="btn btn-primary btn-sm" id="ceSave">Save</button></div></div>';
+  document.body.appendChild(w);
+  w.addEventListener('click',e=>{ if(e.target===w) ctEditClose(); });
+  document.getElementById('ce-first').focus();
+  document.getElementById('ceSave').onclick = async ()=>{
+    const v = id=>(document.getElementById('ce-'+id).value||'').trim();
+    const first=v('first'), last=v('last'), email=v('email');
+    if(!first){ showToast('First name is required.'); return; }
+    if(!email){ showToast('Email is required.'); return; }
+    if(!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)){ showToast('That email address does not look right.'); return; }
+    const payload = { first, last, name: ctJoin(first,last), title:v('title'), phone:v('phone'), cell:v('cell'), email };
+    if(realUser){
+      if(ct.contactId==null){ showToast('Could not edit this contact.'); return; }
+      try {
+        const res = await apiFetch('/api/contacts/'+ct.contactId,{method:'PUT',body:JSON.stringify(payload)});
+        const j = await res.json().catch(()=>({}));
+        if(!res.ok){ showToast(j.error||'Could not save that contact - please try again.'); return; }
+        await loadRealContacts(companyId);
+        if(ctServer && ctServer.rows){ ctServer.rows.forEach(r=>{ if(r.contactId===ct.contactId){ r.name=payload.name; r.first=first; r.last=last; r.title=payload.title||'—'; r.phone=j.phone||payload.phone||'—'; r.cell=j.cell||payload.cell||'—'; r.email=email; } }); }
+      } catch(err){ showToast('Could not save that contact - please try again.'); return; }
+    } else {
+      Object.assign(ct,{ name:payload.name, first, last, title:payload.title||'—', phone:fmtPhoneTyped(payload.phone)||'—', cell:fmtPhoneTyped(payload.cell)||'—', email });
+    }
+    ctEditClose(); showToast('Contact saved.');
+    if(openCompanyId===companyId && drawerTab==='contacts') renderCustomerContacts(companyId);
+    if(document.getElementById('view-contacts').classList.contains('active')) renderContactsView();
+  };
+}
+/* ===== end C-080 ===== */
 async function submitGlobalContact() {
   if(!acSelectedCompanyId) { showToast('No company selected.'); return; }
   const first = (document.getElementById('ac-first').value||'').trim();
@@ -8687,7 +9071,7 @@ function creditNextText(d) {
 function creditHtml(d, id) {
   const f = (l,v)=>`<div class="field-box"><div class="field-label">${l}</div><div class="field-val">${v}</div></div>`;
   const st = d.staff;
-  const base = f('Credit limit', crMoney(d.creditLimit)) + f('Payment terms', esc(d.paycat||'—')) + f('Last checked', d.checkedAt?crDate(d.checkedAt):'—') + f('Next recheck', creditNextText(d));
+  const base = (st?'':f('Credit limit', crMoney(d.creditLimit))) + f('Payment terms', esc(d.paycat||'—')) + f('Last checked', d.checkedAt?crDate(d.checkedAt):'—') + f('Next recheck', creditNextText(d));
   let act;
   if(d.openCase) act = `<div style="font-size:12px;color:var(--text-faint);margin-top:8px;">A Compliance case is already open (${esc(d.openCase.caseId)}).</div>`;
   else act = `<div style="margin-top:8px;"><button class="btn btn-primary btn-sm" onclick="recheckOpen(${id})">${st?'Start a recheck':'Send for recheck / ask for more credit'}</button></div>`;
@@ -8696,7 +9080,7 @@ function creditHtml(d, id) {
   const hist = (st.history||[]).length ? (st.history).map(h=>`<div style="font-size:11.5px;color:var(--text-faint);">${esc(new Date(h.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))} · ${esc(h.by_name||'')} · ${esc(h.kind)}: ${esc(h.old_value||'—')} → ${esc(h.new_value||'—')}</div>`).join('') : '<div style="font-size:11.5px;color:var(--text-faint);">No changes recorded yet.</div>';
   return `<div class="field-grid">${base}</div>
     <div class="field-grid" style="margin-top:10px;">
-      <div class="field-box"><div class="field-label">Credit limit shown to the sales rep ($)</div><div style="display:flex;gap:6px;"><input id="crLimit${id}" type="number" min="0" step="1000" value="${d.creditLimit==null?'':d.creditLimit}" style="flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:5px 8px;"><button class="btn btn-ghost btn-sm" onclick="creditSaveLimit(${id})">Save</button></div></div>
+      <div class="field-box"><div class="field-label">Credit limit <span style="color:var(--text-faint);">(shown to the sales rep) ($)</span></div><div style="display:flex;gap:6px;"><input id="crLimit${id}" type="number" min="0" step="1000" value="${d.creditLimit==null?'':d.creditLimit}" style="flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:5px 8px;"><button class="btn btn-ghost btn-sm" onclick="creditSaveLimit(${id})">Save</button></div></div>
       <div class="field-box"><div class="field-label">Allianz grade <span style="color:var(--text-faint);">(1 = best, 10 = highest risk · Compliance only)</span></div><div style="display:flex;gap:6px;"><select id="crGrade${id}" style="flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:5px 8px;">${gradeOpts}</select><button class="btn btn-ghost btn-sm" onclick="creditSaveGrade(${id})">Save</button></div>
         ${st.allianzCheckedAt?`<div style="font-size:10.5px;color:var(--text-faint);margin-top:3px;">Set ${crDate(st.allianzCheckedAt)}${st.allianzBy?' by '+esc(st.allianzBy):''}</div>`:''}</div>
       <div class="field-box"><div class="field-label">Allianz-approved credit limit ($) <span style="color:var(--text-faint);">(what Allianz approves · Compliance only)</span></div><div style="display:flex;gap:6px;"><input id="crAlLimit${id}" type="number" min="0" step="1000" value="${st.allianzLimit==null?'':st.allianzLimit}" style="flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:5px 8px;"><button class="btn btn-ghost btn-sm" onclick="creditSaveAllianzLimit(${id})">Save</button></div></div>
@@ -9819,7 +10203,17 @@ async function saveCCCoiNote(mc) {
 // ── EMAIL COMPOSE MODAL ───────────────────────────────────────
 let emailComposeContext = null; // {type:'ops'|'coi', mc:'...'}
 
+/* C-074: Cc / Bcc helpers */
+function ecShowCc(){ const w=document.getElementById('ec-cc-wrap'); if(w){ w.style.display='flex'; const i=document.getElementById('ec-cc'); if(i) i.focus(); } }
+function ecShowBcc(){ const w=document.getElementById('ec-bcc-wrap'); if(w){ w.style.display='flex'; const i=document.getElementById('ec-bcc'); if(i) i.focus(); } }
+function ecBccValue(){ const w=document.getElementById('ec-bcc-wrap'), i=document.getElementById('ec-bcc'); return (w && i && w.style.display!=='none') ? String(i.value||'').split(/[,;]+/).map(a=>a.trim()).filter(Boolean).join(', ') : ''; }
+function ecCheckAddresses(){
+  const ok=a=>/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(a);
+  const chk=(id,label)=>{ const el=document.getElementById(id); if(!el) return true; const w=el.closest('.ol-c-row'); if(w && w.style.display==='none') return true; const bad=String(el.value||'').split(/[,;]+/).map(a=>a.trim()).filter(a=>a&&!ok(a)); if(bad.length){ showToast('Not sent - this '+label+' address does not look right: '+bad.join(', ')); return false; } return true; };
+  return chk('ec-to','To') && chk('ec-cc','Cc') && chk('ec-bcc','Bcc');
+}
 function openEmailCompose(type, mc, opts) {
+  { const bw=document.getElementById('ec-bcc-wrap'), bi=document.getElementById('ec-bcc'); if(bw) bw.style.display='none'; if(bi) bi.value=''; }
   if((type==='ops' || type==='coi') && !ccMayStartMail()) { showToast('Only Carrier Compliance can start this email.'); return; }
   { const vw=document.getElementById('ec-vis-wrap'), vn=document.getElementById('ec-vis-note'); if(vw) vw.style.display='none'; if(vn) vn.style.display='none'; }
   { const fi=document.getElementById('ec-from'); if(fi) fi.readOnly=true; }
@@ -9982,7 +10376,7 @@ async function sendRealCompanyEmail(co, toAddr, ccAddr, subject, body, attachmen
   try {
     const res = await apiFetch(`/api/companies/${co.id}/send-email`, {
       method: 'POST',
-      body: JSON.stringify({ to: toAddr, cc: ccAddr, subject, body, bodyHtml: emailComposeHtml || undefined, graphAccessToken: graphToken || undefined, attachments: emailAttachPayload(attachments) }),
+      body: JSON.stringify({ to: toAddr, cc: ccAddr, bcc: ecBccValue() || undefined, subject, body, bodyHtml: emailComposeHtml || undefined, graphAccessToken: graphToken || undefined, attachments: emailAttachPayload(attachments) }),
     });
     if(!res.ok) {
       const err = await res.json().catch(()=>({}));
@@ -10046,10 +10440,11 @@ async function sendRealGenericEmail(toAddr, ccAddr, subject, body, emailId, atta
     return false;
   }
 
-  const toRecipients = String(toAddr).split(',').map(a=>a.trim()).filter(Boolean).map(address=>({ emailAddress: { address } }));
-  const ccRecipients = (ccAddr ? String(ccAddr).split(',') : []).map(a=>a.trim()).filter(Boolean).map(address=>({ emailAddress: { address } }));
+  const toRecipients = String(toAddr).split(/[,;]+/).map(a=>a.trim()).filter(Boolean).map(address=>({ emailAddress: { address } }));
+  const ccRecipients = (ccAddr ? String(ccAddr).split(/[,;]+/) : []).map(a=>a.trim()).filter(Boolean).map(address=>({ emailAddress: { address } }));
+  const bccRecipients = ecBccValue().split(',').map(a=>a.trim()).filter(Boolean).map(address=>({ emailAddress: { address } }));
 
-  const msg = { subject: subject || '(no subject)', body: emailComposeHtml ? { contentType: 'HTML', content: emailComposeHtml } : { contentType: 'Text', content: body || '' }, toRecipients, ccRecipients, attachments: emailAttachPayload(attachments).map(f=>({ '@odata.type':'#microsoft.graph.fileAttachment', name:f.name, contentType:f.type, contentBytes:f.contentBase64 })) };
+  const msg = { subject: subject || '(no subject)', body: emailComposeHtml ? { contentType: 'HTML', content: emailComposeHtml } : { contentType: 'Text', content: body || '' }, toRecipients, ccRecipients, ...(bccRecipients.length?{bccRecipients}:{}), attachments: emailAttachPayload(attachments).map(f=>({ '@odata.type':'#microsoft.graph.fileAttachment', name:f.name, contentType:f.type, contentBytes:f.contentBase64 })) };
   const sendAs = fromAddr && String(fromAddr).toLowerCase() !== String(currentUserEmail()||'').toLowerCase() ? String(fromAddr).trim() : '';
   const post = (message) => fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
     method: 'POST',
@@ -10164,6 +10559,7 @@ async function doSendEmail() {
   const attachments = (emailAttachments||[]).slice();
 
   if(!toAddr) { showToast('Add at least one recipient.'); return; }
+  if(!ecCheckAddresses()) return;
 
   // ── CUSTOMER COMPLIANCE EMAIL (C-033): always from the shared customer mailbox ──
   if(type === 'custcomp') {
@@ -13018,6 +13414,61 @@ async function custLoadEmailLog(caseId){
     box.innerHTML = rows.length ? '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-faint);margin-bottom:4px;">Emails sent to customer</div>' + rows.map(r=>`<div style="font-size:12px;padding:5px 0;border-top:1px solid var(--border);"><b>${esc(r.subject||'(no subject)')}</b><br><span style="color:var(--text-muted);">${esc(new Date(r.sent_at).toLocaleString())} · ${esc(r.full_name||'')} · to ${esc(r.to_address||'')} · ${r.email_kind==='documents'?'<b style="color:#b45309;">documents — broker NOT copied</b>':(r.broker_copied?'broker copied':'broker not copied')}</span></div>`).join('') : '';
   } catch(e) {}
 }
+/* C-074: customer emails from the case (sales rep side) */
+async function caseEmailCustomer(companyId, caseId){
+  const c = customers.find(x=>x.id===companyId);
+  if(!c) { showToast('Could not find that company.'); return; }
+  if(realUser && !canEmailCompany(c)) { showEmailBlocked([{companyId:c.id,name:c.name}]); return; }
+  let ops = '';
+  try { const r = await apiFetch('/api/compliance-cases/'+encodeURIComponent(caseId)+'/share-info'); if(r.ok){ const j = await r.json(); ops = j.opsAddress||''; } } catch(e) {}
+  if(!ops) showToast('The Compliance mailbox is not set up yet - ask Customer Compliance to add it in Email settings. You can still send, but add it in Cc yourself.');
+  const first = (contactsDB[companyId]||[])[0];
+  openEmailCompose('sales', null, {
+    companyId: c.id,
+    title: 'Email - '+c.name,
+    subhead: 'Compliance is copied so they can read the conversation.',
+    from: currentUserEmail()||'nav@nlius.com',
+    to: first?.email || (c.domain ? 'contact@'+c.domain : ''),
+    cc: ops, showCc: true,
+    subject: c.name+' - NAV Logistics',
+    body: 'Hi '+(first?.name?.split(' ')[0]||'there')+',\n\n',
+  });
+}
+function caseCloseShare(){ const m=document.getElementById('caseShareModal'); if(m) m.remove(); }
+async function caseShareEmails(caseId){
+  caseCloseShare();
+  const wrap = document.createElement('div'); wrap.id='caseShareModal';
+  wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  wrap.innerHTML='<div style="background:var(--surface,#fff);color:var(--text);border-radius:10px;max-width:640px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.3);"><div style="padding:14px 18px;border-bottom:1px solid var(--border);font-weight:600;">Share emails with Compliance</div><div id="caseShareBody" style="padding:12px 18px;overflow:auto;font-size:13px;">Loading...</div><div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-ghost btn-sm" onclick="caseCloseShare()">Cancel</button><button class="btn btn-primary btn-sm" id="caseShareSave">Save</button></div></div>';
+  document.body.appendChild(wrap);
+  const body = document.getElementById('caseShareBody');
+  try {
+    const r = await apiFetch('/api/compliance-cases/'+encodeURIComponent(caseId)+'/my-emails');
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok){ body.textContent = j.error || 'Could not load your emails.'; return; }
+    const list = j.emails||[];
+    if(!list.length){ body.innerHTML='<div style="color:var(--text-faint);">No emails with this customer are saved in the CRM yet. Send one with the button on the case, or open the customer\'s Emails tab to sync your mailbox first.</div>'; document.getElementById('caseShareSave').style.display='none'; return; }
+    body.innerHTML='<div style="color:var(--text-faint);margin-bottom:8px;">Tick the emails Compliance may read. Only these are shared - nothing else from your mailbox.</div>'+list.map(e=>'<label style="display:flex;gap:10px;padding:7px 0;border-top:1px solid var(--border);cursor:pointer;align-items:flex-start;"><input type="checkbox" class="caseShareChk" value="'+Number(e.email_id)+'"'+(e.shared?' checked':'')+' style="margin-top:3px;"><span style="flex:1;min-width:0;"><b>'+esc(e.subject||'(no subject)')+'</b><br><span style="color:var(--text-faint);font-size:12px;">'+(e.direction==='sent'?'Sent to ':'Received from ')+esc(e.direction==='sent'?(e.to_addr||''):(e.from_addr||''))+' - '+esc(new Date(e.sent_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))+'</span></span></label>').join('');
+    document.getElementById('caseShareSave').onclick = async ()=>{
+      const ids=[...document.querySelectorAll('.caseShareChk:checked')].map(x=>Number(x.value));
+      try {
+        const res = await apiFetch('/api/compliance-cases/'+encodeURIComponent(caseId)+'/shared-emails',{method:'PUT',body:JSON.stringify({emailIds:ids})});
+        const jj = await res.json().catch(()=>({}));
+        if(!res.ok){ showToast(jj.error||'Could not save.'); return; }
+        caseCloseShare(); showToast(ids.length ? ids.length+' email'+(ids.length===1?'':'s')+' shared with Compliance.' : 'No emails shared.');
+      } catch(e){ showToast('Could not save.'); }
+    };
+  } catch(e){ body.textContent='Could not load your emails.'; }
+}
+async function caseLoadShared(caseId){
+  const box=document.getElementById('caseSharedBox'); if(!box||!realUser) return;
+  try {
+    const r = await apiFetch('/api/compliance-cases/'+encodeURIComponent(caseId)+'/shared-emails'); const j = await r.json().catch(()=>({}));
+    const list=(j&&j.emails)||[];
+    if(!r.ok||!list.length){ box.textContent='The sales rep has not shared any emails on this case yet.'; return; }
+    box.innerHTML=list.map(e=>'<details style="border-top:1px solid var(--border);padding:6px 0;"><summary style="cursor:pointer;"><b>'+esc(e.subject||'(no subject)')+'</b> <span style="color:var(--text-faint);font-size:11.5px;">'+(e.direction==='sent'?'to ':'from ')+esc(e.direction==='sent'?(e.to_addr||''):(e.from_addr||''))+' - '+esc(new Date(e.sent_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}))+' - shared by '+esc(e.shared_by||'')+'</span></summary><div style="white-space:pre-wrap;padding:8px 2px;color:var(--text);font-size:12.5px;">'+esc(e.body_main||'')+'</div></details>').join('');
+  } catch(e){ box.textContent='Could not load shared emails.'; }
+}
 function custBrokerEmail(companyId){
   const c = customers.find(x=>x.id===companyId);
   const o = c && (realUsers||[]).find(u=>u.userId===c.ownerUserId);
@@ -13289,7 +13740,7 @@ async function finishLogin() {
     console.info('[load] app opened after ' + ((performance.now()-T0)/1000).toFixed(1) + 's');
     const bl = document.getElementById('bootLoading'); if(bl && !fromCache) bl.style.display = 'block';
     const bigDone = [
-      timed('companies', loadRealCompanies).then(()=>{ try{ renderDashboard(); }catch(e){} setTimeout(()=>{ try{ showProspectAlerts(true); }catch(e){ console.warn(e); } }, 600); }),
+      timed('companies', loadRealCompanies).then(()=>{ try{ renderDashboard(); }catch(e){} setTimeout(async ()=>{ try{ await loadPopupSnoozes(); showProspectAlerts(true); }catch(e){ console.warn(e); } }, 600); }),
       timed('user management', loadRealUserManagement),
       timed('compliance cases', loadRealComplianceCases),
       timed('carrier checks', loadRealCarrierChecks),
@@ -13509,17 +13960,19 @@ var LK = (function(){
       tabs:[{n:'All prospects',s:{f:'all'}},{n:'Prospect',s:{f:'Prospect'}},{n:'Pending Compliance',s:{f:'Pending'}}],
       get:()=>({f:prospectFilter}), set:s=>{ prospectFilter=s.f||'all'; },
       sorters:{'Company':c=>c.name,'Status':c=>c.status,'Owner (Sales Rep)':c=>ownerLabelFor(c),'Stage':c=>c.prospectStatus||'','Last Updated':c=>c.updatedTs||0},
-      board:'prospect' },
+      board:'prospect', dates:['Last Updated'],
+      counts:()=>{ let b=customers.filter(c=>isProspect(c)); if(!realUser && currentRole==='Sales Rep'){ const me=currentUserName(); b=b.filter(c=>c.owner===me||(c.coOwners&&c.coOwners.includes(me))); } if(!realUser && currentRole==='Location Head') b=b.filter(c=>canSeeLocation(c.location)); return LISTS.pr.tabs.map(t=>{ const f=(t.s&&t.s.f)||'all'; return f==='all'?b.length:b.filter(c=>c.status.toLowerCase().includes(f.toLowerCase())).length; }); } },
     co: { mod:'customers', view:'view-companies', tbody:'coTbody', dd:'co', slice:true, render:()=>renderCoTable(),
       tabs:[{n:'All customers',s:{f:'all'}},{n:'Active',s:{f:'Active'}},{n:'Open',s:{f:'Open'}},{n:'Limited Credit',s:{f:'Limited'}},{n:'Prepaid',s:{f:'Prepaid'}}],
       get:()=>({f:coFilter}), set:s=>{ coFilter=s.f||'all'; },
       sorters:{'Company Name':c=>c.name,'Status':c=>c.status,'Payment Category':c=>c.paycat||'','Owner (Sales Rep)':c=>ownerLabelFor(c),'Compliance Team':c=>c.compTeam||'','Last Updated':c=>c.updatedTs||0},
-      board:'customer' },
+      board:'customer', dates:['Last Updated'],
+      counts:()=>{ const b=getVisibleCustomers().filter(c=>!isProspect(c)); return LISTS.co.tabs.map(t=>{ const f=(t.s&&t.s.f)||'all'; if(f==='all') return b.length; return b.filter(c=>{ const sl=c.status.toLowerCase(); if(f==='Active') return sl==='active'; if(f==='Open') return sl==='open'||isOpenCo(c); if(f==='Limited') return sl.includes('limited'); if(f==='Prepaid') return sl.includes('prepaid'); return sl.startsWith(f.toLowerCase()); }).length; }); } },
     cr: { mod:'carriers', view:'view-companies', tbody:'coTbody', dd:null, slice:false, render:()=>renderCoTable(),
       tabs:[{n:'All carriers',s:{}}], get:()=>({}), set:()=>{}, board:null },
     ct: { mod:'contacts', view:'view-contacts', tbody:'ctTbody', dd:'ct', slice:true, render:()=>renderContactsView(),
       tabs:[{n:'All contacts',s:{}}], get:()=>({}), set:()=>{},
-      sorters:{'First name':c=>ctParts(c).first,'Last name':c=>ctParts(c).last,'Title':c=>c.title||'','Company':c=>c.company||'','Phone':c=>c.phone||'','Cell':c=>c.cell||'','Email':c=>c.email||'','Added':c=>c.addedAt?Date.parse(c.addedAt)||0:0}, board:null },
+      sorters:{'First name':c=>ctParts(c).first,'Last name':c=>ctParts(c).last,'Title':c=>c.title||'','Company':c=>c.company||'','Phone':c=>c.phone||'','Cell':c=>c.cell||'','Email':c=>c.email||'','Added':c=>c.addedAt?Date.parse(c.addedAt)||0:0}, board:null, dates:['Added'] },
     cc: { mod:'carcomp', view:'view-carrier-compliance', tbody:'ccTbody', dd:'cc', slice:false, render:()=>renderCCView(),
       tabs:[{n:'All Open',s:{f:'open'}},{n:'Assigned to me',s:{f:'mine'}},{n:'Quotation Only',s:{f:'quotation'}},{n:'Setup',s:{f:'setup'}},{n:'Over SLA',s:{f:'sla'}},{n:'History',s:{m:'history'}}],
       get:()=>({f:ccFilter,m:ccViewMode}), set:s=>{ ccViewMode=s.m||'active'; ccFilter=s.f||'open'; sync('cc'); },
@@ -13530,7 +13983,7 @@ var LK = (function(){
       board:'Status' },
   };
   const ST = {};
-  function st(k){ return ST[k] || (ST[k] = {active:'b0', base:null, sort:null, hide:[], ps:50, page:0, board:false, views:null, sig:'', barSig:'', local:false, total:null, ddOpen:null}); }
+  function st(k){ return ST[k] || (ST[k] = {active:'b0', base:null, sort:null, hide:[], adv:[], ps:50, page:0, board:false, views:null, sig:'', barSig:'', local:false, total:null, ddOpen:null}); }
   // keep the original History/Active button highlights in step (they are hidden, but other code looks at them)
   function sync(k){
     try{
@@ -13545,25 +13998,25 @@ var LK = (function(){
   }
   const clone = o => JSON.parse(JSON.stringify(o||{}));
   function norm(s){
-    const dd = {}; Object.keys(s.dd||{}).sort().forEach(x=>{ if(s.dd[x]) dd[x]=s.dd[x]; });
-    return JSON.stringify({f:s.f||null,m:s.m||null,dd,sort:s.sort||null,hide:(s.hide||[]).slice().sort(),ps:s.ps||50,board:!!s.board});
+    const dd = {}; Object.keys(s.dd||{}).sort().forEach(x=>{ const v=s.dd[x]; if(Array.isArray(v)){ if(v.length) dd[x]=v.slice().sort(); } else if(v) dd[x]=[v]; });
+    return JSON.stringify({f:s.f||null,m:s.m||null,dd,sort:s.sort||null,hide:(s.hide||[]).slice().sort(),adv:s.adv||[],ps:s.ps||50,board:!!s.board});
   }
   function snap(k){
     const c=LISTS[k], s=st(k), g=c.get();
-    return {f:g.f, m:g.m, dd:c.dd?clone(DD[c.dd]):{}, sort:s.sort, hide:s.hide.slice(), ps:s.ps, board:s.board};
+    return {f:g.f, m:g.m, dd:c.dd?clone(DD[c.dd]):{}, sort:s.sort, hide:s.hide.slice(), adv:(s.adv||[]).map(r=>Object.assign({},r)), ps:s.ps, board:s.board};
   }
   function tabSnap(k, t){ // what a tab means, filled in with defaults
     const d = LISTS[k].tabs[0].s; const hasM = ('m' in LISTS[k].get());
-    return Object.assign({f:d.f||null,m:hasM?'active':null,dd:{},sort:null,hide:[],ps:50,board:false}, t.s);
+    return Object.assign({f:d.f||null,m:hasM?'active':null,dd:{},sort:null,hide:[],adv:[],ps:50,board:false}, t.s);
   }
   function activeDef(k){
     const s=st(k), c=LISTS[k];
     if(s.active[0]==='b') return {name:c.tabs[+s.active.slice(1)].n, snap:tabSnap(k,c.tabs[+s.active.slice(1)]), builtin:true};
-    const v=(s.views||[]).find(x=>'c'+x.id===s.active); return v?{name:v.name,snap:Object.assign({dd:{},hide:[],ps:50},v.config),builtin:false,id:v.id}:null;
+    const v=(s.views||[]).find(x=>'c'+x.id===s.active); return v?{name:v.name,snap:Object.assign({dd:{},hide:[],adv:[],ps:50},v.config),builtin:false,id:v.id}:null;
   }
   function apply(k, sn){
     const c=LISTS[k], s=st(k);
-    s.sort=sn.sort||null; s.hide=(sn.hide||[]).slice(); s.ps=sn.ps||50; s.board=!!sn.board; s.page=0;
+    s.sort=sn.sort||null; s.hide=(sn.hide||[]).slice(); s.adv=(sn.adv||[]).map(r=>Object.assign({},r)); s.ps=sn.ps||50; s.board=!!sn.board; s.page=0;
     if(c.dd){ DD[c.dd]=clone(sn.dd||{}); }
     c.set(sn);
     c.render();
@@ -13635,8 +14088,8 @@ var LK = (function(){
       if(a==='del'){ if(!confirm('Delete the view “'+v.name+'”?')) return; try{ await persist(k,'del',{id:v.id}); s.views=s.views.filter(x=>x!==v); if(s.active==='c'+v.id){ s.active='b0'; pick(k,'b0'); } else { s.barSig=''; bar(k); } }catch(e){} }
     };
   }
-  function closeMenus(){ document.querySelectorAll('#lkMenu,#lkCols').forEach(x=>x.remove()); }
-  document.addEventListener('click',e=>{ if(!e.target.closest('#lkCols,#lkMenu')) closeMenus(); });
+  function closeMenus(){ document.querySelectorAll('#lkMenu,#lkCols,#lkAdv,#lkSort').forEach(x=>x.remove()); }
+  document.addEventListener('click',e=>{ if(!e.target.closest('#lkCols,#lkMenu,#lkAdv,#lkSort')) closeMenus(); });
   // ── table helpers ────────────────────────────────────────
   function tableOf(k){ const tb=document.getElementById(LISTS[k].tbody); return tb? tb.closest('table'):null; }
   function heads(k){ const t=tableOf(k); if(!t||!t.tHead) return []; return [...t.tHead.querySelectorAll('th')]; }
@@ -13663,11 +14116,40 @@ var LK = (function(){
       th.onclick=()=>{ if(s.sort&&s.sort.c===nm){ if(s.sort.d>0) s.sort={c:nm,d:-1}; else s.sort=null; } else s.sort={c:nm,d:1}; s.page=0; c.render(); };
     });
   }
+  // ── advanced filters (C-074) ─────────────────────────────
+  const OPS=[['contains','contains'],['ncontains','does not contain'],['is','is'],['isnt','is not'],['empty','is empty'],['nempty','is not empty'],['gt','is greater than'],['lt','is less than']];
+  const DOPS=[['gt','is older than (days)'],['lt','is newer than (days)'],['empty','is empty'],['nempty','is not empty']];
+  function advCols(k){ const c=LISTS[k]; if(c.slice) return Object.keys(c.sorters||{}); return heads(k).filter(th=>!th.classList.contains('cb-th')).map(hname).filter(x=>x && !/^action/i.test(x)); }
+  function isDate(k,col){ return !!(LISTS[k].dates && LISTS[k].dates.includes(col)); }
+  function numOf(v){ if(typeof v==='number') return v; const d=durSecs(v); if(d!=null) return d/3600; const n=parseFloat(String(v).replace(/[$,]/g,'')); return isNaN(n)?null:n; }
+  function advTest(k, r, raw){
+    const col=r.c, v=raw;
+    if(isDate(k,col)){
+      const ts=(typeof v==='number')?v:Date.parse(v); const has=ts>0&&!isNaN(ts); const days=has?(Date.now()-ts)/86400000:null;
+      if(r.op==='empty') return !has; if(r.op==='nempty') return has;
+      const n=parseFloat(r.v); if(isNaN(n)||!has) return false;
+      return r.op==='gt' ? days>n : days<n;
+    }
+    const t=(v==null?'':String(v)).trim(), tl=t.toLowerCase(), q=String(r.v==null?'':r.v).trim().toLowerCase();
+    switch(r.op){
+      case 'empty': return t===''||t==='—'; case 'nempty': return !(t===''||t==='—');
+      case 'contains': return tl.includes(q); case 'ncontains': return !tl.includes(q);
+      case 'is': return tl===q; case 'isnt': return tl!==q;
+      case 'gt': case 'lt': { const a=numOf(v), b=parseFloat(String(r.v).replace(/[$,]/g,'')); if(a==null||isNaN(b)) return false; return r.op==='gt'?a>b:a<b; }
+    }
+    return true;
+  }
+  function advRules(k){ return (st(k).adv||[]).filter(r=>r && r.c && r.op && (r.op==='empty'||r.op==='nempty'||String(r.v==null?'':r.v).trim()!=='')); }
+  function advFilter(k, all){
+    const rs=advRules(k); if(!rs.length) return all;
+    const g=LISTS[k].sorters||{};
+    return all.filter(row=>rs.every(r=>g[r.c]? advTest(k,r,g[r.c](row)) : true));
+  }
   // for big lists: sort + slice the data BEFORE it is drawn
   function rows(k, all){
     const c=LISTS[k], s=st(k);
-    let r=all;
-    if(s.sort && c.sorters && c.sorters[s.sort.c]){ const g=c.sorters[s.sort.c], d=s.sort.d; r=all.slice().sort((a,b)=>d*cmp(g(a),g(b))); }
+    let r=advFilter(k, all);
+    if(s.sort && c.sorters && c.sorters[s.sort.c]){ const g=c.sorters[s.sort.c], d=s.sort.d; r=r.slice().sort((a,b)=>d*cmp(g(a),g(b))); }
     s.total=r.length;
     const q=pageSig(k); if(q!==s.sig){ s.sig=q; s.page=0; }
     if(s.board) return r.slice(0,300);
@@ -13681,7 +14163,8 @@ var LK = (function(){
     const s=st(k), tb=document.getElementById(LISTS[k].tbody); if(!tb) return;
     let trs=[...tb.children].filter(r=>r.tagName==='TR');
     const ph=trs.filter(r=>r.children.length===1 && r.children[0].colSpan>1); ph.forEach(r=>r.classList.add('lk-ph'));
-    trs=trs.filter(r=>!ph.includes(r)); trs.forEach(r=>r.classList.remove('lk-hide'));
+    trs=trs.filter(r=>!ph.includes(r)); trs.forEach(r=>{ r.classList.remove('lk-hide'); r.classList.remove('lk-adv-hide'); });
+    { const rs=advRules(k); if(rs.length){ const ths=heads(k).map(hname); const keep=[]; trs.forEach(tr=>{ const ok=rs.every(r=>{ const i=ths.indexOf(r.c); if(i<0) return true; const td=tr.children[i]; return advTest(k,r,td?td.textContent.replace(/\s+/g,' ').trim():''); }); if(ok) keep.push(tr); else tr.classList.add('lk-adv-hide'); }); trs=keep; } }
     if(s.sort){ const ths=heads(k); const i=ths.findIndex(th=>hname(th)===s.sort.c); if(i>=0){ trs.sort((a,b)=>s.sort.d*cmp(a.children[i]?a.children[i].textContent.trim():'',b.children[i]?b.children[i].textContent.trim():'')); trs.forEach(r=>tb.appendChild(r)); ph.forEach(r=>tb.appendChild(r)); } }
     s.total=trs.length;
     const q=pageSig(k); if(q!==s.sig){ s.sig=q; s.page=0; }
@@ -13693,7 +14176,7 @@ var LK = (function(){
     const s=st(k), c=LISTS[k], box=boxes(c.view).pg; if(!box) return;
     if(s.board || s.total==null){ box.innerHTML=''; return; }
     const total=s.total, pages=Math.max(1,Math.ceil(total/s.ps));
-    if(total<=0){ box.innerHTML=''; return; }
+    if(total<=0){ box.innerHTML = advRules(k).length ? '<div class="lk-pg-l">No records match your advanced filters.</div>' : ''; return; }
     const from=s.page*s.ps+1, to=Math.min(total,(s.page+1)*s.ps);
     const nums=[]; const add=n=>{ if(!nums.includes(n)&&n>=0&&n<pages) nums.push(n); };
     add(0); for(let i=s.page-2;i<=s.page+2;i++) add(i); add(pages-1); nums.sort((a,b)=>a-b);
@@ -13713,7 +14196,7 @@ var LK = (function(){
     b.bd.style.display = s.board ? '' : 'none';
     if(!s.board){ b.bd.innerHTML=''; return; }
     const tb=document.getElementById(c.tbody); const ths=heads(k).map(hname);
-    let trs=[...tb.children].filter(r=>r.tagName==='TR' && !(r.children.length===1&&r.children[0].colSpan>1));
+    let trs=[...tb.children].filter(r=>r.tagName==='TR' && !r.classList.contains('lk-adv-hide') && !(r.children.length===1&&r.children[0].colSpan>1));
     let gi = c.board==='prospect' ? ths.indexOf('Stage') : c.board==='customer' ? ths.indexOf('Status') : ths.indexOf(c.board);
     const groupOf=tr=>{ const td=tr.children[gi]; if(!td) return '—'; if(c.board==='prospect'){ const sp=td.querySelector('span:not(.stage-pill)'); const t=(sp?sp.textContent:td.textContent).trim(); return t&&t!=='—'?t:(td.querySelector('.stage-pill')||td).textContent.trim(); } const fc=[...td.childNodes].find(n=>(n.textContent||'').trim()); return (fc?fc.textContent:td.textContent).replace(/\s+/g,' ').trim()||'—'; };
     const groups={}; const order=[];
@@ -13747,6 +14230,43 @@ var LK = (function(){
       if(!names.some(x=>!s.hide.includes(x))){ s.hide=s.hide.filter(x=>x!==n); e.target.checked=true; return; }
       applyHide(k); s.barSig=''; bar(k); };
   }
+  // ── sort pop-up (C-074) ───────────────────────────────────
+  function sortPop(k, ev){
+    ev.stopPropagation(); const had=document.getElementById('lkSort'); closeMenus(); if(had) return;
+    const s=st(k), c=LISTS[k], cols=advCols(k);
+    const el=document.createElement('div'); el.className='lk-menu'; el.id='lkSort'; el.style.minWidth='220px';
+    const dir=(s.sort&&s.sort.d<0)?-1:1;
+    el.innerHTML='<div class="lk-cols-t">Sort by</div>'+cols.map(n=>`<label style="display:flex;gap:8px;align-items:center;padding:6px 12px;cursor:pointer;"><input type="radio" name="lkSortC" value="${esc(n)}"${s.sort&&s.sort.c===n?' checked':''}> ${esc(n)}</label>`).join('')
+      +`<div style="border-top:1px solid var(--border);margin-top:4px;display:flex;gap:6px;"><button class="btn btn-sm ${dir>0?'btn-primary':'btn-ghost'}" data-d="1">▲ Low to high</button><button class="btn btn-sm ${dir<0?'btn-primary':'btn-ghost'}" data-d="-1">▼ High to low</button></div>`
+      +`<div data-none="1" style="color:var(--text-faint);">Default order</div>`;
+    const r=ev.currentTarget.getBoundingClientRect(); el.style.left=Math.max(8,Math.min(r.left,window.innerWidth-250))+'px'; el.style.top=(r.bottom+4)+'px';
+    document.body.appendChild(el);
+    const go=()=>{ s.page=0; s.barSig=''; c.render(); };
+    el.onchange=e=>{ if(e.target.name==='lkSortC'){ s.sort={c:e.target.value,d:(s.sort&&s.sort.d)||1}; closeMenus(); go(); } };
+    el.onclick=e=>{ e.stopPropagation(); const b=e.target.closest('[data-d]'); if(b){ const d=+b.dataset.d; if(!s.sort){ showToast('Pick a column first.'); return; } s.sort={c:s.sort.c,d}; closeMenus(); go(); return; } if(e.target.closest('[data-none]')){ s.sort=null; closeMenus(); go(); } };
+  }
+  // ── advanced filters pop-up (C-074) ───────────────────────
+  function advPop(k, ev){
+    ev.stopPropagation(); const had=document.getElementById('lkAdv'); closeMenus(); if(had) return;
+    const s=st(k), c=LISTS[k], cols=advCols(k);
+    if(!cols.length){ showToast('This list has no columns to filter.'); return; }
+    let draft=(s.adv||[]).map(r=>Object.assign({},r)); if(!draft.length) draft=[{c:cols[0],op:isDate(k,cols[0])?'gt':'contains',v:''}];
+    const el=document.createElement('div'); el.className='lk-advp'; el.id='lkAdv';
+    const rowHtml=(r,i)=>{ const ops=isDate(k,r.c)?DOPS:OPS; const noVal=(r.op==='empty'||r.op==='nempty'); return `<div class="lk-r" data-i="${i}"><select data-f="c">${cols.map(n=>`<option${n===r.c?' selected':''}>${esc(n)}</option>`).join('')}</select><select data-f="op">${ops.map(o=>`<option value="${o[0]}"${o[0]===r.op?' selected':''}>${o[1]}</option>`).join('')}</select><input class="lk-v" data-f="v" value="${esc(r.v==null?'':r.v)}" placeholder="${isDate(k,r.c)?'days':'value'}"${noVal?' style="visibility:hidden"':''}><button class="btn btn-ghost btn-sm" data-x="${i}" title="Remove rule">✕</button></div>`; };
+    const draw=()=>{ el.innerHTML=`<div style="font-weight:600;margin-bottom:2px;">Advanced filters</div><div style="color:var(--text-faint);font-size:12px;margin-bottom:10px;">Show only records that match <b>all</b> of these rules. For time columns such as SLA, type hours (a negative number means over SLA).</div>${draft.map(rowHtml).join('')}<div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-ghost btn-sm" data-add="1">＋ Add rule</button><span style="flex:1"></span><button class="btn btn-ghost btn-sm" data-clr="1">Clear all</button><button class="btn btn-primary btn-sm" data-ok="1">Apply</button></div>`; };
+    draw();
+    const r0=ev.currentTarget.getBoundingClientRect(); el.style.left=Math.max(8,Math.min(r0.left,window.innerWidth-Math.min(640,window.innerWidth-24)-8))+'px'; el.style.top=(r0.bottom+4)+'px';
+    document.body.appendChild(el);
+    el.onchange=e=>{ const row=e.target.closest('.lk-r'); if(!row) return; const i=+row.dataset.i, f=e.target.dataset.f; if(!f) return; draft[i][f]=e.target.value;
+      if(f==='c'){ draft[i].op=isDate(k,draft[i].c)?'gt':'contains'; draft[i].v=''; draw(); } else if(f==='op'){ draw(); } };
+    el.oninput=e=>{ const row=e.target.closest('.lk-r'); if(row && e.target.dataset.f==='v') draft[+row.dataset.i].v=e.target.value; };
+    el.onclick=e=>{ e.stopPropagation();
+      const x=e.target.closest('[data-x]'); if(x){ draft.splice(+x.dataset.x,1); if(!draft.length) draft=[{c:cols[0],op:isDate(k,cols[0])?'gt':'contains',v:''}]; draw(); return; }
+      if(e.target.closest('[data-add]')){ draft.push({c:cols[0],op:isDate(k,cols[0])?'gt':'contains',v:''}); draw(); return; }
+      if(e.target.closest('[data-clr]')){ s.adv=[]; closeMenus(); s.page=0; s.barSig=''; c.render(); return; }
+      if(e.target.closest('[data-ok]')){ s.adv=draft.filter(r=>r.c&&r.op&&(r.op==='empty'||r.op==='nempty'||String(r.v==null?'':r.v).trim()!=='')).map(r=>({c:r.c,op:r.op,v:(r.op==='empty'||r.op==='nempty')?'':String(r.v).trim()})); closeMenus(); s.page=0; s.barSig=''; c.render(); }
+    };
+  }
   // ── the bar ──────────────────────────────────────────────
   function boxes(viewId){
     const v=document.getElementById(viewId); if(!v) return {};
@@ -13772,13 +14292,17 @@ var LK = (function(){
     const c=LISTS[k], s=st(k), b=boxes(c.view); if(!b.bar) return;
     const d=activeDef(k)||{snap:tabSnap(k,c.tabs[0]),builtin:true,name:''};
     const cur=snap(k); const dirty = norm(cur)!==norm(d.snap);
-    const sig=JSON.stringify([k,s.active,(s.views||[]).map(v=>[v.id,v.name]),dirty,s.hide,s.board,s.sort,s.ps, !!s.local]);
+    let cn=null; try{ cn = c.counts ? c.counts() : null; }catch(e){ cn=null; }
+    const sig=JSON.stringify([k,s.active,(s.views||[]).map(v=>[v.id,v.name]),dirty,s.hide,s.board,s.sort,s.ps, !!s.local, s.adv, cn, cn?null:s.total]);
     if(sig===s.barSig) return; s.barSig=sig;
-    const tabs=c.tabs.map((t,i)=>`<div class="lk-tab${s.active==='b'+i?' on':''}" data-t="b${i}">${esc(t.n)}</div>`).join('')
+    const numHtml=(n)=>(n==null?'':` <span class="lk-n">${Number(n).toLocaleString()}</span>`);
+    const tabs=c.tabs.map((t,i)=>`<div class="lk-tab${s.active==='b'+i?' on':''}" data-t="b${i}">${esc(t.n)}${cn?numHtml(cn[i]):(s.active==='b'+i?numHtml(s.total):'')}</div>`).join('')
       + (s.views||[]).map(v=>`<div class="lk-tab${s.active==='c'+v.id?' on':''}" data-t="c${v.id}">${esc(v.name)}${s.active==='c'+v.id?`<span class="lk-dot" data-m="${v.id}" title="Rename, clone or delete">⋯</span>`:''}</div>`).join('')
       + `<div class="lk-add" data-add="1">＋ Add view</div>`;
     const bdOK = !!c.board;
-    const tools=`<div class="lk-tools"><button class="btn btn-ghost btn-sm" data-cols="1">▥ Edit columns${s.hide.length?' ('+s.hide.length+' hidden)':''}</button>${bdOK?`<span class="lk-seg"><button class="${s.board?'':'on'}" data-md="t">▤ Table</button><button class="${s.board?'on':''}" data-md="b">▥ Board</button></span>`:''}</div>`;
+    const sortCols=advCols(k); const nAdv=advRules(k).length;
+    const sortBtn = sortCols.length ? `<button class="btn btn-ghost btn-sm" data-sort="1">⇅ Sort${s.sort?': '+esc(s.sort.c)+' '+(s.sort.d>0?'▲':'▼'):''}</button>` : '';
+    const tools=`<div class="lk-tools"><button class="btn btn-ghost btn-sm" data-adv="1">☰ Advanced filters${nAdv?' ('+nAdv+')':''}</button>${sortBtn}<button class="btn btn-ghost btn-sm" data-cols="1">▥ Edit columns${s.hide.length?' ('+s.hide.length+' hidden)':''}</button>${bdOK?`<span class="lk-seg"><button class="${s.board?'':'on'}" data-md="t">▤ Table</button><button class="${s.board?'on':''}" data-md="b">▥ Board</button></span>`:''}</div>`;
     const dbar = dirty ? `<div class="lk-dirty">You changed this view. ${d.builtin?'':'<button class="btn btn-primary btn-sm" data-sv="1">Save changes</button>'}<button class="btn btn-ghost btn-sm" data-sn="1">Save as new view</button><button class="btn btn-ghost btn-sm" data-rs="1">Reset</button></div>` : '';
     b.bar.innerHTML=`<div class="lk-row"><div class="lk-tabs">${tabs}</div>${tools}</div>${dbar}`;
     b.bar.onclick=e=>{
@@ -13789,6 +14313,8 @@ var LK = (function(){
       if(e.target.closest('[data-sn]')){ ask('Name this view', '', n=>saveNew(k,n)); return; }
       if(e.target.closest('[data-sv]')){ saveChanges(k); return; }
       if(e.target.closest('[data-rs]')){ reset(k); return; }
+      const ab=e.target.closest('[data-adv]'); if(ab){ advPop(k,{stopPropagation:()=>e.stopPropagation(),currentTarget:ab}); return; }
+      const sb=e.target.closest('[data-sort]'); if(sb){ sortPop(k,{stopPropagation:()=>e.stopPropagation(),currentTarget:sb}); return; }
       const cb=e.target.closest('[data-cols]'); if(cb){ colsPop(k,{stopPropagation:()=>e.stopPropagation(),currentTarget:cb}); return; }
       const md=e.target.closest('[data-md]'); if(md){ s.board=md.dataset.md==='b'; s.page=0; c.render(); return; }
     };
