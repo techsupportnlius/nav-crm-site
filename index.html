@@ -2679,6 +2679,16 @@ const realContactsLoaded = new Set();
 function ctSplitName(full){ const t=String(full||'').trim().replace(/\s+/g,' '); const i=t.indexOf(' '); return i<0?{first:t,last:''}:{first:t.slice(0,i),last:t.slice(i+1)}; }
 function ctParts(ct){ if(ct && (ct.first||ct.last)) return {first:ct.first||'', last:ct.last||''}; return ctSplitName(ct&&ct.name); }
 const ctJoin=(f,l)=>[f,l].map(x=>String(x||'').trim()).filter(Boolean).join(' ');
+// C-088: the person to email = a REAL saved contact with an email address (loads the contacts first if they are not loaded yet).
+// The CRM never invents an address like contact@theirdomain.com any more.
+async function contactForEmail(companyId) {
+  if(realUser && typeof realContactsLoaded!=='undefined' && !realContactsLoaded.has(companyId)) { try { await loadRealContacts(companyId); } catch(e) {} }
+  const list = contactsDB[companyId] || [];
+  const ct = list.find(x=>x && x.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(x.email).trim())) || null;
+  if(!ct) showToast('This company has no contact with an email address yet - add a contact first (or type the address yourself).');
+  return ct;
+}
+function contactFirstName(ct){ return ct ? (ct.first || String(ct.name||'').split(' ')[0] || 'there') : 'there'; }
 async function loadRealContacts(companyId) {
   try {
     const res = await apiFetch(`/api/companies/${companyId}/contacts`);
@@ -10321,24 +10331,24 @@ function emailContactFromCard(companyId, contactName, contactEmail) {
   });
 }
 
-function openSalesEmail(companyId) {
+async function openSalesEmail(companyId) {
   const c = customers.find(x=>x.id===companyId);
   if(!c) return;
   if(realUser && !canEmailCompany(c)) {
     showEmailBlocked([{companyId:c.id,name:c.name}]);
     return;
   }
-  const firstContact = (contactsDB[companyId]||[])[0];
+  const firstContact = await contactForEmail(companyId);
   openEmailCompose('sales', null, {
     companyId: c.id,
     title: `Email — ${c.name}`,
     subhead: 'Review and edit before sending.',
     from: currentUserEmail()||'nav@nlius.com',
-    to: firstContact?.email||(c.domain ? `contact@${c.domain}` : ''),
+    to: firstContact ? firstContact.email : '',
     cc: '',
     showCc: true,
     subject: `Following up — NAV Logistics`,
-    body: `Hi ${firstContact?.name?.split(' ')[0]||'there'},\n\nI wanted to follow up regarding our previous conversation about how NAV Logistics can support ${c.name}'s freight needs.\n\nPlease let me know a good time to connect.\n`,
+    body: `Hi ${contactFirstName(firstContact)},\n\nI wanted to follow up regarding our previous conversation about how NAV Logistics can support ${c.name}'s freight needs.\n\nPlease let me know a good time to connect.\n`,
   });
 }
 
@@ -13448,16 +13458,16 @@ async function caseEmailCustomer(companyId, caseId){
   let ops = '';
   try { const r = await apiFetch('/api/compliance-cases/'+encodeURIComponent(caseId)+'/share-info'); if(r.ok){ const j = await r.json(); ops = j.opsAddress||''; } } catch(e) {}
   if(!ops) showToast('The Compliance mailbox is not set up yet - ask Customer Compliance to add it in Email settings. You can still send, but add it in Cc yourself.');
-  const first = (contactsDB[companyId]||[])[0];
+  const first = await contactForEmail(companyId);
   openEmailCompose('sales', null, {
     companyId: c.id,
     title: 'Email - '+c.name,
     subhead: 'Compliance is copied so they can read the conversation.',
     from: currentUserEmail()||'nav@nlius.com',
-    to: first?.email || (c.domain ? 'contact@'+c.domain : ''),
+    to: first ? first.email : '',
     cc: ops, showCc: true,
     subject: c.name+' - NAV Logistics',
-    body: 'Hi '+(first?.name?.split(' ')[0]||'there')+',\n\n',
+    body: 'Hi '+contactFirstName(first)+',\n\n',
   });
 }
 function caseCloseShare(){ const m=document.getElementById('caseShareModal'); if(m) m.remove(); }
@@ -13515,22 +13525,22 @@ function custVisChanged(){
   else if(br){ note.style.cssText='display:block;font-size:12px;padding:4px 10px;color:var(--text-muted);'; note.textContent='Broker / sales rep ('+br+') is copied.'; }
   else { note.style.cssText='display:block;font-size:12px;padding:4px 10px;color:#b45309;'; note.textContent='No email found for the broker / sales rep on this company, so nobody is copied automatically. Add one in Cc if needed.'; }
 }
-function openCustomerEmail(companyId, caseId){
+async function openCustomerEmail(companyId, caseId){
   const c = customers.find(x=>x.id===companyId);
   if(!c) { showToast('Could not find that company.'); return; }
   if(realUser && !ccBox(ccMail.mine.customer)) {
     showToast('No customer mailbox is set up yet. Click "✉ Email settings" at the top of this screen and add one (e.g. ops.customer@nlius.com).');
     return;
   }
-  const first = (contactsDB[companyId]||[])[0];
+  const first = await contactForEmail(companyId);
   openEmailCompose('custcomp', null, {
     companyId: c.id,
     title: `Email customer — ${c.name}`,
     subhead: 'Sends from the shared customer mailbox. Review before sending.',
-    to: first?.email || (c.domain ? `contact@${c.domain}` : ''),
+    to: first ? first.email : '',
     cc: '', showCc: true,
     subject: `${c.name} — NAV Logistics credit review`,
-    body: `Hi ${first?.name?.split(' ')[0]||'there'},\n\n`,
+    body: `Hi ${contactFirstName(first)},\n\n`,
   });
   if(emailComposeContext && emailComposeContext.type==='custcomp'){
     emailComposeContext.brokerEmail = custBrokerEmail(companyId);
