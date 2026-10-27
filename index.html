@@ -259,8 +259,8 @@ td.mono{font-family:var(--mono);font-size:11.5px;}
 .sla-over .sla-dot,.sla-critical .sla-dot{display:inline-block;animation:sla-pulse 1.2s ease-in-out infinite;}
 
 /* CC DRAWER INNER TABS */
-.cc-dtab-bar{display:flex;gap:0;border-bottom:1px solid var(--border);margin:-18px -18px 16px;padding:0 18px;background:var(--surface-2);}
-.cc-dtab{padding:9px 14px;font-size:12.5px;color:var(--text-muted);cursor:pointer;border:none;border-bottom:2px solid transparent;background:transparent;font-family:var(--sans);transition:all 0.1s;margin-bottom:-1px;}
+.cc-dtab-bar{display:flex;flex-wrap:wrap;gap:0;border-bottom:1px solid var(--border);margin:-18px -18px 16px;padding:0 6px;background:var(--surface-2);}
+.cc-dtab{flex:1 1 auto;white-space:nowrap;text-align:center;padding:9px 7px;font-size:12px;color:var(--text-muted);cursor:pointer;border:none;border-bottom:2px solid transparent;background:transparent;font-family:var(--sans);transition:all 0.1s;margin-bottom:-1px;}
 .cc-dtab:hover{color:var(--text);}
 .cc-dtab.active{color:var(--accent);border-bottom-color:var(--accent);}
 .cc-dtab:disabled{opacity:0.35;cursor:not-allowed;}
@@ -275,8 +275,8 @@ td.mono{font-family:var(--mono);font-size:11.5px;}
 .drawer.open{transform:translateX(0);}
 .drawer-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;}
 .drawer-close{width:28px;height:28px;border-radius:5px;border:1px solid var(--border);background:var(--surface-2);display:flex;align-items:center;justify-content:center;cursor:pointer;margin-left:auto;color:var(--text-faint);font-size:18px;line-height:1;flex-shrink:0;}
-.drawer-tabs-bar{display:flex;border-bottom:1px solid var(--border);padding:0 18px;flex-shrink:0;background:var(--surface);}
-.dtab{padding:9px 14px;font-size:12.5px;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.1s;}
+.drawer-tabs-bar{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--border);padding:0 6px;flex-shrink:0;background:var(--surface);}
+.dtab{flex:1 1 auto;white-space:nowrap;text-align:center;padding:9px 8px;font-size:12px;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.1s;}
 .dtab:hover{color:var(--text);}
 .dtab.active{color:var(--accent);border-bottom-color:var(--accent);}
 .drawer-body{flex:1;overflow-y:auto;padding:18px;}
@@ -1673,8 +1673,8 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <div style="display:flex;gap:10px;"><div class="addco-field" style="flex:1;"><label>First Name</label><input id="addCoContactFirst" placeholder="e.g. Jennifer"></div>
       <div class="addco-field" style="flex:1;"><label>Last Name</label><input id="addCoContactLast" placeholder="e.g. Walsh"></div></div>
       <div class="addco-field"><label>Title</label><input id="addCoContactTitle" placeholder="e.g. Director of Transportation"></div>
-      <div style="display:flex;gap:10px;"><div class="addco-field" style="flex:1;"><label>Phone (office)</label><input id="addCoContactPhone" placeholder="(555) 555-0100"></div>
-      <div class="addco-field" style="flex:1;"><label>Cell</label><input id="addCoContactCell" placeholder="(555) 555-0199"></div></div>
+      <div style="display:flex;gap:10px;"><div class="addco-field" style="flex:1;"><label>Phone (office)</label><input id="addCoContactPhone" type="tel" placeholder="(555) 555-0100"></div>
+      <div class="addco-field" style="flex:1;"><label>Cell</label><input id="addCoContactCell" type="tel" placeholder="(555) 555-0199"></div></div>
       <div class="addco-field"><label>Email</label><input id="addCoContactEmail" placeholder="name@company.com"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="addCoBackToDetails()">← Back</button>
@@ -2168,7 +2168,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
         </div>
         <div class="addco-field" style="margin-bottom:0;">
           <label>Dispatcher Phone <span class="smc-required">*</span></label>
-          <input id="smc-disp-phone" type="text" placeholder="(XXX) XXX-XXXX">
+          <input id="smc-disp-phone" type="tel" placeholder="(XXX) XXX-XXXX">
         </div>
       </div>
       <div class="addco-field" style="margin-top:10px;margin-bottom:0;">
@@ -3195,11 +3195,14 @@ async function notesLoad(){
     notesData = j; notesRender();
   } catch(e){ box.textContent = 'Could not load your notes.'; }
 }
+let notesFilter = 'all';
+function notesSetFilter(f){ notesFilter = f; notesRender(); }
 function notesRender(){
   const box = document.getElementById('notesList');
   const list = notesData.notes||[];
-  if(!list.length) box.innerHTML = '<div style="color:var(--text-faint);padding:10px 0;">No notes yet. Write your first one above.</div>';
-  else box.innerHTML = list.map(n=>{
+  let mineHtml = '';
+  if(!list.length) mineHtml = '<div style="color:var(--text-faint);padding:10px 0;">No notes yet. Write your first one above.</div>';
+  else mineHtml = list.map(n=>{
     if(notesEditId===n.note_id) return '<div style="border:1px solid var(--accent);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--surface);"><textarea id="neText" rows="4" maxlength="4000" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font:inherit;resize:vertical;">'+esc(n.body)+'</textarea><div style="margin-top:8px;display:flex;gap:8px;"><button class="btn btn-primary btn-sm" onclick="notesSaveEdit('+n.note_id+')">Save</button><button class="btn btn-ghost btn-sm" onclick="notesEditId=null;notesRender()">Cancel</button></div></div>';
     const sh = (n.shares||[]).length;
     return '<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--surface);'+(n.pinned?'border-left:3px solid var(--accent);':'')+(n.done?'opacity:.6;':'')+'">'
@@ -3214,6 +3217,20 @@ function notesRender(){
       +(n.remind_at?'<span>&#9200; '+esc(notesFmt(n.remind_at))+'</span>':'')
       +'<span>Updated '+esc(notesFmt(n.updated_at))+'</span>'+(sh?'<span>Shared</span>':'<span>Private</span>')+'</div></div>';
   }).join('');
+  // C-086: notes written inside a prospect / customer (read-only here; edit them in the company's Activity tab)
+  const cn = notesData.companyNotes||[];
+  const cnHtml = cn.length ? cn.map(n=>'<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--surface);">'
+      +'<div style="white-space:pre-wrap;word-break:break-word;">'+esc(n.body)+'</div>'
+      +'<div style="margin-top:6px;font-size:11.5px;color:var(--text-faint);display:flex;gap:12px;flex-wrap:wrap;">'
+      +'<a style="color:var(--accent);cursor:pointer;" onclick="notesOpenCompany('+Number(n.company_id)+')">&#127970; '+esc(n.company_name||'Company')+'</a>'
+      +(n.reminder_at?'<span>&#9200; '+esc(notesFmt(n.reminder_at))+'</span>':'')
+      +'<span>Written '+esc(notesFmt(n.created_at))+'</span><span>Company note - edit it in the company\'s Activity tab</span></div></div>').join('')
+    : '<div style="color:var(--text-faint);padding:10px 0;">You have not written any notes inside a company yet.</div>';
+  const chip=(k,l,c)=>'<button class="fchip'+(notesFilter===k?' active':'')+'" onclick="notesSetFilter(\''+k+'\')">'+l+' <span style="opacity:.6;">'+c+'</span></button>';
+  const bar = '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">'+chip('all','All notes',list.length+cn.length)+chip('mine','My notes',list.length)+chip('company','Company notes',cn.length)+'</div>';
+  box.innerHTML = bar
+    + (notesFilter!=='company' ? mineHtml : '')
+    + (notesFilter!=='mine' ? ((notesFilter==='all' ? '<div class="d-sec-label" style="margin:14px 0 8px;">Notes on companies</div>' : '')+cnHtml) : '');
   const sw = document.getElementById('notesSharedWrap'), sb = document.getElementById('notesShared');
   const sl = notesData.shared||[];
   if(sw){ sw.style.display = sl.length ? '' : 'none'; sb.innerHTML = sl.map(n=>'<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--surface);"><div style="white-space:pre-wrap;word-break:break-word;">'+esc(n.body)+'</div><div style="margin-top:6px;font-size:11.5px;color:var(--text-faint);">From '+esc(n.owner_name||'a colleague')+(n.company_name?' - '+esc(n.company_name):'')+' - '+esc(notesFmt(n.updated_at))+'</div></div>').join(''); }
@@ -7329,7 +7346,9 @@ function fmtPhoneTyped(v){
 }
 document.addEventListener('input', function(e){
   const el = e.target;
-  if(!el || el.tagName!=='INPUT' || el.type!=='tel') return;
+  if(!el || el.tagName!=='INPUT') return;
+  // C-085: any phone/cell box formats as you type - by type="tel" OR by its id (so a box that forgets the type still works)
+  if(el.type!=='tel' && !/(^|[-_])(phone|cell|mobile)([-_]|$)|contactphone|contactcell|disp-phone/i.test(el.id||'')) return;
   const before = el.value;
   const caret = el.selectionStart==null ? before.length : el.selectionStart;
   const digitsBefore = before.slice(0,caret).replace(/\D/g,'').length;
@@ -9781,8 +9800,8 @@ function openCCCase(mc, forceTab, keepPin) {
   const tabBar = `
     <div class="cc-dtab-bar">
       <button class="cc-dtab${activeTab==='overview'?' active':''}" onclick="switchCCTab('overview',this)">Overview</button>
-      ${isSetup ? `<button class="cc-dtab${activeTab==='onboard'?' active':''}" onclick="switchCCTab('onboard',this)">Carrier Onboarding</button>` : ''}
-      ${isSetup && (isCarrCC || isCoiSpec || isAdmin) ? `<button class="cc-dtab${activeTab==='coi'?' active':''}" onclick="switchCCTab('coi',this)">COI Verification</button>` : ''}
+      ${isSetup ? `<button class="cc-dtab${activeTab==='onboard'?' active':''}" onclick="switchCCTab('onboard',this)">Onboarding</button>` : ''}
+      ${isSetup && (isCarrCC || isCoiSpec || isAdmin) ? `<button class="cc-dtab${activeTab==='coi'?' active':''}" onclick="switchCCTab('coi',this)" title="COI Verification">COI</button>` : ''}
       <button class="cc-dtab${activeTab==='msgs'?' active':''}" onclick="switchCCTab('msgs',this)">Conversation<span id="ccTabConvN">${ccConvTabN(c)}</span></button>
       <button class="cc-dtab${activeTab==='files'?' active':''}" onclick="switchCCTab('files',this)">Files</button>
       <button class="cc-dtab${activeTab==='tl'?' active':''}" onclick="switchCCTab('tl',this)">Timeline</button>
