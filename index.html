@@ -7032,7 +7032,7 @@ function renderProspectsView() {
   const prBase = rows;
   rows = ddApply('pr', rows, PR_DD);
   if(prospectFilter!=='all') rows = rows.filter(c=>c.status.toLowerCase().includes(prospectFilter.toLowerCase()));
-  if(search) rows = rows.filter(c=>c.name.toLowerCase().includes(search)||(c.domain&&c.domain.toLowerCase().includes(search)));
+  if(search) { const qs=search.trim().split(/\s+/).filter(Boolean); rows = rows.filter(c=>{ const hay=(c.name+' '+(c.domain||'')+' '+(c.owner||'')+' '+(c.prospectStatus||'')+' '+(c.industry||'')+' '+(c.hqCity||'')+' '+(c.mc||'')+' '+(c.dot||'')+' '+(c.ff||'')).toLowerCase(); return qs.every(q=>hay.includes(q)); }); }
   ddRender('pr', 'prospectDD', prBase, PR_DD, renderProspectsView, rows.length);
 
   if(!rows.length) {
@@ -12538,6 +12538,31 @@ function loadRealCompanies() {
   return _coLoading;
 }
 let companiesFresh = false;
+// C-081: pick up companies that changed or were newly assigned while the page stays open (no reload, no full download)
+let _coSyncBusy = false;
+async function syncCompaniesQuiet(force) {
+  if(_coSyncBusy || !realUser || !companiesFresh || (document.hidden && !force)) return;
+  _coSyncBusy = true;
+  try {
+    let mx = 0; for(let i=0;i<customers.length;i++){ const t=customers[i].updatedTs||0; if(t>mx) mx=t; }
+    if(!mx) return;
+    const res = await apiFetch('/api/companies?since=' + encodeURIComponent(new Date(mx - 2000).toISOString()));
+    if(!res.ok) return;
+    const rows = await res.json();
+    if(!Array.isArray(rows) || !rows.length) return;
+    let changed = false;
+    const sig = (c)=>JSON.stringify(Object.assign({}, c, { lastUpdated:'' }));
+    const idx = new Map(); customers.forEach((c,i)=>idx.set(c.id,i));
+    rows.forEach(r=>{ const m = mapCompany(r); const i = idx.get(m.id); if(i!=null) { if(sig(customers[i])!==sig(m)) { customers[i]=m; changed=true; } } else { customers.push(m); idx.set(m.id,customers.length-1); changed=true; } });
+    if(!changed) return;
+    renderCoTable(); renderCustCompView(); updateNavBadges(); renderDashboard();
+    if(typeof renderProspectsView === 'function') renderProspectsView();
+    try { await loadRealNotifications(); } catch(e) {}
+  } catch(e) { /* try again next time */ }
+  _coSyncBusy = false;
+}
+setInterval(()=>syncCompaniesQuiet(false), 60000);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) syncCompaniesQuiet(true); });
 // C-055: refresh only the companies that just changed (fast) instead of reloading and redrawing all 11,000+.
 // Falls back to the full reload if the server is an older version that ignores ?ids=.
 async function refreshCompanies(ids, onlyIfChanged) {
