@@ -2560,6 +2560,35 @@ async function loadRealActivity(companyId) {
   }
 }
 // Escape user-entered text before it goes into innerHTML.
+
+// ══ C-073 · keep script out of the page ═════════════════════════════
+// safeHtml: for text that may carry simple formatting (notes, notifications). Anything but bold / italic / lists / plain links is dropped.
+// deTag / deTagObj: for names, cities, titles etc. - removes anything that looks like a tag.
+function safeHtml(s) {
+  if(s==null) return '';
+  const ALLOW = {B:1,STRONG:1,I:1,EM:1,U:1,UL:1,OL:1,LI:1,BR:1,P:1,DIV:1,SPAN:1,A:1};
+  const t = document.createElement('template');
+  t.innerHTML = String(s);
+  (function walk(n){
+    [...n.childNodes].forEach(ch=>{
+      if(ch.nodeType===3) return;
+      if(ch.nodeType!==1){ ch.remove(); return; }
+      if(/^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|SVG|MATH|LINK|META|FORM|INPUT|BUTTON|TEXTAREA|SELECT|IMG|VIDEO|AUDIO|SOURCE|BASE)$/.test(ch.tagName)){ ch.remove(); return; }
+      walk(ch);
+      if(!ALLOW[ch.tagName]){ ch.replaceWith(...ch.childNodes); return; }
+      const href = ch.tagName==='A' ? ch.getAttribute('href') : null;
+      [...ch.attributes].forEach(a=>ch.removeAttribute(a.name));
+      if(href && /^(https?:\/\/|mailto:)/i.test(href.trim()) && !/[\s"'<>`]/.test(href.trim())){ ch.setAttribute('href',href.trim()); ch.setAttribute('target','_blank'); ch.setAttribute('rel','noopener noreferrer'); }
+    });
+  })(t.content);
+  return t.innerHTML;
+}
+function deTag(v){ return typeof v==='string' ? v.replace(/<[^>]*>?/g,'').replace(/[<>]/g,'') : v; }
+function deTagObj(o){
+  if(Array.isArray(o)) return o.map(deTagObj);
+  if(o && typeof o==='object'){ for(const k in o){ o[k]=deTagObj(o[k]); } return o; }
+  return deTag(o);
+}
 function esc(s) {
   return String(s==null?'':s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -2617,7 +2646,7 @@ async function loadRealContacts(companyId) {
   try {
     const res = await apiFetch(`/api/companies/${companyId}/contacts`);
     if(!res.ok) { console.error('Loading contacts failed:', res.status, await res.text()); return; }
-    const rows = await res.json();
+    const rows = deTagObj(await res.json());
     contactsDB[companyId] = rows.map(r => ({
       contactId: r.contact_id,
       name: r.full_name, first: r.first_name!=null ? r.first_name : ctSplitName(r.full_name).first, last: r.last_name!=null ? r.last_name : ctSplitName(r.full_name).last,
@@ -4212,7 +4241,7 @@ function renderCustomerTimeline(id) {
     return `<div class="tl-item">
       <div class="tl-kind" style="color:${kindColor[e.kind]||'var(--text-faint)'};">${e.kind}</div>
       <div style="flex:1;">
-        <div class="tl-text">${e.text}${reminderLabel}</div>
+        <div class="tl-text">${safeHtml(e.text)}${reminderLabel}</div>
         <div class="tl-time">by ${e.by} · ${e.time}${false ? `` : ''}</div>
       </div>
     </div>`;
@@ -6854,7 +6883,7 @@ function ctSchedule(q){
       const res=await apiFetch('/api/search?only=contacts&limit=200&q='+encodeURIComponent(q));
       if(!res.ok) return;
       const j=await res.json();
-      ctServer={q, rows:(j.contacts||[]).map(c=>({name:c.full_name,first:c.first_name!=null?c.first_name:ctSplitName(c.full_name).first,last:c.last_name!=null?c.last_name:ctSplitName(c.full_name).last,cell:c.cell_phone||'—',title:c.title||'—',phone:c.phone||'—',email:c.email||'',company:c.company_name,companyId:c.company_id,
+      ctServer={q, rows:deTagObj(j.contacts||[]).map(c=>({name:c.full_name,first:c.first_name!=null?c.first_name:ctSplitName(c.full_name).first,last:c.last_name!=null?c.last_name:ctSplitName(c.full_name).last,cell:c.cell_phone||'—',title:c.title||'—',phone:c.phone||'—',email:c.email||'',company:c.company_name,companyId:c.company_id,
         addedAt:c.created_at?new Date(c.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}))};
       if(((document.getElementById('ctSearch')||{}).value||'').toLowerCase()===q && document.getElementById('view-contacts').classList.contains('active')) renderContactsView();
     }catch(e){ console.error('Contact search failed', e); }
@@ -9680,7 +9709,7 @@ function renderNotifications() {
         <span class="notif-kind">${n.kind}</span>
         <span class="notif-time">${n.time}</span>
       </div>
-      <div class="notif-text">${n.text}</div>
+      <div class="notif-text">${safeHtml(n.text)}</div>
       ${isInactivity ? `<button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="event.stopPropagation();extendCompanyInactivity(${n.targetCompanyId})">Extend →</button>` : clickable?`<div style="font-size:10px;color:var(--accent);margin-top:4px;">Open →</div>`:''}
     </div>`;}).join('');
 }
@@ -13468,6 +13497,12 @@ async function bulkOpenCampaign(id) {
 }
 
 // ══ C-071 · LIST VIEWS (HubSpot-style tabs, pages, sort, columns, board) ══════════════
+
+// C-073: clean what the server hands back before it is drawn (also protects against older saved data)
+(function(){
+  ['mapCompany','mapComplianceCase','mapUser'].forEach(n=>{ const o=window[n]; if(typeof o!=='function') return; window[n]=function(){ return deTagObj(o.apply(this,arguments)); }; });
+  const oc=window.mapCarrierCheck; if(typeof oc==='function') window.mapCarrierCheck=function(){ const r=oc.apply(this,arguments); ['carrier','mc','lane','broker','owner','team','officeName','stage'].forEach(k=>{ if(typeof r[k]==='string') r[k]=deTag(r[k]); }); return r; };
+})();
 var LK = (function(){
   const LISTS = {
     pr: { mod:'prospects', view:'view-deals', tbody:'prospectTbody', dd:'pr', slice:true, render:()=>renderProspectsView(),
@@ -13614,7 +13649,9 @@ var LK = (function(){
     const tbl='#'+tid; const rules = idx.map(n=>`[data-lk="${k}"] thead th:nth-child(${n}),[data-lk="${k}"] tbody tr:not(.lk-ph) td:not([colspan]):nth-child(${n}){display:none}`).join('');
     t.setAttribute('data-lk',k); el.textContent=rules;
   }
-  function cmp(a,b){ if(typeof a==='number'&&typeof b==='number') return a-b; const na=parseFloat(a),nb=parseFloat(b); if(!isNaN(na)&&!isNaN(nb)&&/^[\s\d.,$-]+$/.test(a+''+b)) return na-nb; return String(a).localeCompare(String(b),undefined,{numeric:true,sensitivity:'base'}); }
+  // times written as words ("2h left", "3h over", "5d ago", "Yesterday") sort by their real length of time
+  function durSecs(t){ t=String(t).toLowerCase().trim(); if(!t) return null; if(t.includes('yesterday')) return 86400; if(/^(just now|now)$/.test(t)) return 0; const ms=[...t.matchAll(/(\d+(?:\.\d+)?)\s*(w|d|h|m|s)\b/g)]; if(!ms.length||!/(left|over|ago|remaining|paused)/.test(t)) return null; const U={w:604800,d:86400,h:3600,m:60,s:1}; const v=ms.reduce((x,y)=>x+parseFloat(y[1])*U[y[2]],0); return /over/.test(t)?-v:v; }
+  function cmp(a,b){ if(typeof a==='number'&&typeof b==='number') return a-b; { const da=durSecs(a), db=durSecs(b); if(da!=null&&db!=null) return da-db; } const na=parseFloat(a),nb=parseFloat(b); if(!isNaN(na)&&!isNaN(nb)&&/^[\s\d.,$-]+$/.test(a+''+b)) return na-nb; return String(a).localeCompare(String(b),undefined,{numeric:true,sensitivity:'base'}); }
   function sortHeads(k){
     const s=st(k), c=LISTS[k];
     heads(k).forEach(th=>{
