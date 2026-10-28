@@ -1045,7 +1045,8 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <input type="text" id="coSearch" placeholder="Search…" oninput="renderCoTable()">
     </div>
     <div class="filter-chips" id="coFilterChips">
-      <button class="fchip active" onclick="setCoFilter(this,'all')">All</button>
+      <button class="fchip active" onclick="setCoFilter(this,'all')">All customers</button>
+      <button class="fchip" onclick="setCoFilter(this,'Mine')">My customers</button>
       <button class="fchip" onclick="setCoFilter(this,'Active')">Active</button>
       <button class="fchip" onclick="setCoFilter(this,'Open')">Open</button>
       <button class="fchip" onclick="setCoFilter(this,'Limited')">Limited Credit</button>
@@ -1098,8 +1099,8 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <input type="text" id="prospectSearch" placeholder="Search…" oninput="renderProspectsView()">
     </div>
     <div class="filter-chips">
-      <button class="fchip active" onclick="setProspectFilter(this,'all')">All</button>
-      <button class="fchip" onclick="setProspectFilter(this,'Prospect')">Prospect</button>
+      <button class="fchip active" onclick="setProspectFilter(this,'all')">All prospects</button>
+      <button class="fchip" onclick="setProspectFilter(this,'Mine')">My prospects</button>
       <button class="fchip" onclick="setProspectFilter(this,'Pending')">Pending Compliance</button>
     </div>
     <div class="role-note" id="prospectRoleNote" style="display:none;"></div>
@@ -2458,7 +2459,9 @@ const GLOBAL_ROLES = ['Admin', 'Customer Compliance', 'Carrier Compliance', 'COI
 
 // ── PROSPECT PIPELINE STAGES (Sales / TL / Location Head) ─────
 // These are owned by Sales. Customer Status is owned by Compliance.
-const PROSPECT_STATUSES = ['New Lead', 'Contacted', 'Negotiating', 'Request Extension', 'Ready to Convert', 'Lost'];
+const PROSPECT_STATUSES = ['New Lead', 'Working on it', 'Ready to Convert', 'Lost']; // C-096: Contacted + Negotiating merged; Request Extension removed from the list (button returns later when the window is closing)
+// mine = the signed-in person owns or co-owns it (C-096 My prospects / My customers tabs)
+function isMineCo(c){ if(realUser) return c.ownerUserId===realUser.userId || (c.coOwnerUserIds||[]).includes(realUser.userId); const me=currentUserName(); return c.owner===me || (c.coOwners&&c.coOwners.includes(me)); }
 // Request Extension = Sales Rep needs more time beyond the 21-30 day window; flags TL/LocHead for review
 
 // ════════════════════════════════════════════════════════════════
@@ -3841,6 +3844,7 @@ function renderCoTable() {
         if(coFilter!=='all') {
           const sl = c.status.toLowerCase();
           if(coFilter==='Active') fm = sl==='active';
+          else if(coFilter==='Mine') fm = isMineCo(c);
           else if(coFilter==='Open') fm = sl==='open' || isOpenCo(c);
           else if(coFilter==='Limited') fm = sl.includes('limited');
           else if(coFilter==='Prepaid') fm = sl.includes('prepaid');
@@ -5802,7 +5806,7 @@ function prospectWindowPanel(c) {
   if(c.prospectStatus==='Open') {
     html += `<div style="margin-bottom:14px;padding:10px 14px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.3);border-radius:6px;font-size:12px;color:var(--blue);">This prospect is <strong>Open</strong> — its working window ended and nobody owns it.${canSeeWindow()?' Assign it below.':''}</div>`;
   } else if(left!==null && left<=3 && c.extStatus!=='Pending') {
-    html += `<div style="margin-bottom:14px;padding:10px 14px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.3);border-radius:6px;font-size:12px;color:var(--red);">⏱ ${left<=0?'The working window ends today.':`Only ${left} day${left===1?'':'s'} left on this prospect's working window.`} ${currentRole==='Sales Rep'?'Set the stage to "Request Extension" if you need more time.':''}</div>`;
+    html += `<div style="margin-bottom:14px;padding:10px 14px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.3);border-radius:6px;font-size:12px;color:var(--red);">⏱ ${left<=0?'The working window ends today.':`Only ${left} day${left===1?'':'s'} left on this prospect's working window.`}</div>`;
   }
   if(canSeeWindow()) {
     const people = (realUsers||[]).filter(u=>['Sales Rep','Team Leader','Supervisor','Operations Manager','Location Head','Operations Head'].includes(u.role));
@@ -7024,7 +7028,8 @@ function renderProspectsView() {
   if(!realUser && currentRole==='Location Head') rows = rows.filter(c=>canSeeLocation(c.location));
   const prBase = rows;
   rows = ddApply('pr', rows, PR_DD);
-  if(prospectFilter!=='all') rows = rows.filter(c=>c.status.toLowerCase().includes(prospectFilter.toLowerCase()));
+  if(prospectFilter==='Mine') rows = rows.filter(isMineCo);
+  else if(prospectFilter!=='all') rows = rows.filter(c=>c.status.toLowerCase().includes(prospectFilter.toLowerCase()));
   if(search) { const qs=search.trim().split(/\s+/).filter(Boolean); rows = rows.filter(c=>{ const hay=(c.name+' '+(c.domain||'')+' '+(c.owner||'')+' '+(c.prospectStatus||'')+' '+(c.industry||'')+' '+(c.hqCity||'')+' '+(c.mc||'')+' '+(c.dot||'')+' '+(c.ff||'')).toLowerCase(); return qs.every(q=>hay.includes(q)); }); }
   ddRender('pr', 'prospectDD', prBase, PR_DD, renderProspectsView, rows.length);
 
@@ -12563,7 +12568,7 @@ function mapCompany(c) {
     loadFreq: c.load_freq_id || '', loadVolume: c.load_volume_id || '', equipment: c.equipment_id || '',
     equipmentList: Array.isArray(c.equipmentList) ? c.equipmentList : (c.equipment_id ? [c.equipment_id] : []),
     status: c.status_id || 'Prospect', statusCls: STATUS_CLASS_MAP[c.status_id] || 's-prospect',
-    prospectStatus: c.prospect_status_id || null,
+    prospectStatus: (['Contacted','Negotiating','Request Extension'].includes(c.prospect_status_id) ? 'Working on it' : (c.prospect_status_id || null)), // C-096: old stages show as the merged stage even before the SQL is run
     owner: c.owner_name || '—', ownerUserId: c.owner_user_id || null, rep: c.owner_name || '—',
     coOwners: Array.isArray(c.coOwnerNames) ? c.coOwnerNames : [],
     coOwnerUserIds: Array.isArray(c.coOwnerUserIds) ? c.coOwnerUserIds : [],
@@ -14240,17 +14245,17 @@ async function bulkOpenCampaign(id) {
 var LK = (function(){
   const LISTS = {
     pr: { mod:'prospects', view:'view-deals', tbody:'prospectTbody', dd:'pr', slice:true, render:()=>renderProspectsView(),
-      tabs:[{n:'All prospects',s:{f:'all'}},{n:'Prospect',s:{f:'Prospect'}},{n:'Pending Compliance',s:{f:'Pending'}}],
-      get:()=>({f:prospectFilter}), set:s=>{ prospectFilter=s.f||'all'; },
+      tabs:[{n:'All prospects',s:{f:'all'}},{n:'My prospects',s:{f:'Mine'}},{n:'Pending Compliance',s:{f:'Pending'}}],
+      get:()=>({f:prospectFilter}), set:s=>{ prospectFilter=(s.f==='Prospect'?'Mine':s.f)||'all'; },
       sorters:{'Company':c=>c.name,'Status':c=>c.status,'Owner (Sales Rep)':c=>ownerLabelFor(c),'Stage':c=>c.prospectStatus||'','Last Updated':c=>c.updatedTs||0},
       board:'prospect', dates:['Last Updated'],
-      counts:()=>{ let b=customers.filter(c=>isProspect(c)); if(!realUser && currentRole==='Sales Rep'){ const me=currentUserName(); b=b.filter(c=>c.owner===me||(c.coOwners&&c.coOwners.includes(me))); } if(!realUser && currentRole==='Location Head') b=b.filter(c=>canSeeLocation(c.location)); return LISTS.pr.tabs.map(t=>{ const f=(t.s&&t.s.f)||'all'; return f==='all'?b.length:b.filter(c=>c.status.toLowerCase().includes(f.toLowerCase())).length; }); } },
+      counts:()=>{ let b=customers.filter(c=>isProspect(c)); if(!realUser && currentRole==='Sales Rep'){ const me=currentUserName(); b=b.filter(c=>c.owner===me||(c.coOwners&&c.coOwners.includes(me))); } if(!realUser && currentRole==='Location Head') b=b.filter(c=>canSeeLocation(c.location)); return LISTS.pr.tabs.map(t=>{ const f=(t.s&&t.s.f)||'all'; return f==='all'?b.length:(f==='Mine'?b.filter(isMineCo).length:b.filter(c=>c.status.toLowerCase().includes(f.toLowerCase())).length); }); } },
     co: { mod:'customers', view:'view-companies', tbody:'coTbody', dd:'co', slice:true, render:()=>renderCoTable(),
-      tabs:[{n:'All customers',s:{f:'all'}},{n:'Active',s:{f:'Active'}},{n:'Open',s:{f:'Open'}},{n:'Limited Credit',s:{f:'Limited'}},{n:'Prepaid',s:{f:'Prepaid'}}],
+      tabs:[{n:'All customers',s:{f:'all'}},{n:'My customers',s:{f:'Mine'}},{n:'Active',s:{f:'Active'}},{n:'Open',s:{f:'Open'}},{n:'Limited Credit',s:{f:'Limited'}},{n:'Prepaid',s:{f:'Prepaid'}}],
       get:()=>({f:coFilter}), set:s=>{ coFilter=s.f||'all'; },
       sorters:{'Company Name':c=>c.name,'Status':c=>c.status,'Payment Category':c=>c.paycat||'','Owner (Sales Rep)':c=>ownerLabelFor(c),'Compliance Team':c=>c.compTeam||'','Last Updated':c=>c.updatedTs||0},
       board:'customer', dates:['Last Updated'],
-      counts:()=>{ const b=getVisibleCustomers().filter(c=>!isProspect(c)); return LISTS.co.tabs.map(t=>{ const f=(t.s&&t.s.f)||'all'; if(f==='all') return b.length; return b.filter(c=>{ const sl=c.status.toLowerCase(); if(f==='Active') return sl==='active'; if(f==='Open') return sl==='open'||isOpenCo(c); if(f==='Limited') return sl.includes('limited'); if(f==='Prepaid') return sl.includes('prepaid'); return sl.startsWith(f.toLowerCase()); }).length; }); } },
+      counts:()=>{ const b=getVisibleCustomers().filter(c=>!isProspect(c)); return LISTS.co.tabs.map(t=>{ const f=(t.s&&t.s.f)||'all'; if(f==='all') return b.length; return b.filter(c=>{ const sl=c.status.toLowerCase(); if(f==='Mine') return isMineCo(c); if(f==='Active') return sl==='active'; if(f==='Open') return sl==='open'||isOpenCo(c); if(f==='Limited') return sl.includes('limited'); if(f==='Prepaid') return sl.includes('prepaid'); return sl.startsWith(f.toLowerCase()); }).length; }); } },
     cr: { mod:'carriers', view:'view-companies', tbody:'coTbody', dd:null, slice:false, render:()=>renderCoTable(),
       tabs:[{n:'All carriers',s:{}}], get:()=>({}), set:()=>{}, board:null },
     ct: { mod:'contacts', view:'view-contacts', tbody:'ctTbody', dd:'ct', slice:true, render:()=>renderContactsView(),
