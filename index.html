@@ -1384,7 +1384,8 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><button class="btn btn-ghost btn-sm" onclick="notifAdminTest()">Send me a test email</button><span id="naTestMsg" style="font-size:12px;"></span></div>
       <div style="color:var(--text-faint);margin-top:8px;">Save first, then press "Send me a test email" to check the sender mailbox works. Emails are only sent for events where <b>Email</b> (sent straight away) or <b>Morning summary</b> (one email at 8 AM office time) is ticked. While Test mode is ON, every email goes only to the test address. The role columns decide who else is emailed: Team Leader, Operations Manager, Location Head, Operations Head and Sales Rep only for accounts in their own team or office; Compliance and Admin for everything. The bell takes effect within about a minute.</div>
     </div>
-    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;"><table class="data-table" id="naTable" style="width:100%;min-width:1240px"><thead id="naHead"><tr><th>Event</th><th>In-CRM bell</th><th>Email</th><th>Also email when Urgent</th></tr></thead><tbody id="naRules"></tbody></table></div>
+    <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;"><table class="data-table" id="naTable" style="width:100%"><thead id="naHead"><tr><th>Event</th><th style="text-align:center;">In-CRM bell</th><th style="text-align:center;">Email</th><th style="text-align:center;">Morning summary</th><th>Who gets it</th></tr></thead><tbody id="naRules"></tbody></table></div>
+    <div id="naPop" style="display:none;position:fixed;z-index:9600;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:12px 14px;width:300px;"></div>
     <h3 style="margin:22px 0 8px;font-size:14px;">Change history</h3>
     <table class="data-table" style="width:100%"><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody id="naHist"></tbody></table>
     <h3 style="margin:22px 0 8px;font-size:14px;">Sent-email log</h3>
@@ -8955,19 +8956,42 @@ async function notifAdminLoad() {
     _naRules = j.rules||[];
     document.getElementById('naSender').value=j.settings.sender||''; document.getElementById('naLimit').value=j.settings.dailyLimit;
     document.getElementById('naTest').checked=!!j.settings.testMode; document.getElementById('naTestAddr').value=j.settings.testAddress||'';
-    const cb=(k,f,v)=>`<td style="text-align:center;"><input type="checkbox" data-k="${k}" data-f="${f}" ${v?'checked':''}></td>`;
-    const hasRoles = _naRules.length && _naRules[0].to_person!==undefined;
-    const ROLEH=[['to_person','The person it is about'],['r_sales_rep','Sales Rep'],['r_team_leader','Team Leader'],['r_ops_manager','Operations Manager'],['r_location_head','Location Head'],['r_ops_head','Operations Head'],['r_cust_comp','Customer Compliance'],['r_carrier_comp','Carrier Compliance'],['r_coi','COI Specialist'],['r_admin','Admin']];
-    const cols = [['in_app','In-CRM bell'],['email','Email (straight away)'],['digest','Morning summary'],['urgent','Also email when Urgent']].concat(hasRoles?ROLEH:[]);
-    document.getElementById('naHead').innerHTML='<tr><th style="min-width:230px;">Event</th>'+cols.map(c=>`<th style="text-align:center;font-size:11px;line-height:1.2;">${e2(c[1])}</th>`).join('')+'</tr>';
-    const fields = hasRoles ? cols.map(c=>c[0]) : ['in_app','email','urgent'];
-    if(!hasRoles) document.getElementById('naHead').innerHTML='<tr><th>Event</th><th>In-CRM bell</th><th>Email</th><th>Also email when Urgent</th></tr>';
-    rb.innerHTML=_naRules.map(r=>`<tr><td>${e2(r.label)}</td>${fields.map(f=>cb(r.kind,f,r[f])).join('')}</tr>`).join('')||`<tr><td colspan="15">${e2(j.note||'No rules yet.')}</td></tr>`;
-    if(!hasRoles && j.note) rb.insertAdjacentHTML('afterend',`<tr><td colspan="5" style="color:var(--red,#c33);">${e2(j.note)}</td></tr>`);
+    naDraw(!!hasRolesFlag(_naRules), j.note);
     document.getElementById('naHist').innerHTML=(j.history||[]).map(h=>`<tr><td>${e2(new Date(h.created_at).toLocaleString())}</td><td>${e2(h.by_name)}</td><td>${e2(h.what)}</td></tr>`).join('')||'<tr><td colspan="3">No changes yet.</td></tr>';
     document.getElementById('naLog').innerHTML=(j.log||[]).map(h=>`<tr><td>${e2(new Date(h.created_at).toLocaleString())}</td><td>${e2(h.kind)}</td><td>${e2(h.to_email)}</td><td>${e2(h.subject)}</td><td>${e2(h.status)}</td></tr>`).join('')||'<tr><td colspan="5">No emails sent yet.</td></tr>';
   } catch(e) { rb.innerHTML='<tr><td colspan="5">Could not load.</td></tr>'; }
 }
+const NA_ROLES=[['to_person','The person it is about',''],['r_sales_rep','Sales Rep','own accounts'],['r_team_leader','Team Leader','own team'],['r_ops_manager','Operations Manager','own team'],['r_location_head','Location Head','own office'],['r_ops_head','Operations Head','own office'],['r_cust_comp','Customer Compliance','all'],['r_carrier_comp','Carrier Compliance','all'],['r_coi','COI Specialist','all'],['r_admin','Admin','all']];
+const NA_GROUPS=[['Prospects & customers',['PROSPECT_ASSIGNED','PROSPECT_EXPIRING','INACTIVITY','PROSPECT_RELEASED','PROSPECT_EXTENSION','EMAIL']],['Compliance',['COMPLIANCE_SUBMITTED','COMPLIANCE_UPDATE','CREDIT_RECHECK','CARRIER_UPDATE','CASE_ASSIGNMENT']],['Admin & personal',['REMINDER','EMAIL_ACCESS','SECURITY']]];
+function hasRolesFlag(rules){ return rules.length && rules[0].to_person!==undefined; }
+function naWho(r){ const names=NA_ROLES.filter(x=>r[x[0]]).map(x=>x[0]==='to_person'?'Person':x[1]); return names.length?names.map(n=>`<span style="background:rgba(212,98,26,0.12);color:var(--accent);border-radius:20px;padding:1px 9px;font-size:11.5px;white-space:nowrap;">${esc(n)}</span>`).join(' '):'<span style="color:var(--text-faint);font-size:12px;">nobody extra</span>'; }
+function naDraw(hasRoles, note){
+  const rb=document.getElementById('naRules'); if(!rb) return;
+  const cb=(k,f,v)=>`<td style="text-align:center;"><input type="checkbox" ${v?'checked':''} onchange="naSet('${k}','${f}',this.checked)"></td>`;
+  const row=r=>`<tr><td>${esc(r.label)}</td>${cb(r.kind,'in_app',r.in_app)}${cb(r.kind,'email',r.email)}${hasRoles?cb(r.kind,'digest',r.digest):'<td></td>'}<td>${hasRoles?`<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;">${naWho(r)} <button class="btn btn-ghost btn-sm" style="padding:1px 9px;font-size:11.5px;" onclick="naPop(event,'${r.kind}')">Edit</button></div>`:''}</td></tr>`;
+  const used=new Set(); let html='';
+  NA_GROUPS.forEach((g,gi)=>{
+    let list=g[1].map(k=>_naRules.find(r=>r.kind===k)).filter(Boolean);
+    if(gi===NA_GROUPS.length-1) list=list.concat(_naRules.filter(r=>!NA_GROUPS.some(x=>x[1].includes(r.kind))));
+    list.forEach(r=>used.add(r.kind));
+    if(list.length) html+=`<tr><td colspan="5" style="background:var(--surface-2);font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);padding:7px 12px;">${esc(g[0])}</td></tr>`+list.map(row).join('');
+  });
+  rb.innerHTML=html||`<tr><td colspan="5">${esc(note||'No rules yet.')}</td></tr>`;
+  if(!hasRoles && note) rb.insertAdjacentHTML('beforeend',`<tr><td colspan="5" style="color:var(--red,#c33);">${esc(note)}</td></tr>`);
+}
+function naSet(k,f,v){ const r=_naRules.find(x=>x.kind===k); if(r) r[f]=v?1:0; }
+function naPop(ev,k){
+  ev.stopPropagation(); const r=_naRules.find(x=>x.kind===k); if(!r) return; const p=document.getElementById('naPop');
+  p.innerHTML=`<div style="font-weight:600;margin-bottom:8px;">Who gets: ${esc(r.label)}</div>`+NA_ROLES.map((x,i)=>(i===1?'<div style="border-top:1px solid var(--border);margin:6px 0;"></div>':'')+`<label style="display:flex;gap:8px;align-items:center;padding:4px 0;cursor:pointer;"><input type="checkbox" ${r[x[0]]?'checked':''} onchange="naPopSet('${k}','${x[0]}',this.checked)"> ${esc(x[1])}<span style="margin-left:auto;font-size:11px;color:var(--text-faint);">${esc(x[2])}</span></label>`).join('')+`<div style="display:flex;justify-content:space-between;gap:8px;margin-top:10px;"><span><button class="btn btn-ghost btn-sm" onclick="naPopAll('${k}',1)">Select all</button> <button class="btn btn-ghost btn-sm" onclick="naPopAll('${k}',0)">Clear</button></span><button class="btn btn-primary btn-sm" onclick="naPopClose()">Done</button></div>`;
+  const b=ev.target.getBoundingClientRect(); p.style.display='block';
+  p.style.left=Math.max(10,Math.min(b.left-200,innerWidth-320))+'px'; p.style.top=Math.max(10,Math.min(b.bottom+6,innerHeight-p.offsetHeight-10))+'px';
+}
+function naPopSet(k,f,v){ naSet(k,f,v); naRedrawKeepPop(); }
+function naPopAll(k,on){ NA_ROLES.forEach(x=>naSet(k,x[0],on)); document.querySelectorAll('#naPop input[type=checkbox]').forEach(c=>c.checked=!!on); naRedrawKeepPop(); }
+function naRedrawKeepPop(){ naDraw(hasRolesFlag(_naRules), ''); }
+function naPopClose(){ const p=document.getElementById('naPop'); if(p) p.style.display='none'; }
+document.addEventListener('click',e=>{ if(!e.target.closest('#naPop')) naPopClose(); });
+document.addEventListener('scroll',()=>naPopClose(),true);
 async function notifAdminTest() {
   const m=document.getElementById('naTestMsg'); m.textContent='Sending…'; m.style.color='var(--text-faint)';
   try {
@@ -8976,8 +9000,7 @@ async function notifAdminTest() {
   } catch(e){ m.textContent='Could not send.'; m.style.color='var(--red,#c33)'; }
 }
 async function notifAdminSave() {
-  const m=document.getElementById('naMsg'); const rules={};
-  document.querySelectorAll('#naRules input[type=checkbox]').forEach(c=>{ const k=c.dataset.k; (rules[k]=rules[k]||{kind:k})[c.dataset.f]=c.checked; });
+  const m=document.getElementById('naMsg'); const rules={}; _naRules.forEach(r=>{ rules[r.kind]=r; });
   try {
     const res=await apiFetch('/api/notif-settings',{method:'PUT',body:JSON.stringify({rules:Object.values(rules),settings:{sender:document.getElementById('naSender').value,dailyLimit:document.getElementById('naLimit').value,testMode:document.getElementById('naTest').checked,testAddress:document.getElementById('naTestAddr').value}})});
     const j=await res.json().catch(()=>({}));
