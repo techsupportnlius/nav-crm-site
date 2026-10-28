@@ -1358,7 +1358,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <button class="btn btn-primary btn-sm" onclick="secSave()">Save</button> <span id="secMsg" style="margin-left:8px;"></span>
       <div style="color:var(--text-faint);margin-top:8px;">Screenshot alerts are best-effort: they catch the Print Screen key and common shortcuts. Phone photos and screen recordings cannot be detected.</div>
     </div>
-    <table class="data-table" style="width:100%"><thead><tr><th>When</th><th>Event</th><th>Person</th><th>Role</th><th>Details</th></tr></thead><tbody id="secTbody"></tbody></table>
+    <table class="data-table" style="width:100%"><thead><tr><th>When</th><th>Event</th><th>Person</th><th>Role</th><th>Details</th><th>Device / IP</th></tr></thead><tbody id="secTbody"></tbody></table>
   </div>
 </div>
 <div class="view" id="view-notif-admin">
@@ -8889,13 +8889,13 @@ document.addEventListener('keydown', (e)=>{
 // C-057: Admin Security page
 async function secLoad() {
   const tb=document.getElementById('secTbody'); if(!tb) return;
-  if(!realUser){ tb.innerHTML='<tr><td colspan="5">Sign in with a real account to see the log.</td></tr>'; return; }
+  if(!realUser){ tb.innerHTML='<tr><td colspan="6">Sign in with a real account to see the log.</td></tr>'; return; }
   try {
     const g = await (await apiFetch('/api/security-settings')).json(); document.getElementById('secAlertAddr').value = g.alertAddress||'';
     const j = await (await apiFetch('/api/security-events')).json();
     const lab={export:'Export',export_blocked:'Blocked export',screenshot:'Possible screenshot'};
     const esc2=t=>String(t==null?'':t).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-    tb.innerHTML=(j.events||[]).map(e=>`<tr><td>${esc2(new Date(e.created_at).toLocaleString())}</td><td>${lab[e.kind]||esc2(e.kind)}</td><td>${esc2(e.user_name)}</td><td>${esc2(e.role)}</td><td>${esc2(e.detail)}</td></tr>`).join('') || '<tr><td colspan="5">Nothing logged yet.</td></tr>';
+    tb.innerHTML=(j.events||[]).map(e=>`<tr><td>${esc2(new Date(e.created_at).toLocaleString())}</td><td>${lab[e.kind]||esc2(e.kind)}</td><td>${esc2(e.user_name)}</td><td>${esc2(e.role)}</td><td>${esc2(e.detail)}</td><td>${e.device||e.ip_address ? esc2(e.device||'')+(e.ip_address?'<br><span style="color:var(--text-faint);font-size:11.5px;">IP '+esc2(e.ip_address)+'</span>':'') : '<span style="color:var(--text-faint);">not recorded</span>'}</td></tr>`).join('') || '<tr><td colspan="6">Nothing logged yet.</td></tr>';
   } catch(e) { tb.innerHTML='<tr><td colspan="5">Could not load.</td></tr>'; }
 }
 async function secSave() {
@@ -10574,15 +10574,16 @@ async function doSendEmail() {
     const fromAddr = emailComposeContext && emailComposeContext.fromAddr;
     // C-090: once the Customer Mailbox is connected, EVERY compliance email goes out as ops.customer@ through the CRM server
     // (never from a personal mailbox, never a fallback). Before it is connected, the old way still works.
-    const opsI = await opsEnsureInfo();
+    const opsI = await opsEnsureBoxes();
+    const cbox = (emailComposeContext && emailComposeContext.mbId && sharedBox(emailComposeContext.mbId)) || opsCustBox();
     let viaOps = false;
-    if(opsI.configured) {
+    if(opsI && opsI.configured && cbox) {
       const sb = document.querySelector('#emailComposeModal .btn-primary'); if(sb) { sb.disabled = true; sb.textContent = 'Sending...'; }
-      const res = await opsServerSend({ to: toAddr, cc: ccClean, subject, body, html: emailComposeHtml || undefined, attachments: emailAttachPayload(attachments).map(f=>({name:f.name,type:f.type,contentBase64:f.contentBase64})), noSignature: true, caseId: emailComposeContext.caseId || undefined, companyId: emailComposeContext.companyId || undefined, docs: visDocs, brokerCopied: brokerSeen, threadSubject: emailComposeContext.threadSubject || undefined });
+      const res = await opsServerSend({ mailboxId: cbox.id, to: toAddr, cc: ccClean, subject, body, html: emailComposeHtml || undefined, attachments: emailAttachPayload(attachments).map(f=>({name:f.name,type:f.type,contentBase64:f.contentBase64})), noSignature: true, caseId: emailComposeContext.caseId || undefined, companyId: emailComposeContext.companyId || undefined, docs: visDocs, brokerCopied: brokerSeen, threadSubject: emailComposeContext.threadSubject || undefined });
       if(!res.ok) { if(sb) { sb.disabled = false; sb.textContent = '\u27A4 Send'; } showToast('Not sent - ' + res.error); return; }
       viaOps = true;
       if(compDrawer && compDrawer.tab==='emails') setTimeout(()=>{ if(compDrawer && compDrawer.tab==='emails') { custLoadEmailLog(compDrawer.caseId); caseLoadShared(compDrawer.caseId,'caseSharedBox',true); } }, 1200);
-      closeEmailCompose(); showToast('Email sent from ' + opsI.address + '.'); return;
+      closeEmailCompose(); showToast('Email sent from ' + cbox.email + '.'); return;
     }
     const sentOk = await sendRealGenericEmail(toAddr, ccClean, subject, body, 'cu-'+Date.now(), attachments, true, fromAddr);
     if(!sentOk) return;
@@ -11107,49 +11108,59 @@ async function markRealMailRead(id) {
   } catch(e) { console.error('Marking real mail read failed:', e); }
 }
 
-// ── C-090: Customer Mailbox (ops.customer@) - Admin and Customer Compliance only ──────────────────
-// The CRM server reads and sends this mailbox. Replies ALWAYS go out as ops.customer@ - never from a personal mailbox.
-let opsMode = false, opsInfo = null, opsData = { inbox: [], sent: [] }, opsMore = { inbox: false, sent: false };
-let opsFolder = 'inbox', opsSel = null, opsBusy = false, opsErr = '', opsLoadedAt = 0, opsMsgCache = {}, opsLastSync = 0;
-function opsAllowed() { return !!realUser && (currentRole === 'Customer Compliance' || currentRole === 'Admin'); }
+// ── C-094: shared mailboxes in CRM Mail (Customer Operations, Carrier Operations, COI ...) ─────────────
+// Which mailboxes a person sees comes from the server (Email settings: Show in CRM Mail + roles + people).
+// Replies from a shared mailbox ALWAYS go out as that mailbox - never from a personal mailbox.
+let sharedBoxes = [], sharedInfo = null, sharedFetched = false, sharedFetching = null;
+let sharedMode = 0, sharedData = {}, opsFolder = 'inbox', opsSel = null, opsMsgCache = {}, opsLastSync = 0;
+function sharedBox(id) { return sharedBoxes.find(b => b.id === id) || null; }
+function opsOn() { return !!realUser && !!sharedMode && !!sharedBox(sharedMode); }
+function sd() { if(!sharedData[sharedMode]) sharedData[sharedMode] = { inbox: [], sent: [], more: { inbox: false, sent: false }, loadedAt: 0, err: '', busy: false }; return sharedData[sharedMode]; }
+function opsCustBox() { return sharedBoxes.find(b => b.type === 'Customer' && b.isDefault) || sharedBoxes.find(b => b.type === 'Customer') || null; }
+function opsAllowed() { return !!realUser && !!opsCustBox(); }   // can this person reply as the customer mailbox?
 function opsIsOwn(a) { return /@(nlius\.com|navgroup\.co)$/i.test(String(a || '')); }
 function opsEmailList(v) { return String(v || '').split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(x => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x)); }
-async function opsEnsureInfo(force) {
-  if(opsInfo && !force) return opsInfo;
-  try {
-    const r = await apiFetch('/api/ops-mail/status');
-    const j = await r.json().catch(() => ({}));
-    opsInfo = r.ok ? j : { configured: false, address: '', missing: [], error: j.error || '' };
-  } catch(e) { opsInfo = { configured: false, address: '', missing: [], error: 'Could not check the Customer Mailbox.' }; }
-  return opsInfo;
+async function opsEnsureBoxes(force) {
+  if(!realUser) return sharedInfo;
+  if(sharedFetched && !force) return sharedInfo;
+  if(sharedFetching) return sharedFetching;
+  sharedFetching = (async () => {
+    try {
+      const r = await apiFetch('/api/shared-mail/boxes'); const j = await r.json().catch(() => ({}));
+      if(r.ok) { sharedBoxes = j.boxes || []; sharedInfo = { configured: !!j.configured, missing: j.missing || [], needSql: !!j.needSql }; sharedFetched = true; }
+      else { sharedInfo = { configured: false, missing: [], needSql: false, error: j.error || '' }; }
+    } catch(e) { sharedInfo = { configured: false, missing: [], needSql: false, error: 'Could not reach the CRM server.' }; }
+    sharedFetching = null; return sharedInfo;
+  })();
+  return sharedFetching;
 }
 function mailSwitcherHtml() {
-  if(!opsAllowed()) return '';
-  const b = on => `flex:1;padding:6px 4px;font-size:11.5px;border-radius:5px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'var(--accent-soft, rgba(234,88,12,.12))' : 'transparent'};color:var(--text);cursor:pointer;font-weight:${on ? 600 : 400};`;
-  return `<div style="display:flex;gap:6px;padding:2px 4px 10px;"><button style="${b(!opsMode)}" onclick="opsSwitch(false)">My mailbox</button><button style="${b(opsMode)}" onclick="opsSwitch(true)">Customer Mailbox</button></div>`;
+  if(!realUser) return '';
+  if(!sharedFetched) { opsEnsureBoxes().then(() => { if(currentViewName === 'mail' && sharedBoxes.length) renderMailView(); }); return ''; }
+  if(!sharedBoxes.length) return '';
+  const b = on => `flex:1 1 44%;min-width:0;padding:6px 4px;font-size:11.5px;border-radius:5px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'var(--accent-soft, rgba(234,88,12,.12))' : 'transparent'};color:var(--text);cursor:pointer;font-weight:${on ? 600 : 400};`;
+  return `<div style="display:flex;flex-wrap:wrap;gap:6px;padding:12px 4px 6px;border-top:1px solid var(--border);margin-top:10px;"><button style="${b(!sharedMode)}" onclick="opsSwitch(0)">My mailbox</button>${sharedBoxes.map(x => `<button style="${b(sharedMode === x.id)}" title="${esc(x.email)}" onclick="opsSwitch(${x.id})">${esc(x.name)}</button>`).join('')}</div>`;
 }
 function opsPaneEmpty() {
   const p = document.getElementById('mailReadingPane');
   if(p) p.innerHTML = '<div class="mail-reading-empty"><span style="font-size:13px;">Select an email to read</span></div>';
 }
-function opsSwitch(on) {
-  opsMode = !!on; mailSelected = null; opsSel = null; opsPaneEmpty();
-  if(opsMode) { opsData = { inbox: [], sent: [] }; opsLoadedAt = 0; opsErr = ''; }
+function opsSwitch(id) {
+  sharedMode = id || 0; mailSelected = null; opsSel = null; opsFolder = 'inbox'; opsPaneEmpty();
+  if(sharedMode) { sharedData[sharedMode] = null; }
   renderMailView();
 }
 async function opsLoad(folder, append) {
-  if(opsBusy) return; opsBusy = true; opsErr = '';
+  const d = sd(); if(d.busy) return; d.busy = true; d.err = '';
+  const mid = sharedMode;
   try {
-    const skip = append ? opsData[folder].length : 0;
-    const r = await apiFetch('/api/ops-mail/messages?folder=' + folder + '&skip=' + skip);
+    const skip = append ? d[folder].length : 0;
+    const r = await apiFetch('/api/shared-mail/' + mid + '/messages?folder=' + folder + '&skip=' + skip);
     const j = await r.json().catch(() => ({}));
-    if(!r.ok) { opsErr = j.notConfigured ? 'notconfigured' : (j.error || 'Could not load the Customer Mailbox.'); }
-    else {
-      opsData[folder] = append ? opsData[folder].concat(j.messages || []) : (j.messages || []);
-      opsMore[folder] = !!j.more; opsLoadedAt = Date.now();
-    }
-  } catch(e) { opsErr = 'Could not reach the CRM server.'; }
-  opsBusy = false;
+    if(!r.ok) { d.err = j.notConfigured ? 'notconfigured' : (j.error || 'Could not load this mailbox.'); if(j.missing) sharedInfo = { ...(sharedInfo || {}), configured: false, missing: j.missing }; }
+    else { d[folder] = append ? d[folder].concat(j.messages || []) : (j.messages || []); d.more[folder] = !!j.more; d.loadedAt = Date.now(); }
+  } catch(e) { d.err = 'Could not reach the CRM server.'; }
+  d.busy = false;
 }
 async function opsRefresh() {
   await opsLoad('inbox'); await opsLoad('sent');
@@ -11157,45 +11168,45 @@ async function opsRefresh() {
   if(currentViewName === 'mail') renderMailView();
 }
 async function opsSyncOnce(force) {
-  if(!opsAllowed()) return 0;
+  if(!realUser || !opsCustBox()) return 0;
   if(!force && Date.now() - opsLastSync < 60000) return 0;
   opsLastSync = Date.now();
-  try { const r = await apiFetch('/api/ops-mail/sync', { method: 'POST', body: '{}' }); const j = await r.json().catch(() => ({})); return (r.ok && j.saved) || 0; } catch(e) { return 0; }
+  try { const r = await apiFetch('/api/shared-mail/sync', { method: 'POST', body: '{}' }); const j = await r.json().catch(() => ({})); return (r.ok && j.saved) || 0; } catch(e) { return 0; }
 }
 function opsSetFolder(f) { opsFolder = f; opsSel = null; opsPaneEmpty(); renderMailView(); }
 function renderOpsMailView() {
   const foldersEl = document.getElementById('mailFolders');
-  const addr = (opsInfo && opsInfo.address) || 'ops.customer@';
-  const unread = opsData.inbox.filter(m => !m.isRead).length;
-  if(!opsInfo) { opsEnsureInfo().then(() => { if(currentViewName === 'mail' && opsMode) renderMailView(); }); }
-  if(opsInfo && opsInfo.configured && !opsLoadedAt && !opsBusy && !opsErr) {
-    opsLoad('inbox').then(() => opsLoad('sent')).then(() => { if(currentViewName === 'mail' && opsMode) renderMailView(); });
+  const box = sharedBox(sharedMode), d = sd();
+  const unread = d.inbox.filter(m => !m.isRead).length;
+  if(sharedInfo && sharedInfo.configured && !d.loadedAt && !d.busy && !d.err) {
+    opsLoad('inbox').then(() => opsLoad('sent')).then(() => { if(currentViewName === 'mail' && sharedMode) renderMailView(); });
   }
-  foldersEl.innerHTML = mailSwitcherHtml() + `
+  foldersEl.innerHTML = `
     <button class="mail-compose-btn" onclick="opsCompose()">New mail</button>
-    <div class="mail-folder-label">${esc(addr)}</div>
-    <div class="mail-folder-item ${opsFolder === 'inbox' ? 'active' : ''}" onclick="opsSetFolder('inbox')">Inbox ${unread ? `<span class="mail-folder-count unread">${unread}</span>` : `<span class="mail-folder-count">${opsData.inbox.length}</span>`}</div>
-    <div class="mail-folder-item ${opsFolder === 'sent' ? 'active' : ''}" onclick="opsSetFolder('sent')">Sent Items <span class="mail-folder-count">${opsData.sent.length}</span></div>
+    <div class="mail-folder-label" title="${esc(box.email)}">${esc(box.email)}</div>
+    <div class="mail-folder-item ${opsFolder === 'inbox' ? 'active' : ''}" onclick="opsSetFolder('inbox')">Inbox ${unread ? `<span class="mail-folder-count unread">${unread}</span>` : `<span class="mail-folder-count">${d.inbox.length}</span>`}</div>
+    <div class="mail-folder-item ${opsFolder === 'sent' ? 'active' : ''}" onclick="opsSetFolder('sent')">Sent Items <span class="mail-folder-count">${d.sent.length}</span></div>
     <div class="mail-folder-divider"></div>
     <div style="padding:6px 4px;">
-      <div style="font-size:10px;color:var(--text-faint);margin-bottom:6px;"><span style="color:var(--green);">&#10003;</span> Shared customer mailbox. Replies always go out as ${esc(addr)}.${opsLoadedAt ? ' Updated ' + esc(relativeTime(new Date(opsLoadedAt).toISOString())) : ''}</div>
+      <div style="font-size:10px;color:var(--text-faint);margin-bottom:6px;"><span style="color:var(--green);">&#10003;</span> Shared mailbox. Replies always go out as ${esc(box.email)}.${d.loadedAt ? ' Updated ' + esc(relativeTime(new Date(d.loadedAt).toISOString())) : ''}</div>
       <button class="btn btn-ghost btn-sm" style="width:100%;font-size:11px;" onclick="opsRefresh()">&#128260; Refresh now</button>
-      ${opsMore[opsFolder] ? `<button class="btn btn-ghost btn-sm" style="width:100%;font-size:11px;margin-top:5px;" onclick="opsLoad(opsFolder,true).then(()=>renderMailView())">Load older mail</button>` : ''}
-    </div>`;
+      ${d.more[opsFolder] ? `<button class="btn btn-ghost btn-sm" style="width:100%;font-size:11px;margin-top:5px;" onclick="opsLoad(opsFolder,true).then(()=>renderMailView())">Load older mail</button>` : ''}
+    </div>` + mailSwitcherHtml();
   renderOpsList();
 }
 function renderOpsList() {
   const listEl = document.getElementById('mailList'), titleEl = document.getElementById('mailListTitle');
-  if(titleEl) titleEl.textContent = 'Customer Mailbox - ' + (opsFolder === 'inbox' ? 'Inbox' : 'Sent Items');
-  if(opsErr === 'notconfigured' || (opsInfo && !opsInfo.configured)) {
-    const miss = (opsInfo && opsInfo.missing && opsInfo.missing.length) ? ' Missing Azure setting(s): ' + opsInfo.missing.map(esc).join(', ') + '.' : '';
-    listEl.innerHTML = `<div style="padding:30px 14px;text-align:center;color:var(--text-faint);font-size:13px;">The Customer Mailbox is not connected yet.${miss}<br>Follow the Customer Mailbox steps from the update README, then press Refresh.</div>`;
+  const box = sharedBox(sharedMode), d = sd();
+  if(titleEl) titleEl.textContent = box.name + ' - ' + (opsFolder === 'inbox' ? 'Inbox' : 'Sent Items');
+  if(d.err === 'notconfigured' || (sharedInfo && !sharedInfo.configured)) {
+    const miss = (sharedInfo && sharedInfo.missing && sharedInfo.missing.length) ? ' Missing Azure setting(s): ' + sharedInfo.missing.map(esc).join(', ') + '.' : '';
+    listEl.innerHTML = `<div style="padding:30px 14px;text-align:center;color:var(--text-faint);font-size:13px;">Shared mailboxes are not connected yet.${miss}<br>Follow the Azure steps in the update README, then press Refresh.</div>`;
     return;
   }
-  if(opsErr) { listEl.innerHTML = `<div style="padding:30px 14px;text-align:center;color:var(--red);font-size:13px;">${esc(opsErr)}<br><button class="btn btn-ghost btn-sm" style="margin-top:10px;" onclick="opsRefresh()">Try again</button></div>`; return; }
-  if(!opsLoadedAt) { listEl.innerHTML = '<div style="padding:30px 14px;text-align:center;color:var(--text-faint);font-size:13px;">Loading the Customer Mailbox...</div>'; return; }
+  if(d.err) { listEl.innerHTML = `<div style="padding:30px 14px;text-align:center;color:var(--red);font-size:13px;">${esc(d.err)}<br><button class="btn btn-ghost btn-sm" style="margin-top:10px;" onclick="opsRefresh()">Try again</button></div>`; return; }
+  if(!d.loadedAt) { listEl.innerHTML = '<div style="padding:30px 14px;text-align:center;color:var(--text-faint);font-size:13px;">Loading ' + esc(box.name) + '...</div>'; return; }
   const q = (mailSearchText || '').trim().toLowerCase();
-  let list = opsData[opsFolder] || [];
+  let list = d[opsFolder] || [];
   if(q) list = list.filter(m => [m.fromName, m.from, m.to.join(' '), m.subject, m.preview].join(' ').toLowerCase().includes(q));
   if(!list.length) { listEl.innerHTML = `<div style="padding:30px 14px;text-align:center;color:var(--text-faint);font-size:13px;">${q ? 'Nothing matches.' : 'No emails in this folder.'}</div>`; return; }
   listEl.innerHTML = list.map(m => {
@@ -11209,51 +11220,53 @@ function renderOpsList() {
 }
 async function opsOpen(id) {
   opsSel = id; renderOpsList();
-  const pane = document.getElementById('mailReadingPane');
+  const pane = document.getElementById('mailReadingPane'), mid = sharedMode;
   pane.innerHTML = '<div class="mail-reading-empty"><span style="font-size:13px;">Loading...</span></div>';
   try {
-    const r = await apiFetch('/api/ops-mail/messages/' + encodeURIComponent(id)); const m = await r.json().catch(() => ({}));
+    const r = await apiFetch('/api/shared-mail/' + mid + '/messages/' + encodeURIComponent(id)); const m = await r.json().catch(() => ({}));
     if(!r.ok) { pane.innerHTML = `<div style="padding:20px;color:var(--red);font-size:13px;">${esc(m.error || 'Could not open that email.')}</div>`; return; }
-    opsMsgCache[id] = m;
-    const row = [...opsData.inbox, ...opsData.sent].find(x => x.id === id);
-    if(row && !row.isRead) { row.isRead = true; apiFetch('/api/ops-mail/messages/' + encodeURIComponent(id) + '/read', { method: 'POST', body: '{}' }).catch(() => {}); renderOpsList(); }
+    opsMsgCache[id] = { ...m, _mid: mid };
+    const row = [...sd().inbox, ...sd().sent].find(x => x.id === id);
+    if(row && !row.isRead) { row.isRead = true; apiFetch('/api/shared-mail/' + mid + '/messages/' + encodeURIComponent(id) + '/read', { method: 'POST', body: '{}' }).catch(() => {}); renderOpsList(); }
+    const sid = esc(id).replace(/'/g, '');
     pane.innerHTML = `<div style="padding:18px 22px;overflow:auto;height:100%;box-sizing:border-box;">
       <div style="font-size:17px;font-weight:600;margin-bottom:8px;">${esc(m.subject)}</div>
       <div style="font-size:12.5px;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">From: <b>${esc(m.fromName || m.from)}</b> &lt;${esc(m.from)}&gt;<br>To: ${esc(m.to.join(', '))}${m.cc.length ? '<br>Cc: ' + esc(m.cc.join(', ')) : ''}<br>${esc(m.at ? new Date(m.at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '')}</div>
-      <div style="display:flex;gap:8px;margin-bottom:14px;"><button class="btn btn-primary btn-sm" onclick="opsReply('${esc(id).replace(/'/g, '')}',false)">&#8617; Reply</button><button class="btn btn-ghost btn-sm" onclick="opsReply('${esc(id).replace(/'/g, '')}',true)">&#8617;&#8617; Reply all</button></div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;"><button class="btn btn-primary btn-sm" onclick="opsReply('${sid}',false)">&#8617; Reply</button><button class="btn btn-ghost btn-sm" onclick="opsReply('${sid}',true)">&#8617;&#8617; Reply all</button></div>
       <div style="white-space:pre-wrap;font-size:13.5px;line-height:1.55;border-top:1px solid var(--border);padding-top:12px;">${esc(m.text || '')}</div></div>`;
   } catch(e) { pane.innerHTML = '<div style="padding:20px;color:var(--red);font-size:13px;">Could not open that email.</div>'; }
 }
-// Who a reply goes to: the customer side in To, our own people (e.g. the sales rep) kept in Cc. ops.customer@ itself is never listed.
-function opsReplyTargets(m, all) {
-  const ops = ((opsInfo && opsInfo.address) || '').toLowerCase();
-  const everyone = [m.from].concat(m.to || [], m.cc || []).map(x => String(x || '').toLowerCase()).filter(x => x && x !== ops);
+// Who a reply goes to: the outside side in To, our own people (e.g. the sales rep) kept in Cc. The shared mailbox itself is never listed.
+function opsReplyTargets(m, all, ownAddr) {
+  const me = String(ownAddr || '').toLowerCase();
+  const everyone = [m.from].concat(m.to || [], m.cc || []).map(x => String(x || '').toLowerCase()).filter(x => x && x !== me);
   const uniq = [...new Set(everyone)];
-  const fromIsCustomer = m.from && !opsIsOwn(m.from) && m.from.toLowerCase() !== ops;
-  let to = fromIsCustomer ? [m.from.toLowerCase()] : uniq.filter(a => !opsIsOwn(a));
+  const fromOutside = m.from && !opsIsOwn(m.from) && m.from.toLowerCase() !== me;
+  let to = fromOutside ? [m.from.toLowerCase()] : uniq.filter(a => !opsIsOwn(a));
   if(!to.length) to = uniq.slice(0, 1);
   const cc = uniq.filter(a => !to.includes(a) && (all || opsIsOwn(a)));
   return { to, cc };
 }
 function opsReply(id, all) {
-  const m = opsMsgCache[id]; if(!m) return;
-  const t = opsReplyTargets(m, all);
-  opsComposeModal({ title: 'Reply', to: t.to.join(', '), cc: t.cc.join(', '), subject: /^re:/i.test(m.subject) ? m.subject : 'Re: ' + m.subject, replyToId: id });
+  const m = opsMsgCache[id], box = m && sharedBox(m._mid); if(!box) return;
+  const t = opsReplyTargets(m, all, box.email);
+  opsComposeModal({ mailboxId: box.id, title: 'Reply', to: t.to.join(', '), cc: t.cc.join(', '), subject: /^re:/i.test(m.subject) ? m.subject : 'Re: ' + m.subject, replyToId: id });
 }
-function opsCompose() { opsComposeModal({ title: 'New email', to: '', cc: '', subject: '' }); }
+function opsCompose() { const box = sharedBox(sharedMode); if(box) opsComposeModal({ mailboxId: box.id, title: 'New email', to: '', cc: '', subject: '' }); }
 function opsReplyFromCase(i, caseId) {
   const list = window._caseEmails || [], e = list[i]; if(!e) return;
-  const m = { from: e.direction === 'received' ? e.from_addr : '', to: String(e.direction === 'received' ? e.to_addr : e.to_addr).split(/[,;\s]+/).filter(Boolean), cc: String(e.cc_addr || '').split(/[,;\s]+/).filter(Boolean), subject: e.subject || '' };
-  if(e.direction !== 'received') m.from = e.from_addr || '';
-  opsEnsureInfo().then(info => {
-    if(!info.configured) { showToast('The Customer Mailbox is not connected yet - the Azure steps in the update README are needed first.'); return; }
-    const t = opsReplyTargets(m, false);
-    opsComposeModal({ title: 'Reply from ' + info.address, to: t.to.join(', '), cc: t.cc.join(', '), subject: /^re:/i.test(m.subject) ? m.subject : 'Re: ' + m.subject, threadSubject: m.subject, caseId, companyId: compDrawer && compDrawer.companyId });
+  const m = { from: e.from_addr || '', to: String(e.to_addr || '').split(/[,;\s]+/).filter(Boolean), cc: String(e.cc_addr || '').split(/[,;\s]+/).filter(Boolean), subject: e.subject || '' };
+  opsEnsureBoxes().then(info => {
+    const box = opsCustBox();
+    if(!box) { showToast('You do not have a shared customer mailbox, or it is not set up in Email settings yet.'); return; }
+    if(!info || !info.configured) { showToast('The shared mailboxes are not connected yet - the Azure steps in the update README are needed first.'); return; }
+    const t = opsReplyTargets(m, false, box.email);
+    opsComposeModal({ mailboxId: box.id, title: 'Reply from ' + box.email, to: t.to.join(', '), cc: t.cc.join(', '), subject: /^re:/i.test(m.subject) ? m.subject : 'Re: ' + m.subject, threadSubject: m.subject, caseId, companyId: compDrawer && compDrawer.companyId });
   });
 }
 function opsComposeModal(o) {
   const old = document.getElementById('opsModal'); if(old) old.remove();
-  const addr = (opsInfo && opsInfo.address) || 'ops.customer@';
+  const box = sharedBox(o.mailboxId), addr = box ? box.email : 'the shared mailbox';
   const w = document.createElement('div'); w.id = 'opsModal';
   w.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
   const inp = 'width:100%;box-sizing:border-box;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:8px 10px;font-size:13px;font-family:var(--sans);';
@@ -11264,28 +11277,28 @@ function opsComposeModal(o) {
       <input id="opsTo" style="${inp}" placeholder="To" value="${esc(o.to)}">
       <input id="opsCc" style="${inp}" placeholder="Cc" value="${esc(o.cc)}">
       <input id="opsSubj" style="${inp}" placeholder="Subject" value="${esc(o.subject)}">
-      <textarea id="opsBody" rows="9" style="${inp}resize:vertical;" placeholder="Write your reply..."></textarea></div>
+      <textarea id="opsBody" rows="9" style="${inp}resize:vertical;" placeholder="Write your message..."></textarea></div>
     <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-ghost btn-sm" onclick="document.getElementById('opsModal').remove()">Cancel</button><button class="btn btn-primary btn-sm" id="opsSendBtn">&#10148; Send as ${esc(addr)}</button></div></div>`;
   document.body.appendChild(w);
   document.getElementById('opsBody').focus();
   document.getElementById('opsSendBtn').onclick = async () => {
     const btn = document.getElementById('opsSendBtn');
-    const payload = { to: document.getElementById('opsTo').value, cc: document.getElementById('opsCc').value, subject: document.getElementById('opsSubj').value, body: document.getElementById('opsBody').value, replyToId: o.replyToId, threadSubject: o.threadSubject, caseId: o.caseId, companyId: o.companyId };
+    const payload = { mailboxId: o.mailboxId, to: document.getElementById('opsTo').value, cc: document.getElementById('opsCc').value, subject: document.getElementById('opsSubj').value, body: document.getElementById('opsBody').value, replyToId: o.replyToId, threadSubject: o.threadSubject, caseId: o.caseId, companyId: o.companyId };
     if(!opsEmailList(payload.to).length) { showToast('Add at least one valid To address.'); return; }
     if(!payload.body.trim()) { showToast('Write something first.'); return; }
     btn.disabled = true; btn.textContent = 'Sending...';
     const res = await opsServerSend(payload);
-    if(!res.ok) { btn.disabled = false; btn.textContent = '\u27A4 Send as ' + addr; showToast(res.error); return; }
+    if(!res.ok) { btn.disabled = false; btn.textContent = '➤ Send as ' + addr; showToast(res.error); return; }
     w.remove(); showToast('Email sent from ' + addr + '.');
     if(compDrawer && compDrawer.tab === 'emails') setTimeout(() => { custLoadEmailLog(compDrawer.caseId); caseLoadShared(compDrawer.caseId, 'caseSharedBox', true); }, 1200);
-    if(currentViewName === 'mail' && opsMode) setTimeout(opsRefresh, 2500);
+    if(currentViewName === 'mail' && sharedMode) setTimeout(opsRefresh, 2500);
   };
 }
 async function opsServerSend(p) {
   try {
-    const r = await apiFetch('/api/ops-mail/send', { method: 'POST', body: JSON.stringify(p) });
+    const r = await apiFetch('/api/shared-mail/send', { method: 'POST', body: JSON.stringify(p) });
     const j = await r.json().catch(() => ({}));
-    if(!r.ok) return { ok: false, error: j.error || 'Could not send from the Customer Mailbox.', notConfigured: !!j.notConfigured };
+    if(!r.ok) return { ok: false, error: j.error || 'Could not send from the shared mailbox.', notConfigured: !!j.notConfigured };
     return { ok: true };
   } catch(e) { return { ok: false, error: 'Could not reach the CRM server - nothing was sent.' }; }
 }
@@ -11374,14 +11387,14 @@ function renderMailView() {
 // demo path (still used by the role-switcher / pre-login preview) stays
 // untouched.
 function renderRealMailView() {
-  if(opsMode && opsAllowed()) { renderOpsMailView(); return; }
+  if(opsOn()) { renderOpsMailView(); return; }
   const foldersEl = document.getElementById('mailFolders');
   if(!mailboxConnected) {
-    foldersEl.innerHTML = mailSwitcherHtml() + `
+    foldersEl.innerHTML = `
       <div style="padding:18px 6px;text-align:center;">
         <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Connect your Outlook mailbox to see your real inbox here.</div>
         <button class="btn btn-primary btn-sm" onclick="connectMailbox()">📧 Connect Mailbox</button>
-      </div>`;
+      </div>` + mailSwitcherHtml();
     document.getElementById('mailListTitle').textContent = 'Mail';
     document.getElementById('mailList').innerHTML = `<div style="padding:30px 14px;text-align:center;color:var(--text-faint);font-size:13px;">Connect your mailbox to see real email here.</div>`;
     return;
@@ -11397,7 +11410,7 @@ function renderRealMailView() {
   const loadOlderBtn = realMailNextLink[mailFolder]
     ? `<button class="btn btn-ghost btn-sm" style="width:100%;font-size:11px;margin-top:5px;" onclick="loadOlderRealMail()">Load older mail</button>`
     : `<button class="btn btn-ghost btn-sm" style="width:100%;font-size:11px;margin-top:5px;opacity:.5;cursor:default;" disabled>No more mail to load</button>`;
-  foldersEl.innerHTML = mailSwitcherHtml() + `
+  foldersEl.innerHTML = `
     <button class="mail-compose-btn" onclick="openMailCompose()">
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
       New mail
@@ -11432,7 +11445,7 @@ function renderRealMailView() {
       <button class="btn btn-ghost btn-sm" style="width:100%;font-size:11px;" onclick="refreshRealMail()">🔄 Refresh now</button>
       ${loadOlderBtn}
     </div>
-  `;
+  ` + mailSwitcherHtml();
   renderMailList();
 }
 
@@ -11477,7 +11490,7 @@ function olDate(ts) {
   return d.toLocaleDateString('en-US',{month:'short',day:'numeric', year: d.getFullYear()===now.getFullYear()?undefined:'numeric'});
 }
 function renderMailList() {
-  if(realUser && opsMode && opsAllowed()) { renderOpsList(); return; }
+  if(opsOn()) { renderOpsList(); return; }
   const listEl = document.getElementById('mailList');
   const titleEl = document.getElementById('mailListTitle');
   const folderName = ({inbox:'Inbox', sent:'Sent Items', drafts:'Drafts', deleted:'Deleted Items'})[mailFolder] || mailFolder;
@@ -13525,7 +13538,7 @@ const cmbPersonName = id => (ccMail.team.find(t=>t.id===id)||ccMail.customerTeam
 function cmbPills(arr,none,fn){ return arr.length ? arr.map(x=>`<span class="cmb-pill">${esc(fn(x))}</span>`).join('') : `<span class="cmb-pill">${none}</span>`; }
 function cmbRender(){
   const tb = document.getElementById('cmbTb'); if(!tb) return;
-  tb.innerHTML = cmbShown().length ? cmbShown().map(m=>`<tr onclick="cmbOpen(${m.id})"><td><div class="cmb-nm">${esc(m.name)} ${m.isDefault?'<span class="cmb-pill def">Default</span>':''}</div><div class="cmb-em">${esc(m.email)}</div></td>
+  tb.innerHTML = cmbShown().length ? cmbShown().map(m=>`<tr onclick="cmbOpen(${m.id})"><td><div class="cmb-nm">${esc(m.name)} ${m.isDefault?'<span class="cmb-pill def">Default</span>':''} ${m.crmInbox?'<span class="cmb-pill coi">In CRM Mail</span>':''}</div><div class="cmb-em">${esc(m.email)}</div></td>
     <td><span class="cmb-pill ${m.type==='COI'?'coi':'ops'}">${m.type}</span></td>
     <td>${m.type==='COI'?'<span class="cmb-pill">All offices</span>':cmbPills(m.offices,m.isDefault?'Everyone else':'—',cmbOfficeName)}</td>
     <td>${m.type==='COI'?'<span class="cmb-pill">Everyone</span>':cmbPills(m.people,'Anyone in those offices',cmbPersonName)}</td>
@@ -13562,7 +13575,7 @@ async function cmbSave(body, id){
 async function cmbToggle(id){ const m=ccBox(id); if(!m) return; await cmbSave({...m, isActive:!m.isActive}, id); }
 let cmbCur = null;
 function cmbOpen(id){
-  cmbCur = id ? JSON.parse(JSON.stringify(ccBox(id))) : {id:0,name:'',email:'',type:(cmbScope==='customer'?'Customer':'Operations'),offices:[],people:[],isDefault:false,isActive:true,signature:'',ccAddress:''};
+  cmbCur = id ? JSON.parse(JSON.stringify(ccBox(id))) : {id:0,name:'',email:'',type:(cmbScope==='customer'?'Customer':'Operations'),offices:[],people:[],isDefault:false,isActive:true,signature:'',ccAddress:'',crmInbox:false,crmRoles:[],crmPeople:[]};
   cmbDraw(); document.getElementById('cmbEditor').classList.add('open');
 }
 function cmbClose(){ document.getElementById('cmbEditor').classList.remove('open'); }
@@ -13580,11 +13593,29 @@ function cmbDraw(){
   <label class="cmb-l">Offices it serves</label>${cmbChips(ccMail.offices,c.offices,'offices')}
   <label class="cmb-l">People assigned (${isCust?'customer':'carrier'} compliance team)</label>${cmbChips(peopleList,c.people,'people')}
   <div class="cmb-hint">Leave people empty to cover everyone in the chosen offices.</div>`}
+  ${ccMail.canEditMailAccess ? cmbMailAccessHtml(c) : ''}
   <label class="cmb-l">Signature added to emails</label><textarea oninput="cmbCur.signature=this.value">${esc(c.signature)}</textarea>
   <label class="cmb-l">Always send a copy to (optional)</label><input type="email" value="${esc(c.ccAddress)}" oninput="cmbCur.ccAddress=this.value" placeholder="cr.compliance@nlius.com">
   <div style="display:flex;gap:24px;margin-top:14px;align-items:center;"><div><span class="cmb-sw ${c.isDefault?'on':''}" onclick="cmbCur.isDefault=!cmbCur.isDefault;cmbDraw()"></span> &nbsp;Default mailbox</div><div><span class="cmb-sw ${c.isActive?'on':''}" onclick="cmbCur.isActive=!cmbCur.isActive;cmbDraw()"></span> &nbsp;Active</div></div>
   <div class="cmb-test" id="cmbTst"></div>
   <div style="display:flex;gap:10px;margin-top:22px;align-items:center;"><button class="btn btn-primary" id="cmbSaveBtn" onclick="cmbDoSave()">Save</button><button class="btn btn-ghost" onclick="cmbClose()">Cancel</button><button class="btn btn-ghost" style="margin-left:auto;" onclick="cmbTest()">✉ Send test to me</button></div>`;
+}
+const CMB_MAIL_ROLES = ['Customer Compliance','Carrier Compliance','COI Specialist','Operations Manager','Operations Head','Location Head','Team Leader','Supervisor','Sales Rep'];
+function cmbAddPerson(v){ if(!v) return; cmbCur.crmPeople = cmbCur.crmPeople || []; if(!cmbCur.crmPeople.includes(v)) cmbCur.crmPeople.push(v); cmbDraw(); }
+// Admin only: show this mailbox inside CRM Mail, and for whom. Admin can always open every shared mailbox.
+function cmbMailAccessHtml(c){
+  const roles = CMB_MAIL_ROLES.map(r=>({id:r,name:r}));
+  const people = (realUsers||[]).filter(u=>(c.crmPeople||[]).includes(u.userId)).map(u=>({id:u.userId,name:u.fullName||u.name||u.userId}));
+  (c.crmPeople||[]).forEach(id=>{ if(!people.find(p=>p.id===id)) people.push({id:id,name:id}); });
+  const addable = (realUsers||[]).filter(u=>!(c.crmPeople||[]).includes(u.userId) && u.userId!==(realUser&&realUser.userId)).sort((a,b)=>String(a.fullName||a.name).localeCompare(String(b.fullName||b.name)));
+  return `<div style="margin-top:16px;padding:12px;border:1px solid var(--border-2);border-radius:12px;background:var(--surface-2);">
+    <div style="display:flex;align-items:center;gap:10px;"><span class="cmb-sw ${c.crmInbox?'on':''}" onclick="cmbCur.crmInbox=!cmbCur.crmInbox;cmbDraw()"></span><b style="font-size:13px;">Show in CRM Mail</b></div>
+    <div class="cmb-hint">Turns this mailbox into a shared inbox inside Mail. Admin can always open it. Replies always go out as this mailbox. The mailbox must also be added to the Microsoft lock group (see the README).</div>
+    ${c.crmInbox ? `<label class="cmb-l">Roles that can open it</label>${cmbChips(roles,c.crmRoles||[],'crmRoles')}
+    <label class="cmb-l">And these specific people</label>${people.length?cmbChips(people,c.crmPeople||[],'crmPeople'):'<div class="cmb-hint">Nobody named. Pick someone below to give just them access, for example one carrier rep.</div>'}
+    <select onchange="cmbAddPerson(this.value);this.value=''" style="margin-top:8px;"><option value="">+ Add a person...</option>${addable.map(u=>`<option value="${esc(u.userId)}">${esc(u.fullName||u.name)} (${esc(u.role||'')})</option>`).join('')}</select>
+    <div class="cmb-hint">Tap a name or role to remove it.</div>` : ''}
+  </div>`;
 }
 async function cmbDoSave(){
   const b=document.getElementById('cmbSaveBtn'); b.disabled=true; b.textContent='Saving…';
@@ -13696,6 +13727,7 @@ async function caseShareEmails(caseId){
 }
 async function caseLoadShared(caseId, boxId, staffView){
   const box=document.getElementById(boxId||'caseSharedBox'); if(!box||!realUser) return;
+  if(staffView) await opsEnsureBoxes();
   const none = staffView ? 'No customer emails on this case yet. When the sales rep emails the customer with "Email the customer (Compliance copied)", or shares an email, the conversation appears here.' : 'No emails with this customer yet. Use "Email the customer (Compliance copied)" and the conversation will show here, replies included.';
   try {
     const r = await apiFetch('/api/compliance-cases/'+encodeURIComponent(caseId)+'/shared-emails'); const j = await r.json().catch(()=>({}));
