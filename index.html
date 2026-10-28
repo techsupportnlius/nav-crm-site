@@ -821,6 +821,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
 .lk-board{display:flex;gap:12px;overflow:auto;padding:14px 24px;align-items:flex-start;flex:1;}
 .lk-col{min-width:230px;max-width:260px;flex:0 0 240px;background:var(--surface-2);border-radius:8px;padding:8px;}
 .lk-col-h{display:flex;justify-content:space-between;font-size:12px;font-weight:600;padding:4px 6px 8px;}
+.lk-card[draggable=true]{cursor:grab}.lk-card.lk-drag{opacity:.45}.lk-col.lk-over{outline:2px dashed var(--accent);outline-offset:-2px}
 .lk-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:8px;cursor:pointer;}
 .lk-card:hover{border-color:var(--accent);}
 .lk-card-t{font-size:13px;font-weight:600;}
@@ -831,6 +832,11 @@ thead th.cb-th{width:36px;padding:0 10px;}
 .lk-ask-t{font-weight:600;margin-bottom:10px;}
 .lk-ask-box input{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:13px;}
 .lk-ask-b{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;}
+/* C-097: one line per menu item */
+:root{--sidebar:258px}
+.sidebar{overflow-x:hidden}
+.nav-item{white-space:nowrap}
+.nav-item svg,.nav-item .nav-badge{flex-shrink:0}
 </style>
 </head>
 
@@ -929,12 +935,12 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <div class="nav-section-label">CRM</div>
     <div class="nav-item" data-view="deals" onclick="nav(this,'deals','Prospect Companies')">
       <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-      Prospect Companies
+      Prospects
       <span class="nav-badge" id="navProspectBadge">0</span>
     </div>
     <div class="nav-item" data-view="companies" onclick="nav(this,'companies','Active Customers')">
       <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 21h18M9 21V7l6-4v18M9 11h6M9 15h6"/></svg>
-      Active Customers
+      Customers
       <span class="nav-badge" id="navCoBadge">0</span>
     </div>
     <div class="nav-item" data-view="contacts" onclick="nav(this,'contacts','Contacts')">
@@ -1375,9 +1381,10 @@ thead th.cb-th{width:36px;padding:0 10px;}
         <label><input id="naTest" type="checkbox"> <b>Test mode</b> — every email goes only to the test address<br>
           <input id="naTestAddr" type="email" placeholder="your own email" style="width:100%;margin-top:4px;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);"></label>
       </div>
-      <div style="color:var(--text-faint);margin-top:8px;">The email switches below are saved now and start working when email sending is switched on in the next update. Nothing new is emailed yet. The "In-CRM" switch takes effect within about a minute.</div>
+      <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><button class="btn btn-ghost btn-sm" onclick="notifAdminTest()">Send me a test email</button><span id="naTestMsg" style="font-size:12px;"></span></div>
+      <div style="color:var(--text-faint);margin-top:8px;">Save first, then press "Send me a test email" to check the sender mailbox works. Emails are only sent for events where <b>Email</b> (sent straight away) or <b>Morning summary</b> (one email at 8 AM office time) is ticked. While Test mode is ON, every email goes only to the test address. The role columns decide who else is emailed: Team Leader, Operations Manager, Location Head, Operations Head and Sales Rep only for accounts in their own team or office; Compliance and Admin for everything. The bell takes effect within about a minute.</div>
     </div>
-    <table class="data-table" style="width:100%"><thead><tr><th>Event</th><th>In-CRM bell</th><th>Email</th><th>Also email when Urgent</th><th>Also tell Team Leader / Location Head</th></tr></thead><tbody id="naRules"></tbody></table>
+    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;"><table class="data-table" id="naTable" style="width:100%;min-width:1240px"><thead id="naHead"><tr><th>Event</th><th>In-CRM bell</th><th>Email</th><th>Also email when Urgent</th></tr></thead><tbody id="naRules"></tbody></table></div>
     <h3 style="margin:22px 0 8px;font-size:14px;">Change history</h3>
     <table class="data-table" style="width:100%"><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody id="naHist"></tbody></table>
     <h3 style="margin:22px 0 8px;font-size:14px;">Sent-email log</h3>
@@ -8244,6 +8251,32 @@ function updateProspectStage(id, newStage) {
   showToast(`Prospect stage updated: ${old} → ${newStage}`);
   renderProspectsView();
 }
+// C-097: move a prospect to another stage by dragging its card on the board. Saves straight away; if the server says no, the card goes back.
+function moveProspectStage(id, newStage) {
+  const c = customers.find(x=>x.id===id);
+  if(!c || !PROSPECT_STATUSES.includes(newStage)) return;
+  const old = c.prospectStatus || 'New Lead';
+  if(old === newStage) return;
+  const go = async () => {
+    if(!realUser){ updateProspectStage(id, newStage); return; }
+    c.prospectStatus = newStage; c.lastUpdated = 'Just now'; renderProspectsView();
+    try {
+      const res = await apiFetch(`/api/companies/${id}/field`, { method:'PATCH', body: JSON.stringify({ field:'prospectStatus', value:newStage }) });
+      if(!res.ok){ const j = await res.json().catch(()=>({})); c.prospectStatus = old; renderProspectsView(); showToast(j.error || 'That move did not save, so the card was put back.'); return; }
+      logActivity(id,'STATUS',`Prospect stage moved: <strong>${esc(old)}</strong> → <strong>${esc(newStage)}</strong>.`);
+      showToast(`${c.name}: moved to ${newStage}`);
+    } catch(e){ c.prospectStatus = old; renderProspectsView(); showToast('That move did not save, so the card was put back.'); }
+  };
+  if(newStage === 'Lost'){
+    const ov=document.createElement('div'); ov.className='lk-ask';
+    ov.innerHTML=`<div class="lk-ask-box"><div class="lk-ask-t">Mark ${esc(c.name)} as Lost?</div><div style="font-size:12.5px;color:var(--text-muted);">It moves out of the working stages. You can move it back later.</div><div class="lk-ask-b"><button class="btn btn-ghost btn-sm" id="lostNo">Cancel</button><button class="btn btn-primary btn-sm" id="lostYes">Mark as Lost</button></div></div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#lostNo').onclick=()=>ov.remove();
+    ov.querySelector('#lostYes').onclick=()=>{ ov.remove(); go(); };
+    return;
+  }
+  go();
+}
 function updateCoStatus(id, newStatus) {
   const c = customers.find(x=>x.id===id);
   if(!c) return;
@@ -8922,11 +8955,25 @@ async function notifAdminLoad() {
     _naRules = j.rules||[];
     document.getElementById('naSender').value=j.settings.sender||''; document.getElementById('naLimit').value=j.settings.dailyLimit;
     document.getElementById('naTest').checked=!!j.settings.testMode; document.getElementById('naTestAddr').value=j.settings.testAddress||'';
-    const cb=(k,f,v)=>`<td><input type="checkbox" data-k="${k}" data-f="${f}" ${v?'checked':''}></td>`;
-    rb.innerHTML=_naRules.map(r=>`<tr><td>${e2(r.label)}</td>${cb(r.kind,'in_app',r.in_app)}${cb(r.kind,'email',r.email)}${cb(r.kind,'urgent',r.urgent)}${cb(r.kind,'escalate',r.escalate)}</tr>`).join('')||`<tr><td colspan="5">${e2(j.note||'No rules yet.')}</td></tr>`;
+    const cb=(k,f,v)=>`<td style="text-align:center;"><input type="checkbox" data-k="${k}" data-f="${f}" ${v?'checked':''}></td>`;
+    const hasRoles = _naRules.length && _naRules[0].to_person!==undefined;
+    const ROLEH=[['to_person','The person it is about'],['r_sales_rep','Sales Rep'],['r_team_leader','Team Leader'],['r_ops_manager','Operations Manager'],['r_location_head','Location Head'],['r_ops_head','Operations Head'],['r_cust_comp','Customer Compliance'],['r_carrier_comp','Carrier Compliance'],['r_coi','COI Specialist'],['r_admin','Admin']];
+    const cols = [['in_app','In-CRM bell'],['email','Email (straight away)'],['digest','Morning summary'],['urgent','Also email when Urgent']].concat(hasRoles?ROLEH:[]);
+    document.getElementById('naHead').innerHTML='<tr><th style="min-width:230px;">Event</th>'+cols.map(c=>`<th style="text-align:center;font-size:11px;line-height:1.2;">${e2(c[1])}</th>`).join('')+'</tr>';
+    const fields = hasRoles ? cols.map(c=>c[0]) : ['in_app','email','urgent'];
+    if(!hasRoles) document.getElementById('naHead').innerHTML='<tr><th>Event</th><th>In-CRM bell</th><th>Email</th><th>Also email when Urgent</th></tr>';
+    rb.innerHTML=_naRules.map(r=>`<tr><td>${e2(r.label)}</td>${fields.map(f=>cb(r.kind,f,r[f])).join('')}</tr>`).join('')||`<tr><td colspan="15">${e2(j.note||'No rules yet.')}</td></tr>`;
+    if(!hasRoles && j.note) rb.insertAdjacentHTML('afterend',`<tr><td colspan="5" style="color:var(--red,#c33);">${e2(j.note)}</td></tr>`);
     document.getElementById('naHist').innerHTML=(j.history||[]).map(h=>`<tr><td>${e2(new Date(h.created_at).toLocaleString())}</td><td>${e2(h.by_name)}</td><td>${e2(h.what)}</td></tr>`).join('')||'<tr><td colspan="3">No changes yet.</td></tr>';
     document.getElementById('naLog').innerHTML=(j.log||[]).map(h=>`<tr><td>${e2(new Date(h.created_at).toLocaleString())}</td><td>${e2(h.kind)}</td><td>${e2(h.to_email)}</td><td>${e2(h.subject)}</td><td>${e2(h.status)}</td></tr>`).join('')||'<tr><td colspan="5">No emails sent yet.</td></tr>';
   } catch(e) { rb.innerHTML='<tr><td colspan="5">Could not load.</td></tr>'; }
+}
+async function notifAdminTest() {
+  const m=document.getElementById('naTestMsg'); m.textContent='Sending…'; m.style.color='var(--text-faint)';
+  try {
+    const res=await apiFetch('/api/notif-settings/test',{method:'POST',body:'{}'}); const j=await res.json().catch(()=>({}));
+    m.textContent=res.ok?('Sent to '+j.to+'. Check your inbox.'):(j.error||'Could not send.'); m.style.color=res.ok?'var(--green,#2a8)':'var(--red,#c33)';
+  } catch(e){ m.textContent='Could not send.'; m.style.color='var(--red,#c33)'; }
 }
 async function notifAdminSave() {
   const m=document.getElementById('naMsg'); const rules={};
@@ -14495,12 +14542,25 @@ var LK = (function(){
     used.forEach(g=>{
       const col=document.createElement('div'); col.className='lk-col';
       col.innerHTML=`<div class="lk-col-h"><span>${esc(g)}</span><b>${groups[g].length}</b></div>`;
+      // C-097: drag a prospect card onto another stage column (prospect board only)
+      const dropOk = c.board==='prospect' && typeof PROSPECT_STATUSES!=='undefined' && PROSPECT_STATUSES.includes(g) && currentRole!=='Customer Compliance';
+      if(dropOk){
+        col.dataset.stage=g;
+        col.addEventListener('dragover',ev=>{ ev.preventDefault(); col.classList.add('lk-over'); });
+        col.addEventListener('dragleave',()=>col.classList.remove('lk-over'));
+        col.addEventListener('drop',ev=>{ ev.preventDefault(); col.classList.remove('lk-over'); const id=Number(ev.dataTransfer.getData('text/plain')); if(id) moveProspectStage(id,g); });
+      }
       groups[g].forEach(tr=>{
         const cells=[...tr.children].map((td,i)=>({h:ths[i]||'',t:td.textContent.replace(/\s+/g,' ').trim(),cls:td.className,i})).filter(x=>x.t && x.i!==gi && !/Action|^$/.test(x.h) && !x.cls.includes('cb-cell'));
         const primTd=[...tr.children].find(td=>td.className.includes('primary')); const prim=primTd?{t:[...primTd.childNodes].filter(n=>!(n.nodeType===1&&n.tagName==='DIV')).map(n=>n.textContent).join(' ').replace(/\s+/g,' ').trim(),cls:'primary'}:cells[0]; const rest=cells.filter(x=>!x.cls.includes('primary')&&x!==prim).slice(0,3);
         const card=document.createElement('div'); card.className='lk-card';
         card.innerHTML=`<div class="lk-card-t">${esc(prim?prim.t:'')}</div><div class="lk-card-m">${rest.map(x=>esc(x.t)).join(' · ')}</div>`;
-        card.onclick=()=>tr.click(); col.appendChild(card);
+        card.onclick=()=>tr.click();
+        if(c.board==='prospect' && currentRole!=='Customer Compliance'){
+          const m=/openCustomerDrawer\((\d+)\)/.exec(tr.getAttribute('onclick')||'');
+          if(m && PROSPECT_STATUSES.includes(g)){ card.draggable=true; card.title='Drag to another stage'; card.addEventListener('dragstart',ev=>{ ev.dataTransfer.setData('text/plain',m[1]); ev.dataTransfer.effectAllowed='move'; card.classList.add('lk-drag'); }); card.addEventListener('dragend',()=>card.classList.remove('lk-drag')); }
+        }
+        col.appendChild(card);
       });
       b.bd.appendChild(col);
     });
