@@ -1385,7 +1385,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <div style="color:var(--text-faint);margin-top:8px;">Save first, then press "Send me a test email" to check the sender mailbox works. Emails are only sent for events where <b>Email</b> (sent straight away) or <b>Morning summary</b> (one email at 8 AM office time) is ticked. While Test mode is ON, every email goes only to the test address. The role columns decide who else is emailed: Team Leader, Operations Manager, Location Head, Operations Head and Sales Rep only for accounts in their own team or office; Compliance and Admin for everything. The bell takes effect within about a minute.</div>
     </div>
     <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;"><table class="data-table" id="naTable" style="width:100%"><thead id="naHead"><tr><th>Event</th><th style="text-align:center;">In-CRM bell</th><th style="text-align:center;">Email</th><th style="text-align:center;">Morning summary</th><th>Who gets it</th></tr></thead><tbody id="naRules"></tbody></table></div>
-    <div id="naSaveBar" style="display:none;position:sticky;bottom:0;justify-content:flex-end;align-items:center;gap:10px;padding:10px 14px;margin-top:10px;background:var(--surface);border:1px solid var(--accent);border-radius:8px;"><span style="font-size:12.5px;color:var(--amber,#b7791f);">You have unsaved changes.</span><button class="btn btn-primary btn-sm" onclick="notifAdminSave()">Save changes</button></div>
+    <div id="naSaveBar" style="display:none;position:sticky;bottom:0;justify-content:flex-end;align-items:center;gap:10px;padding:10px 14px;margin-top:10px;background:var(--surface);border:1px solid var(--accent);border-radius:8px;"><span id="naBarMsg" style="font-size:12.5px;color:var(--amber,#b7791f);">You have unsaved changes.</span><button class="btn btn-primary btn-sm" onclick="notifAdminSave()">Save changes</button></div>
     <div id="naPop" style="display:none;position:fixed;z-index:9600;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:12px 14px;width:300px;"></div>
     <h3 style="margin:22px 0 8px;font-size:14px;">Change history</h3>
     <table class="data-table" style="width:100%"><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody id="naHist"></tbody></table>
@@ -8980,7 +8980,7 @@ function naDraw(hasRoles, note){
   rb.innerHTML=html||`<tr><td colspan="5">${esc(note||'No rules yet.')}</td></tr>`;
   if(!hasRoles && note) rb.insertAdjacentHTML('beforeend',`<tr><td colspan="5" style="color:var(--red,#c33);">${esc(note)}</td></tr>`);
 }
-function naDirty(){ const m=document.getElementById('naMsg'); if(m){ m.textContent='Unsaved changes - press Save changes.'; m.style.color='var(--amber,#b7791f)'; } const b=document.getElementById('naSaveBar'); if(b) b.style.display='flex'; }
+function naDirty(){ const m=document.getElementById('naMsg'); if(m){ m.textContent='Unsaved changes - press Save changes.'; m.style.color='var(--amber,#b7791f)'; } const b=document.getElementById('naSaveBar'); if(b){ b.style.display='flex'; const bm=document.getElementById('naBarMsg'); if(bm){ bm.textContent='You have unsaved changes.'; bm.style.color='var(--amber,#b7791f)'; } } }
 function naSet(k,f,v){ const r=_naRules.find(x=>x.kind===k); if(r){ r[f]=v?1:0; naDirty(); } }
 function naPop(ev,k){
   ev.stopPropagation(); const r=_naRules.find(x=>x.kind===k); if(!r) return; const p=document.getElementById('naPop');
@@ -9003,12 +9003,15 @@ async function notifAdminTest() {
 }
 async function notifAdminSave() {
   const m=document.getElementById('naMsg'); const rules={}; _naRules.forEach(r=>{ rules[r.kind]=r; });
+  const say=(t,ok)=>{ const col=ok?'var(--green,#2a8)':'var(--red,#c33)'; m.textContent=t; m.style.color=col; const bm=document.getElementById('naBarMsg'); if(bm){ bm.textContent=t; bm.style.color=col; } const sb=document.getElementById('naSaveBar'); if(sb && !ok) sb.style.display='flex'; };
+  const val=id=>String(document.getElementById(id).value||'').trim();
+  if(document.getElementById('naTest').checked && !val('naTestAddr')){ say('Not saved: Test mode is ON, so type your own email in the Test mode box at the top of the page (all emails go there while testing).', false); document.getElementById('naTestAddr').focus(); document.getElementById('naTestAddr').scrollIntoView({block:'center'}); return; }
   try {
     const res=await apiFetch('/api/notif-settings',{method:'PUT',body:JSON.stringify({rules:Object.values(rules),settings:{sender:document.getElementById('naSender').value,dailyLimit:document.getElementById('naLimit').value,testMode:document.getElementById('naTest').checked,testAddress:document.getElementById('naTestAddr').value}})});
     const j=await res.json().catch(()=>({}));
-    m.textContent=res.ok?('Saved'+(j.changed?` (${j.changed} change${j.changed===1?'':'s'} recorded).`:'.')):(j.error||'Could not save.'); m.style.color=res.ok?'var(--green,#2a8)':'var(--red,#c33)';
-    if(res.ok){ const sb=document.getElementById('naSaveBar'); if(sb) sb.style.display='none'; notifAdminLoad(); }
-  } catch(e){ m.textContent='Could not save.'; m.style.color='var(--red,#c33)'; }
+    if(res.ok){ say('Saved'+(j.changed?` (${j.changed} change${j.changed===1?'':'s'} recorded).`:'.'), true); const sb=document.getElementById('naSaveBar'); if(sb) sb.style.display='none'; notifAdminLoad(); }
+    else say('Not saved: '+(j.error||('the server said '+res.status+'.')), false);
+  } catch(e){ say('Not saved: could not reach the server.', false); }
 }
 // ── C-059: company details on a customer case ──────────────────────────────
 let compCoData = null;
