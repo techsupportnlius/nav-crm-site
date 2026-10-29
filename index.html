@@ -2432,6 +2432,19 @@ thead th.cb-th{width:36px;padding:0 10px;}
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+<div class="modal-overlay" id="alertModal" style="z-index:900;" onclick="if(event.target===this)hideAlert()">
+  <div class="modal" style="max-width:440px;text-align:left;">
+    <div style="display:flex;gap:12px;align-items:flex-start;">
+      <div style="flex:none;width:38px;height:38px;border-radius:50%;background:rgba(245,158,11,.18);color:#d97706;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;">!</div>
+      <div style="min-width:0;flex:1;">
+        <h3 id="alertTitle" style="margin:0 0 6px;font-size:17px;"></h3>
+        <div id="alertMsg" style="font-size:13.5px;color:var(--text-muted);line-height:1.5;"></div>
+        <ul id="alertList" style="margin:10px 0 0 18px;padding:0;font-size:14px;color:var(--text);font-weight:600;line-height:1.7;"></ul>
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:18px;"><button class="btn btn-primary" id="alertOk" onclick="hideAlert()">OK, got it</button></div>
+  </div>
+</div>
 
 <script>
 // ── LIGHT / DARK MODE TOGGLE ──────────────────────────────────
@@ -3209,6 +3222,21 @@ let openCompanyId = null;
 let selectedIds = new Set();
 
 // ── TOAST ──────────────────────────────────────────────────────
+// C-102: a centered pop-up for "you missed something" messages (bigger than the small toast at the bottom).
+// If the message looks like "...please fill in: A, B, C." the items are shown as a list.
+function showAlert(title, msg, items) {
+  const m = document.getElementById('alertModal'); if(!m) { showToast(msg || title); return; }
+  let text = String(msg||''), list = Array.isArray(items) ? items.slice() : null;
+  if(!list) { const mm = text.match(/^(.*?(?:fill in|complete|add|enter|provide)[^:]*):\s*(.+?)\.?$/i); if(mm && mm[2].includes(',')) { text = mm[1]+':'; list = mm[2].split(/,\s*/).map(x=>x.trim()).filter(Boolean); } }
+  document.getElementById('alertTitle').textContent = title || 'Please check';
+  document.getElementById('alertMsg').textContent = text;
+  const ul = document.getElementById('alertList'); ul.innerHTML = ''; (list||[]).forEach(x=>{ const li=document.createElement('li'); li.textContent=x; ul.appendChild(li); });
+  m.classList.add('open');
+  setTimeout(()=>{ const b=document.getElementById('alertOk'); if(b) b.focus(); }, 50);
+}
+function hideAlert() { const m = document.getElementById('alertModal'); if(m) m.classList.remove('open'); }
+document.addEventListener('keydown', e => { if(e.key==='Escape') hideAlert(); });
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -7222,7 +7250,7 @@ async function submitForComplianceGo(id, priority) {
         method: 'POST',
         body: JSON.stringify({ caseId, caseType: 'Customer Eligibility', companyId: id, slaHours: 48, priority: priority==='Urgent' ? 'Urgent' : 'Normal' }),
       });
-      if(!res.ok) { let m=''; try { const j=await res.json(); m=(j&&j.error)||''; } catch(e){} showToast(m || 'Could not submit for Compliance — please try again.'); return; }
+      if(!res.ok) { let m=''; try { const j=await res.json(); m=(j&&j.error)||''; } catch(e){} showAlert('Cannot send to Compliance yet', m || 'Could not submit for Compliance — please try again.'); return; }
       window.__ticketMailWarn = false;
       try { const j = await res.json(); if(j && j.mail) await sendTicketMailFromMe(j.mail); } catch(e){}
     } catch(e) {
@@ -10185,13 +10213,11 @@ async function doSubmitMC() {
   const dispPhone  = (document.getElementById('smc-disp-phone')?.value||'').trim();
   const dispEmail  = (document.getElementById('smc-disp-email')?.value||'').trim();
 
-  if(!mc) { showToast('MC # is required.'); return; }
+  if(!mc) { showAlert('Details missing', 'Please fill in the MC number before submitting.'); return; }
 
   if(smcMode==='setup') {
-    if(!origin||!dest) { showToast('Lane (origin & destination) is required for Setup.'); return; }
-    if(!pickupDate)    { showToast('Pickup date is required for Setup.'); return; }
-    if(!loadtype||!commodity) { showToast('Load type and commodity are required for Setup.'); return; }
-    if(!dispName||!dispPhone||!dispEmail) { showToast('Dispatcher details are required for Setup.'); return; }
+    { const miss=[]; if(!origin) miss.push('Lane: origin'); if(!dest) miss.push('Lane: destination'); if(!pickupDate) miss.push('Pickup date'); if(!loadtype) miss.push('Load type'); if(!commodity) miss.push('Commodity'); if(!dispName) miss.push('Dispatcher name'); if(!dispPhone) miss.push('Dispatcher phone'); if(!dispEmail) miss.push('Dispatcher email');
+      if(miss.length) { showAlert('Details missing for Setup', 'Please fill in these before submitting:', miss); return; } }
   }
 
   const lane = (origin && dest) ? `${origin} → ${dest}` : origin || dest || 'TBD';
@@ -10214,7 +10240,7 @@ async function doSubmitMC() {
       });
       if(!res.ok) {
         const err = await res.json().catch(()=>({}));
-        showToast(err.error || 'Could not submit — please try again.');
+        showAlert('Cannot submit yet', err.error || 'Could not submit — please try again.');
         return;
       }
       window.__ticketMailWarn = false;
@@ -13399,7 +13425,7 @@ async function ccSetupSend() {
   const c = ccFind(CC_TK.setupMc); if(!c) return;
   const v = id=>(document.getElementById(id).value||'').trim();
   const body = { dispatcherName:v('cst-dn'), dispatcherPhone:v('cst-dp'), dispatcherEmail:v('cst-de'), pickupDate:v('cst-pd'), loadType:v('cst-lt'), commodity:v('cst-co') };
-  if(Object.values(body).some(x=>!x)) { showToast('Please fill in every field for Setup.'); return; }
+  { const nm={dispatcherName:'Dispatcher name',dispatcherPhone:'Dispatcher phone',dispatcherEmail:'Dispatcher email',pickupDate:'Pickup date',loadType:'Load type',commodity:'Commodity'}; const miss=Object.keys(body).filter(k=>!body[k]).map(k=>nm[k]); if(miss.length) { showAlert('Details missing for Setup', 'Please fill in these before continuing:', miss); return; } }
   try {
     const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/to-setup', { method:'PATCH', body: JSON.stringify(body) });
     const j = await res.json().catch(()=>({}));
