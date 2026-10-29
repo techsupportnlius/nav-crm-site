@@ -8921,11 +8921,14 @@ function shotFire() {
   const v = document.querySelector('.view.active');
   secLog('screenshot', 'Screen: '+((v&&v.id||'').replace('view-','')||'unknown'));
 }
-document.addEventListener('keyup', (e)=>{ if((e.key||'').toLowerCase()==='printscreen') shotFire(); });
-document.addEventListener('keydown', (e)=>{
+const _isPrtSc = (e)=> (e.key||'').toLowerCase()==='printscreen' || e.code==='PrintScreen' || e.key==='Snapshot' || e.keyCode===44;
+// C-099: listen on the window in the capture phase for BOTH key-down and key-up (some systems only deliver one of them)
+window.addEventListener('keyup', (e)=>{ if(_isPrtSc(e)) shotFire(); }, true);
+window.addEventListener('keydown', (e)=>{
+  if(_isPrtSc(e)) { shotFire(); return; }
   const k=(e.key||'').toLowerCase();
-  if(e.metaKey && e.shiftKey && (k==='s' || ['3','4','5'].includes(e.key))) shotFire(); // Win+Shift+S, Mac Cmd+Shift+3/4/5
-});
+  if((e.metaKey||e.getModifierState&&e.getModifierState('OS')) && e.shiftKey && (k==='s' || ['3','4','5'].includes(e.key))) shotFire(); // Win+Shift+S, Mac Cmd+Shift+3/4/5
+}, true);
 // C-057: Admin Security page
 async function secLoad() {
   const tb=document.getElementById('secTbody'); if(!tb) return;
