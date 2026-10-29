@@ -8899,8 +8899,10 @@ function canExport() { return ['Admin','Carrier Compliance','Customer Compliance
 async function secLog(kind, detail) {
   if(!realUser) return;
   try {
-    await apiFetch('/api/security-event', {method:'POST', body: JSON.stringify({kind, detail})}); // the server sends the alert email itself
-  } catch(e) {}
+    const res = await apiFetch('/api/security-event', {method:'POST', body: JSON.stringify({kind, detail})}); // the server sends the alert email itself
+    // C-099: Admins get a small note so they can see detection working (other roles are never told)
+    if(kind==='screenshot' && currentRole==='Admin') showToast(res && res.ok ? 'Screenshot key noticed - logged on the Security page.' : 'Screenshot key noticed, but the server did not accept the log (error '+(res&&res.status)+').');
+  } catch(e) { if(kind==='screenshot' && currentRole==='Admin') showToast('Screenshot key noticed, but the log could not be sent.'); }
 }
 async function downloadCsv(filename, headers, rows) {
   if(!canExport()) { showToast('Export is only available to Admin and Compliance.'); secLog('export', 'Blocked: '+filename); return; }
