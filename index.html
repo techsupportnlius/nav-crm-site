@@ -8963,7 +8963,7 @@ async function notifAdminLoad() {
   } catch(e) { rb.innerHTML='<tr><td colspan="5">Could not load.</td></tr>'; }
 }
 const NA_ROLES=[['to_person','The person it is about',''],['r_sales_rep','Sales Rep','own accounts'],['r_team_leader','Team Leader','own team'],['r_ops_manager','Operations Manager','own team'],['r_location_head','Location Head','own office'],['r_ops_head','Operations Head','own office'],['r_cust_comp','Customer Compliance','all'],['r_carrier_comp','Carrier Compliance','all'],['r_coi','COI Specialist','all'],['r_admin','Admin','all']];
-const NA_GROUPS=[['Prospects & customers',['PROSPECT_ASSIGNED','PROSPECT_EXPIRING','INACTIVITY','PROSPECT_RELEASED','PROSPECT_EXTENSION','EMAIL']],['Compliance',['COMPLIANCE_SUBMITTED','COMPLIANCE_UPDATE','CREDIT_RECHECK','CARRIER_UPDATE','CASE_ASSIGNMENT']],['Admin & personal',['REMINDER','EMAIL_ACCESS','SECURITY']]];
+const NA_GROUPS=[['Prospects',['PROSPECT_ASSIGNED','PROSPECT_EXPIRING','PROSPECT_RELEASED','PROSPECT_EXTENSION','EMAIL']],['Active customers',['CUSTOMER_ASSIGNED','INACTIVITY','EMAIL_CUSTOMER','CREDIT_RECHECK']],['Compliance',['COMPLIANCE_SUBMITTED','COMPLIANCE_UPDATE','CARRIER_UPDATE','CASE_ASSIGNMENT']],['Admin & personal',['REMINDER','EMAIL_ACCESS','SECURITY']]];
 function hasRolesFlag(rules){ return rules.length && rules[0].to_person!==undefined; }
 function naWho(r){ const names=NA_ROLES.filter(x=>r[x[0]]).map(x=>x[0]==='to_person'?'Person':x[1]); return names.length?names.map(n=>`<span style="background:rgba(212,98,26,0.12);color:var(--accent);border-radius:20px;padding:1px 9px;font-size:11.5px;white-space:nowrap;">${esc(n)}</span>`).join(' '):'<span style="color:var(--text-faint);font-size:12px;">nobody extra</span>'; }
 function naDraw(hasRoles, note){
