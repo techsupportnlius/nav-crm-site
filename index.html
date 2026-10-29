@@ -1780,6 +1780,10 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <h3>Add Contact</h3>
     <!-- Step 1: Pick company -->
     <div class="modal-step" id="ac-step1">
+      <div id="ac-scanBox" style="margin-bottom:14px;padding:10px 12px;border:1px dashed var(--border);border-radius:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" type="button" onclick="cardPick('ac')">📷 Scan business card</button>
+        <span id="ac-scanMsg" style="font-size:12px;color:var(--text-muted);">Take a photo of a card and the details fill in. You check them before saving.</span>
+      </div>
       <p style="margin-bottom:14px;font-size:13px;color:var(--text-muted);">Select the company this contact belongs to.</p>
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:11px;color:var(--text-faint);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.06em;">Company</label>
@@ -1795,6 +1799,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
     <!-- Step 2: Contact details -->
     <div class="modal-step" id="ac-step2" style="display:none;">
       <div id="ac-companyBanner" style="font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:14px;padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;"></div>
+      <div style="margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><button class="btn btn-ghost btn-sm" type="button" onclick="cardPick('ac2')">📷 Scan business card</button><span id="ac2-scanMsg" style="font-size:12px;color:var(--text-muted);"></span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
  <div><label style="display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em;">First Name *</label>
           <input id="ac-first" type="text" placeholder="Jennifer" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:7px 10px;color:var(--text);font-size:13px;font-family:var(--sans);">
@@ -4389,6 +4394,7 @@ function renderCustomerContacts(id) {
       <button class="btn btn-ghost btn-sm" id="addContactToggleBtn" onclick="showAddContactForm(${id})">+ Add Contact</button>
     </div>
     <div class="add-contact-form" id="addContactForm-${id}">
+      <div style="margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><button class="btn btn-ghost btn-sm" type="button" onclick="cardPick('acf',${id})">📷 Scan business card</button><span id="acf-scanMsg-${id}" style="font-size:12px;color:var(--text-muted);"></span></div>
       <div class="acf-grid">
         <div class="acf-field"><label>First Name *</label><input id="acf-first-${id}" placeholder="Jane"></div>
         <div class="acf-field"><label>Last Name</label><input id="acf-last-${id}" placeholder="Smith"></div>
@@ -7309,6 +7315,7 @@ function openAddContactModal(preselectedId, scope) {
   // Clear step 2 fields
   ['ac-first','ac-last','ac-title','ac-phone','ac-cell','ac-email'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('ac-emailWarn').style.display='none';
+  ['ac-scanMsg','ac2-scanMsg'].forEach(i=>{const e=document.getElementById(i); if(e&&i==='ac2-scanMsg') e.textContent='';});
 
   // Show step 1 or jump to step 2 if company pre-selected
   if(preselectedId) {
@@ -7318,6 +7325,91 @@ function openAddContactModal(preselectedId, scope) {
     acShowStep(1);
   }
   document.getElementById('addContactModal').classList.add('open');
+}
+
+
+/* ===== C-100: Scan business card ===== */
+// Photo -> shrunk in the browser -> sent to /api/scan-card -> the form fields fill in. NOTHING is saved until the person clicks Save.
+let _cardCtx = null;
+function cardPick(kind, id) {
+  if(!realUser) { showToast('Card scanning works only when you are signed in to the live CRM.'); return; }
+  _cardCtx = { kind, id };
+  let inp = document.getElementById('cardFileInput');
+  if(!inp) {
+    inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.id = 'cardFileInput'; inp.style.display = 'none';
+    inp.addEventListener('change', () => { const f = inp.files && inp.files[0]; inp.value = ''; if(f) cardScanFile(f); });
+    document.body.appendChild(inp);
+  }
+  inp.click();
+}
+function cardMsgEl() {
+  const c = _cardCtx || {};
+  return document.getElementById(c.kind==='acf' ? 'acf-scanMsg-'+c.id : (c.kind==='ac2' ? 'ac2-scanMsg' : 'ac-scanMsg'));
+}
+function cardShrink(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = () => {
+      const max = 1600; let w = img.naturalWidth, h = img.naturalHeight; const k = Math.min(1, max / Math.max(w, h)); w = Math.round(w*k); h = Math.round(h*k);
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url); resolve(cv.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('bad image')); };
+    img.src = url;
+  });
+}
+function cardSet(idFor, v) { const el = document.getElementById(idFor); if(el && v) { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); } }
+function cardMatchCompany(r) {
+  const dom = String(r.email||'').split('@')[1]; const d = (dom||'').toLowerCase().replace(/^www\./,'');
+  const site = String(r.website||'').toLowerCase().replace(/^https?:\/\//,'').replace(/^www\./,'').split('/')[0];
+  const norm = t => String(t||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const free = /^(gmail|yahoo|hotmail|outlook|aol|icloud|live|msn|proton)/;
+  let hit = null;
+  if(d && !free.test(d)) hit = customers.find(c => c.domain && (String(c.domain).toLowerCase().replace(/^www\./,'')===d));
+  if(!hit && site) hit = customers.find(c => c.domain && String(c.domain).toLowerCase().replace(/^www\./,'')===site);
+  if(!hit && r.company && norm(r.company).length>=4) hit = customers.find(c => norm(c.name)===norm(r.company));
+  return hit || null;
+}
+async function cardScanFile(file) {
+  const ctx = _cardCtx; const msg = cardMsgEl();
+  const say = (t, bad) => { if(msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red, #d33)' : 'var(--text-muted)'; } };
+  say('Reading the card…');
+  try {
+    const image = await cardShrink(file);
+    const res = await apiFetch('/api/scan-card', { method:'POST', body: JSON.stringify({ image }) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { say(j.error || 'Could not read that card.', true); return; }
+    if(!j.found) { say('Could not find contact details on that photo. Try a clearer, straight-on photo.', true); return; }
+    let first = j.first, last = j.last;
+    if(!first && !last && j.name) { const p = String(j.name).split(' '); first = p.shift(); last = p.join(' '); }
+    if(ctx.kind==='acf') {
+      const id = ctx.id;
+      cardSet('acf-first-'+id, first); cardSet('acf-last-'+id, last); cardSet('acf-title-'+id, j.title);
+      cardSet('acf-phone-'+id, j.phone); cardSet('acf-cell-'+id, j.cell); cardSet('acf-email-'+id, j.email);
+      say('Filled in. Please check every field, then click Save Contact.');
+      return;
+    }
+    // global Add Contact modal
+    if(ctx.kind==='ac') {
+      const co = cardMatchCompany(j);
+      if(co) { const sel = document.getElementById('ac-companySel'); if([...sel.options].some(o=>o.value==String(co.id))) { sel.value = String(co.id); acSelectedCompanyId = co.id; } }
+    }
+    cardSet('ac-first', first); cardSet('ac-last', last); cardSet('ac-title', j.title);
+    cardSet('ac-phone', j.phone); cardSet('ac-cell', j.cell); cardSet('ac-email', j.email);
+    if(ctx.kind==='ac') {
+      if(acSelectedCompanyId) {
+        const co = customers.find(c=>c.id===acSelectedCompanyId);
+        document.getElementById('ac-companyBanner').textContent = co ? co.name+' · '+co.domain : '';
+        acShowStep(2);
+        const m2 = document.getElementById('ac2-scanMsg'); if(m2) m2.textContent = 'Filled in' + (co ? ' and matched to '+co.name : '') + '. Please check every field, then click Add Contact.';
+      } else {
+        say('Filled in' + (j.company ? ' (card says: '+j.company+')' : '') + '. No matching company found. Pick the company below, click Next, then check the details.');
+      }
+    } else { say('Filled in. Please check every field, then click Add Contact.'); acValidateEmail(); }
+  } catch(e) {
+    console.error('Card scan failed:', e);
+    say('Could not read that card. Please try again.', true);
+  }
 }
 
 function closeAddContactModal() {
