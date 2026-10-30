@@ -1672,7 +1672,7 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <div class="addco-section-label">Internal Assignment</div>
       <div class="addco-field"><label>Company Name</label><input id="addCoName" placeholder="Company name"></div>
       <div class="addco-field"><label>Domain</label><input id="addCoDomain" placeholder="example.com" style="font-family:var(--mono);font-size:12px;"></div>
-      <div class="addco-field"><label>Company address * <span class="addco-hint" style="display:inline;margin:0;">— required: this company's own address, not our office</span></label>
+      <div class="addco-field"><label>Company address <span class="addco-hint" style="display:inline;margin:0;">— optional for now (Compliance will ask for it later): this company's own address, not our office</span></label>
         <input id="addCoHqAddress" placeholder="Street address — start typing and pick from the list" autocomplete="off" onfocus="coAddrInit(this,0)" style="margin-bottom:8px;">
         <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">
           <input id="addCoHqCity" placeholder="City">
@@ -6446,9 +6446,6 @@ function addCoContinueToContact() {
     if(!cd) { showToast('Enter a real website domain, like acme.com — no spaces, and it must end in .com, .net, etc.'); return; }
     domain = cd;
     document.getElementById('addCoDomain').value = cd;
-    { const g = id => (document.getElementById(id)||{value:''}).value.trim(); const miss=[];
-      if(!g('addCoHqAddress')) miss.push('Street address'); if(!g('addCoHqCity')) miss.push('City'); if(!g('addCoHqState')) miss.push('State'); if(!g('addCoHqZip')) miss.push('ZIP');
-      if(miss.length) { showAlert('Company address needed', 'Please fill in the company address first:', miss); return; } }
   }
   const ownerSel = document.getElementById('addCoOwnerSel');
   const owner = ownerSel.value || (currentRole==='Sales Rep'?currentUserName():'—');
