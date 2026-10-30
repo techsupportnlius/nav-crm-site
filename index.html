@@ -1667,10 +1667,19 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <div style="display:flex;align-items:center;gap:7px;margin-bottom:16px;padding:9px 12px;background:var(--green-dim);border:1px solid var(--green);border-radius:5px;">
         <span style="font-size:13px;color:var(--green);">✓ Domain clear — fill in details below</span>
       </div>
+      <div id="addCoLookupNote" style="font-size:12px;color:var(--text-muted);margin:-8px 0 12px;min-height:14px;"></div>
 
       <div class="addco-section-label">Internal Assignment</div>
       <div class="addco-field"><label>Company Name</label><input id="addCoName" placeholder="Company name"></div>
       <div class="addco-field"><label>Domain</label><input id="addCoDomain" placeholder="example.com" style="font-family:var(--mono);font-size:12px;"></div>
+      <div class="addco-field"><label>Company address * <span class="addco-hint" style="display:inline;margin:0;">— required: this company's own address, not our office</span></label>
+        <input id="addCoHqAddress" placeholder="Street address — start typing and pick from the list" autocomplete="off" onfocus="coAddrInit(this,0)" style="margin-bottom:8px;">
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">
+          <input id="addCoHqCity" placeholder="City">
+          <input id="addCoHqState" placeholder="State">
+          <input id="addCoHqZip" placeholder="ZIP">
+        </div>
+      </div>
       <div class="addco-field" id="addCoOwnerField"><label>Assign Owner</label>
         <select id="addCoOwnerSel"></select>
       </div>
@@ -1687,14 +1696,6 @@ thead th.cb-th{width:36px;padding:0 10px;}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div class="addco-field"><label>Industry</label><select id="addCoIndustry"></select></div>
         <div class="addco-field"><label>Business Type</label><select id="addCoBizType"></select></div>
-      </div>
-      <div class="addco-field"><label>Headquarters <span class="addco-hint" style="display:inline;margin:0;">— this company's own address, not our office above</span></label>
-        <input id="addCoHqAddress" placeholder="Street address — start typing and pick from the list" autocomplete="off" onfocus="coAddrInit(this,0)" style="margin-bottom:8px;">
-        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">
-          <input id="addCoHqCity" placeholder="City">
-          <input id="addCoHqState" placeholder="State">
-          <input id="addCoHqZip" placeholder="ZIP">
-        </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div class="addco-field"><label>Number of Employees</label><select id="addCoEmployees"></select></div>
@@ -6242,6 +6243,7 @@ function toggleAddCoNoSite(force) {
   document.getElementById('addCoInput').placeholder = addCoNoSite ? 'Company name' : 'e.g. walmart.com or Walmart Supply Chain';
 }
 function openAddCo() {
+  { const ln=document.getElementById('addCoLookupNote'); if(ln) ln.textContent=''; }
   addCoFoundRecord = null;
   addCoDraft = null;
   toggleAddCoNoSite(false);
@@ -6294,8 +6296,34 @@ function openAddCo() {
   document.getElementById('addCoModal').classList.add('open');
 }
 
+// C-103: fill the Add Prospect form from the scanned card, then try the company's website for anything still empty.
+// The person always reviews it; nothing is saved here.
+function cardApplyToAddCo() {
+  const c = _cardCo; if(!c) return;
+  const setIf = (id, v) => { const e = document.getElementById(id); if(e && v && !e.value.trim()) e.value = v; };
+  setIf('addCoName', c.name);
+  const a = c.addr || {};
+  setIf('addCoHqAddress', a.street); setIf('addCoHqCity', a.city); setIf('addCoHqState', a.state); setIf('addCoHqZip', a.zip);
+  const dom = cleanDomain((document.getElementById('addCoDomain')||{}).value || c.domain || '');
+  if(!realUser || !dom) { _cardCo = null; return; }
+  const st = document.getElementById('addCoLookupNote');
+  if(st) st.textContent = 'Looking up ' + dom + '…';
+  apiFetch('/api/company-lookup', { method:'POST', body: JSON.stringify({ domain: dom }) })
+    .then(r => r.ok ? r.json() : {})
+    .then(j => {
+      if(!j || !j.found) { if(st) st.textContent = 'Could not read details from the website. Please fill in the address yourself.'; return; }
+      const f = []; const before = id => (document.getElementById(id)||{value:''}).value.trim();
+      if(!before('addCoName') && j.name) { setIf('addCoName', j.name); f.push('name'); }
+      if(!before('addCoHqAddress') && j.street) { setIf('addCoHqAddress', j.street); setIf('addCoHqCity', j.city); setIf('addCoHqState', j.state); setIf('addCoHqZip', j.zip); f.push('address'); }
+      if(j.phone) { const r = document.getElementById('addCoRemarks'); if(r && !r.value.trim()) { r.value = 'Main phone (from website): ' + j.phone; f.push('phone in remarks'); } }
+      if(st) st.textContent = f.length ? 'Filled from the website: ' + f.join(', ') + '. Please check it.' : 'Website checked. Nothing new to fill in.';
+    })
+    .catch(() => { if(st) st.textContent = ''; })
+    .finally(() => { _cardCo = null; });
+}
+
 function closeAddCo() {
-  _cardPending = null;
+  _cardPending = null; _cardCo = null;
   document.getElementById('addCoModal').classList.remove('open');
   addCoDraft = null;
 }
@@ -6351,6 +6379,7 @@ async function addCoCheck() {
     document.getElementById('addCoDomain').placeholder = addCoNoSite ? 'No website' : 'example.com';
     if(addCoNoSite) { document.getElementById('addCoHqCity').value = nsCity; document.getElementById('addCoHqState').value = nsState; }
     document.getElementById('addCoRemarks').value='';
+    cardApplyToAddCo();
     setTimeout(()=>{
       ADDCO_STEPS.forEach(s=>document.getElementById('addCo-'+s).classList.remove('active'));
       document.getElementById('addCo-s2a').classList.add('active');
@@ -6417,6 +6446,9 @@ function addCoContinueToContact() {
     if(!cd) { showToast('Enter a real website domain, like acme.com — no spaces, and it must end in .com, .net, etc.'); return; }
     domain = cd;
     document.getElementById('addCoDomain').value = cd;
+    { const g = id => (document.getElementById(id)||{value:''}).value.trim(); const miss=[];
+      if(!g('addCoHqAddress')) miss.push('Street address'); if(!g('addCoHqCity')) miss.push('City'); if(!g('addCoHqState')) miss.push('State'); if(!g('addCoHqZip')) miss.push('ZIP');
+      if(miss.length) { showAlert('Company address needed', 'Please fill in the company address first:', miss); return; } }
   }
   const ownerSel = document.getElementById('addCoOwnerSel');
   const owner = ownerSel.value || (currentRole==='Sales Rep'?currentUserName():'—');
@@ -7289,15 +7321,15 @@ async function submitForComplianceGo(id, priority) {
 }
 
 // ── AGGREGATED CONTACTS VIEW ──────────────────────────────────
-let ctServer = {q:'',rows:[]}, ctTimer=null;
-function ctSchedule(q){
+let ctServer = {q:'',rows:[],recent:false}, ctTimer=null;
+function ctSchedule(q, recent){
   clearTimeout(ctTimer);
   ctTimer=setTimeout(async()=>{
     try{
-      const res=await apiFetch('/api/search?only=contacts&limit=200&q='+encodeURIComponent(q));
+      const res=await apiFetch(recent ? '/api/search?only=contacts&limit=50&recent=1' : '/api/search?only=contacts&limit=200&q='+encodeURIComponent(q));
       if(!res.ok) return;
       const j=await res.json();
-      ctServer={q, rows:deTagObj(j.contacts||[]).map(c=>({name:c.full_name,first:c.first_name!=null?c.first_name:ctSplitName(c.full_name).first,last:c.last_name!=null?c.last_name:ctSplitName(c.full_name).last,cell:c.cell_phone||'—',title:c.title||'—',phone:c.phone||'—',email:c.email||'',company:c.company_name,companyId:c.company_id,contactId:c.contact_id,
+      ctServer={q, recent:!!recent, rows:deTagObj(j.contacts||[]).map(c=>({name:c.full_name,first:c.first_name!=null?c.first_name:ctSplitName(c.full_name).first,last:c.last_name!=null?c.last_name:ctSplitName(c.full_name).last,cell:c.cell_phone||'—',title:c.title||'—',phone:c.phone||'—',email:c.email||'',company:c.company_name,companyId:c.company_id,contactId:c.contact_id,
         addedAt:c.created_at?new Date(c.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}))};
       if(((document.getElementById('ctSearch')||{}).value||'').toLowerCase()===q && document.getElementById('view-contacts').classList.contains('active')) renderContactsView();
     }catch(e){ console.error('Contact search failed', e); }
@@ -7341,8 +7373,12 @@ function renderContactsView() {
   if(ctBig) {
     // Thousands of companies: don't download every company's contacts. Ask the server instead.
     if(search.length>=2) {
-      if(ctServer.q===search) allContacts = ctServer.rows.slice();
+      if(ctServer.q===search && !ctServer.recent) allContacts = ctServer.rows.slice();
       else ctSchedule(search);
+    } else {
+      // C-103: nothing typed yet — show the newest contacts so the page is never blank
+      if(ctServer.recent) allContacts = ctServer.rows.slice();
+      else ctSchedule('', true);
     }
   } else {
   visibleCos.forEach(co=>{
@@ -7364,10 +7400,10 @@ function renderContactsView() {
   );
 
   ddRender('ct', 'ctDD', ctBase, CT_DD, renderContactsView, allContacts.length);
-  if(subtitle) subtitle.textContent = ctBig ? (search.length>=2 ? `${allContacts.length} contact${allContacts.length!==1?'s':''} found${allContacts.length>=200?' (first 200 — type more to narrow)':''}` : `Search across all ${visibleCos.length.toLocaleString()} accounts`) : `${allContacts.length} contact${allContacts.length!==1?'s':''} across ${visibleCos.length} accounts`;
+  if(subtitle) subtitle.textContent = ctBig ? (search.length>=2 ? `${allContacts.length} contact${allContacts.length!==1?'s':''} found${allContacts.length>=200?' (first 200 — type more to narrow)':''}` : (ctServer.recent ? `Latest ${allContacts.length} contact${allContacts.length!==1?'s':''} added. Type 2 or more letters above to search all ${visibleCos.length.toLocaleString()} accounts` : `Loading the latest contacts… or type 2 or more letters to search all ${visibleCos.length.toLocaleString()} accounts`)) : `${allContacts.length} contact${allContacts.length!==1?'s':''} across ${visibleCos.length} accounts`;
 
   if(!allContacts.length) {
-    tbody.innerHTML = `<tr><td colspan="9" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">${ctBig&&search.length<2?'Type a name, email, phone or company in the search box to find contacts.':(ctBig&&ctServer.q!==search?'Searching…':(search?'No contacts match your search.':'No contacts on file yet.'))}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="padding:40px;text-align:center;color:var(--text-faint);font-size:13px;">${ctBig&&search.length<2?(ctServer.recent?'No contacts have been added yet. Type a name, email, phone or company in the search box to find one.':'Loading the latest contacts… (or type a name, email, phone or company in the search box)'):(ctBig&&ctServer.q!==search?'Searching…':(search?'No contacts match your search.':'No contacts on file yet.'))}</td></tr>`;
     return;
   }
 
@@ -7448,7 +7484,7 @@ function mobNavClose(){ document.body.classList.remove('mob-nav-open'); }
 
 /* ===== C-100: Scan business card ===== */
 // Photo -> shrunk in the browser -> sent to /api/scan-card -> the form fields fill in. NOTHING is saved until the person clicks Save.
-let _cardCtx = null, _cardLast = null, _cardPending = null;
+let _cardCtx = null, _cardLast = null, _cardPending = null, _cardCo = null;
 function cardPick(kind, id) {
   if(!realUser) { showToast('Card scanning works only when you are signed in to the live CRM.'); return; }
   _cardCtx = { kind, id };
@@ -7540,6 +7576,7 @@ function cardCreateCompany() {
   const ed = String(j.email||'').split('@')[1]||'';
   let guess = cleanDomain(j.website||'') || (ed && !free.test(ed) ? cleanDomain(ed) : '') || j.company || '';
   _cardPending = { first:j.first||'', last:j.last||'', title:j.title||'', phone:j.phone||'', cell:j.cell||'', email:j.email||'' };
+  _cardCo = { name:j.company||'', domain:cleanDomain(guess)||'', addr:j.addr||{}, mainPhone:'' };
   closeAddContactModal();
   openAddCo();
   const inp = document.getElementById('addCoInput'); if(inp) inp.value = guess;
