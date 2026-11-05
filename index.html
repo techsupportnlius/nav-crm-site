@@ -6528,7 +6528,7 @@ function addCoFinish(withContact) {
         commodity:d.commodity, lanes:d.lanesList, loadFreq:d.loadFreq, loadVolume:d.loadVolume,
         equipment:d.equipmentList,
         remarks:d.remarks, ownerUserId: d.ownerUserId || undefined, prospectDays: d.prospectDays, asActive,
-        contact: (withContact && contactName) ? {first:contactFirst, last:contactLast, name:contactName, title:contactTitle, phone:contactPhone, cell:contactCell==='—'?'':contactCell, email:contactEmail} : null,
+        contact: (withContact && contactName) ? {first:contactFirst, last:contactLast, name:contactName, title:contactTitle, phone:contactPhone==='—'?'':contactPhone, cell:contactCell==='—'?'':contactCell, email:contactEmail} : null,
       }),
     }).then(async res => { if(!res.ok) { console.error('Create company on server failed', res.status); try{ const j=await res.json(); showToast(j.error || 'Could not add the company.'); }catch(e){} } else loadRealCompanies(); })
       .catch(err => console.error('Create company on server failed', err));
