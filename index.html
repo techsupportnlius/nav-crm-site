@@ -8476,6 +8476,7 @@ function confirmOffboard(userId) {
   u.status = 'Former Employee';
   u.subTeam = ['—'];
   u.offboardedAt = today;
+  if(!u.auditLog) u.auditLog = [];
   u.auditLog.push({ts:today,action:'Offboarded — marked as Former Employee',by:currentRole+' ('+document.getElementById('tbUserName').textContent+')'});
   u.auditLog.push({ts:today,action:`CRM email assigned: ${internalEmail} (original: ${u.originalEmail} freed)`,by:'System'});
   saveUserFieldReal(userId, 'status', 'Former Employee');
@@ -8630,6 +8631,7 @@ function updateUserRole(userId, newRole) {
   const u = usersDB.find(u=>u.id===userId);
   if(!u||u.role===newRole) return;
   const old = u.role; u.role = newRole;
+  if(!u.auditLog) u.auditLog = [];
   u.auditLog.push({ts:nowDateOnly(),action:`Role changed: ${old} → ${newRole}`,by:currentUserName()});
   showToast(`Role updated to ${newRole}.`);
   saveUserFieldReal(userId, 'role', newRole);
@@ -8639,6 +8641,7 @@ function updateUserTeam(userId, newTeam) {
   const u = usersDB.find(u=>u.id===userId);
   if(!u) return;
   u.team = newTeam;
+  if(!u.auditLog) u.auditLog = [];
   u.auditLog.push({ts:nowDateOnly(),action:`Team changed to ${newTeam}`,by:currentUserName()});
   showToast(`Team updated.`);
   renderUserManagement();
@@ -8647,6 +8650,7 @@ function updateUserStatus(userId, newStatus) {
   const u = usersDB.find(u=>u.id===userId);
   if(!u||u.status===newStatus) return;
   const old = u.status; u.status = newStatus;
+  if(!u.auditLog) u.auditLog = [];
   u.auditLog.push({ts:nowDateOnly(),action:`Status changed: ${old} → ${newStatus}`,by:currentUserName()});
   showToast(`User status updated to ${newStatus}.`);
   saveUserFieldReal(userId, 'status', newStatus);
@@ -8656,6 +8660,7 @@ function updateUserLocation(userId, newLocation) {
   const u = usersDB.find(u=>u.id===userId);
   if(!u||u.location===newLocation) return;
   const old = u.location; u.location = newLocation;
+  if(!u.auditLog) u.auditLog = [];
   u.auditLog.push({ts:nowDateOnly(),action:`Location changed: ${old} → ${newLocation}`,by:currentUserName()});
   showToast(`Location updated to ${newLocation}.`);
   saveUserFieldReal(userId, 'location', newLocation);
@@ -8712,6 +8717,7 @@ function addAssignedLoc(userId, loc) {
   if(!u.assignedLocations) u.assignedLocations = [];
   if(u.assignedLocations.includes(loc)) { showToast(`${loc} already assigned.`); return; }
   u.assignedLocations.push(loc);
+  if(!u.auditLog) u.auditLog = [];
   u.auditLog.push({ts:'Sep 17, 2026',action:`Assigned location added: ${loc}`,by:document.getElementById('tbUserName')?.textContent||'Admin'});
   showToast(`${loc} added to assigned locations.`);
   saveAssignedLocationsReal(userId, u.assignedLocations);
