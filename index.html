@@ -1691,8 +1691,8 @@ thead th.cb-th{width:36px;padding:0 10px;}
         <select id="addCoOwnerSel"></select>
       </div>
       <div class="addco-field" id="addCoDaysField" style="display:none;"><label>Working days for the Sales Rep</label>
-        <input id="addCoDays" type="number" min="1" max="365" value="21" style="max-width:120px;">
-        <div class="addco-hint">How long the Sales Rep has to work this prospect (default 21). If the days run out with no extension it moves to Open. Only you and the other managers can see this.</div>
+        <input id="addCoDays" type="number" min="1" max="365" value="30" style="max-width:120px;">
+        <div class="addco-hint">How long the Sales Rep has to work this prospect (default 30; with regular notes, calls or emails it extends to 60 by itself). If the days run out with no regular work it moves to Open. Only you and the other managers can see this.</div>
       </div>
       <div class="addco-field"><label>NAV Office</label>
         <select id="addCoLocation"></select>
@@ -5878,7 +5878,7 @@ function prospectWindowBadge(c) {
   if(left===null) return '';
   const urgent = left<=3;
   const col = left<=0 ? 'var(--red)' : urgent ? 'var(--amber)' : 'var(--text-faint)';
-  const txt = left<=0 ? 'ending today' : `${left}d left` + ((canSeeWindow() && c.prospectDays) ? ` of ${c.prospectDays}d` : '');
+  const txt = c.idleNoticeAt ? `no work · opens in ${Math.max(left,0)}d` : left<=0 ? 'ending today' : `${left}d left` + ((canSeeWindow() && c.prospectDays) ? ` of ${c.prospectDays}d` : '');
   return `<span style="display:inline-block;font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;color:${col};border:1px solid ${col};opacity:0.9;">⏱ ${txt}</span>`;
 }
 async function decideExtension(id, approve) {
@@ -5914,7 +5914,7 @@ function prospectWindowPanel(c) {
   const left = prospectDaysLeft(c);
   // View-only countdown for EVERYONE who can open the prospect (no buttons).
   if(left!==null && c.prospectStatus!=='Open') {
-    const total = Math.max(c.prospectDays || 21, 1);
+    const total = Math.max(c.prospectDays || 30, 1);
     const used = Math.min(Math.max(total - Math.max(left,0), 0), total);
     const pct = Math.round(used / total * 100);
     const col = left<=3 ? 'var(--red)' : left<=7 ? 'var(--amber)' : 'var(--green)';
@@ -5927,6 +5927,10 @@ function prospectWindowPanel(c) {
       <div style="height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden;"><div style="height:100%;width:${pct}%;background:${col};"></div></div>
       <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">Day ${Math.min(used+1,total)} of ${total}</div>
     </div>`;
+  }
+  if(c.idleNoticeAt && c.prospectStatus!=='Open') {
+    html += `<div style="margin-bottom:14px;padding:12px 14px;background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.4);border-radius:6px;font-size:12.5px;line-height:1.5;color:var(--amber);">
+      <b>No regular work logged on this prospect.</b> It will open in ${Math.max(left||0,0)} day${left===1?'':'s'} unless a note, call or email update is posted. Post an update to keep it assigned.</div>`;
   }
   if(c.extStatus==='Pending') {
     if(canDecideExtension(c)) {
@@ -5953,7 +5957,7 @@ function prospectWindowPanel(c) {
     const people = (realUsers||[]).filter(u=>['Sales Rep','Team Leader','Supervisor','Operations Manager','Location Head','Operations Head'].includes(u.role));
     html += `<div style="margin-bottom:16px;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;">
       <div style="font-size:11px;font-family:var(--mono);color:var(--text-faint);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">Working window</div>
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:9px;">${c.prospectDays?`${c.prospectDays} days assigned`:'Default 21 days'}${left!==null?` · ${left<=0?'ends today':left+' day'+(left===1?'':'s')+' left'}`:''}${c.assignedByRole?` · assigned by ${esc(c.assignedByRole)}`:''}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:9px;">${c.prospectDays?`${c.prospectDays} days assigned`:'Default 30 days'}${left!==null?` · ${left<=0?'ends today':left+' day'+(left===1?'':'s')+' left'}`:''}${c.assignedByRole?` · assigned by ${esc(c.assignedByRole)}`:''}</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <select id="winOwnerSel" class="field-select" style="max-width:210px;">
           <option value="">${c.prospectStatus==='Open'?'— Assign to…':'— Keep current owner'}</option>
@@ -6026,7 +6030,7 @@ function showProspectAlerts(force) {
   prospectAlertSig = sig;
   const label = {expiring:'Ending soon', ext:'Extension request', open:'Open — unassigned'};
   const body = items.slice(0,12).map(i=>{
-    const detail = i.type==='expiring' ? (i.left<=0?'ends today':`${i.left} day${i.left===1?'':'s'} left`)
+    const detail = i.type==='expiring' ? (i.c.idleNoticeAt ? `no work logged — opens in ${Math.max(i.left,0)} day${i.left===1?'':'s'}, post a note, call or email` : (i.left<=0?'ends today':`${i.left} day${i.left===1?'':'s'} left`))
       : i.type==='ext' ? 'waiting for your decision' : 'needs an owner';
     const col = i.type==='expiring' ? 'var(--red)' : i.type==='ext' ? 'var(--amber)' : 'var(--blue)';
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">
@@ -6120,31 +6124,40 @@ function baRefresh() {
   let bar = document.getElementById('baBar');
   if(!bar) {
     bar = document.createElement('div'); bar.id='baBar';
-    bar.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:300;background:var(--surface);border:1px solid var(--border);box-shadow:0 8px 30px rgba(0,0,0,.25);border-radius:10px;padding:8px 12px;display:none;align-items:center;gap:10px;font-size:13px;max-width:94vw;';
+    bar.style.cssText='position:fixed;right:20px;bottom:64px;z-index:950;background:var(--surface);border:1px solid var(--border);box-shadow:0 8px 30px rgba(0,0,0,.25);border-radius:10px;padding:8px 12px;display:none;align-items:center;gap:10px;font-size:13px;max-width:94vw;';
     document.body.appendChild(bar);
   }
   const k = baActive();
   if(k) baSyncAll(k);
   const n = k ? BA.sel[k].size : 0;
+  // C-115: the main "Actions" button lives in the page header, next to Export / Add Prospect (the bottom bar was hidden behind the "still loading" banner)
+  document.querySelectorAll('.ba-hdr').forEach(e=>e.remove());
+  if(k && n) {
+    const hr = document.getElementById(BA.cfg[k].tbody).closest('.view');
+    const box = hr && hr.querySelector('.view-header-right');
+    if(box) { const b = document.createElement('button'); b.className='btn btn-primary ba-hdr'; b.textContent = `Actions (${n}) ▾`; b.onclick = (ev)=>{ ev.stopPropagation(); baToggleMenu(b); }; box.insertBefore(b, box.firstChild); }
+  }
   if(!k || !n) { bar.style.display='none'; baCloseMenu(); return; }
   bar.style.display='flex';
   bar.innerHTML = `<b>${n}</b> ${BA.cfg[k].noun}${n===1?'':'s'} selected
-    <span style="position:relative;"><button class="btn btn-primary btn-sm" onclick="baToggleMenu()">Actions ▾</button></span>
+    <span style="position:relative;"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();baToggleMenu(this)">Actions ▾</button></span>
     <button class="btn btn-ghost btn-sm" onclick="baClear()">Clear</button>`;
 }
-function baToggleMenu() {
+function baToggleMenu(anchor) {
   const ex = document.getElementById('baMenu'); if(ex) { ex.remove(); return; }
   const k = baActive(); if(!k) return;
   const m = document.createElement('div'); m.id='baMenu';
   m.style.cssText='position:fixed;z-index:310;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.28);padding:6px;min-width:210px;';
   m.innerHTML = baMenuItems(k).map(([a,l])=>`<div class="ba-item" onclick="baDo('${a}')" style="padding:9px 12px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text);">${l}</div>`).join('');
   document.body.appendChild(m);
-  const bar = document.getElementById('baBar').getBoundingClientRect();
-  m.style.left = Math.max(8, bar.left) + 'px'; m.style.bottom = (window.innerHeight - bar.top + 8) + 'px';
+  m.style.zIndex = '960';
+  const r = (anchor || document.getElementById('baBar')).getBoundingClientRect();
+  const w = 230; m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+  if(r.top < window.innerHeight/2) m.style.top = (r.bottom + 6) + 'px'; else m.style.bottom = (window.innerHeight - r.top + 8) + 'px';
   m.querySelectorAll('.ba-item').forEach(e=>{ e.onmouseenter=()=>e.style.background='var(--surface-2)'; e.onmouseleave=()=>e.style.background=''; });
 }
 function baCloseMenu() { const m = document.getElementById('baMenu'); if(m) m.remove(); }
-document.addEventListener('click', e=>{ if(!e.target.closest('#baMenu') && !e.target.closest('#baBar')) baCloseMenu(); });
+document.addEventListener('click', e=>{ if(!e.target.closest('#baMenu') && !e.target.closest('#baBar') && !e.target.closest('.ba-hdr')) baCloseMenu(); });
 function baClear() { const k = baActive(); if(k) BA.sel[k].clear(); document.querySelectorAll('.ba-cb').forEach(b=>b.checked=false); baRefresh(); }
 
 // the "Are you sure?" window
@@ -6717,7 +6730,7 @@ async function addCoContinueToContact() {
     loadVolume: document.getElementById('addCoLoadVolume').value,
     equipmentList: addCoDraftEquipment.slice(),
     remarks: document.getElementById('addCoRemarks').value.trim(),
-    prospectDays: canSeeWindow() ? (parseInt(document.getElementById('addCoDays').value,10) || 21) : 21,
+    prospectDays: canSeeWindow() ? (parseInt(document.getElementById('addCoDays').value,10) || 30) : 30,
   };
 
   document.getElementById('addCo-2a2-company').innerHTML =
@@ -9499,7 +9512,7 @@ async function notifAdminLoad() {
   } catch(e) { rb.innerHTML='<tr><td colspan="5">Could not load.</td></tr>'; }
 }
 const NA_ROLES=[['to_person','The person it is about',''],['r_sales_rep','Sales Rep','own accounts'],['r_team_leader','Team Leader','own team'],['r_ops_manager','Operations Manager','own team'],['r_location_head','Location Head','own office'],['r_ops_head','Operations Head','own office'],['r_cust_comp','Customer Compliance','all'],['r_carrier_comp','Carrier Compliance','all'],['r_coi','COI Specialist','all'],['r_admin','Admin','all']];
-const NA_GROUPS=[['Prospects',['PROSPECT_ASSIGNED','PROSPECT_EXPIRING','PROSPECT_RELEASED','PROSPECT_EXTENSION','EMAIL']],['Active customers',['CUSTOMER_ASSIGNED','INACTIVITY','EMAIL_CUSTOMER','CREDIT_RECHECK']],['Compliance',['COMPLIANCE_SUBMITTED','COMPLIANCE_UPDATE','CARRIER_UPDATE','CASE_ASSIGNMENT']],['Admin & personal',['REMINDER','EMAIL_ACCESS','SECURITY']]];
+const NA_GROUPS=[['Prospects',['PROSPECT_ASSIGNED','PROSPECT_EXPIRING','PROSPECT_IDLE','PROSPECT_EXTENDED','PROSPECT_RELEASED','PROSPECT_EXTENSION','EMAIL']],['Active customers',['CUSTOMER_ASSIGNED','INACTIVITY','EMAIL_CUSTOMER','CREDIT_RECHECK']],['Compliance',['COMPLIANCE_SUBMITTED','COMPLIANCE_UPDATE','CARRIER_UPDATE','CASE_ASSIGNMENT']],['Admin & personal',['REMINDER','EMAIL_ACCESS','SECURITY']]];
 function hasRolesFlag(rules){ return rules.length && rules[0].to_person!==undefined; }
 function naWho(r){ const names=NA_ROLES.filter(x=>r[x[0]]).map(x=>x[0]==='to_person'?'Person':x[1]); return names.length?names.map(n=>`<span style="background:rgba(212,98,26,0.12);color:var(--accent);border-radius:20px;padding:1px 9px;font-size:11.5px;white-space:nowrap;">${esc(n)}</span>`).join(' '):'<span style="color:var(--text-faint);font-size:12px;">nobody extra</span>'; }
 function naDraw(hasRoles, note){
@@ -13189,7 +13202,7 @@ function mapCompany(c) {
     ff: c.ff_number || '—', mc: c.mc_number || '—', dot: c.dot_number || '—',
     paycat: c.paycat_id || '—', remarks: c.remarks || '',
     linkedinUrl: c.linkedin_url || '', facebookUrl: c.facebook_url || '', twitterUrl: c.twitter_url || '',
-    expiresAt: c.prospect_claim_expires_at || null,
+    expiresAt: c.prospect_claim_expires_at || null, idleNoticeAt: c.idle_notice_at || null,
     prospectDays: c.prospect_days == null ? null : c.prospect_days,
     extStatus: c.ext_status || null, extRoute: c.ext_route || null,
     assignedByRole: c.assigned_by_role || null, releasedAt: c.released_at || null,
