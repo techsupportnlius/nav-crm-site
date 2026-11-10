@@ -5730,11 +5730,12 @@ const COMP_PRESETS = [
 function custConvBadge(c) { const n = convN('customer', c.id); return n>0 ? ` <span class="conv-badge" title="${n} unread message${n===1?'':'s'}">💬 ${n}</span>` : ''; }
 function compRenderConvShell(d) {
   const body = document.getElementById('dBody');
+  attClear('comp');
   let composer = '';
   if(d.canWrite && d.staff) {
     composer = `<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px;">
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${COMP_PRESETS.map((p,i)=>`<span class="fchip" style="cursor:pointer;font-size:11.5px;" onclick="compPickPreset(${i})">${esc(p.length>34?p.slice(0,34)+'…':p)}</span>`).join('')}</div>
-      <textarea id="compMsgText" placeholder="Write to the rep…" style="width:100%;min-height:70px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;box-sizing:border-box;"></textarea>
+      <textarea id="compMsgText" placeholder="Write to the rep…" style="width:100%;min-height:70px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;box-sizing:border-box;"></textarea>${attBar('comp')}
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:7px;">
         <label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="compMsgInternal" style="accent-color:var(--amber);"> 🔒 Internal note (rep cannot see)</label>
         <button class="btn btn-primary btn-sm" id="compMsgBtn" style="margin-left:auto;" onclick="compSendMessage('${d.caseId}')">Send</button>
@@ -5742,7 +5743,7 @@ function compRenderConvShell(d) {
       <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">The rep and Team Leader are notified in the CRM, and an email goes from your own mailbox (copied to the compliance list as the record).</div></div>`;
   } else if(d.canWrite && d.isRep) {
     composer = `<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px;">
-      <textarea id="compMsgText" placeholder="Write your reply to Customer Compliance…" style="width:100%;min-height:62px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;box-sizing:border-box;"></textarea>
+      <textarea id="compMsgText" placeholder="Write your reply to Customer Compliance…" style="width:100%;min-height:62px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;box-sizing:border-box;"></textarea>${attBar('comp')}
       <div style="text-align:right;margin-top:7px;"><button class="btn btn-primary btn-sm" id="compMsgBtn" onclick="compSendMessage('${d.caseId}')">Send reply</button></div></div>`;
   } else if(d.resolved) {
     composer = '<div style="font-size:12px;color:var(--text-faint);border-top:1px solid var(--border);padding-top:10px;margin-top:6px;">This case is finished.</div>';
@@ -5750,6 +5751,7 @@ function compRenderConvShell(d) {
     composer = '<div style="font-size:12px;color:var(--text-faint);border-top:1px solid var(--border);padding-top:10px;margin-top:6px;">You can read this conversation. Only the rep on the case and Customer Compliance can write in it.</div>';
   }
   body.innerHTML = `<div class="d-sec" style="margin-top:0;"><div class="d-sec-label">Conversation</div><div id="compMsgList" style="margin-top:10px;"><div style="padding:24px 0;text-align:center;color:var(--text-faint);font-size:13px;">Loading…</div></div>${composer}</div>`;
+  attBind('comp','compMsgText');
 }
 async function compLoadMessages(caseId) {
   const box = document.getElementById('compMsgList'); if(!box) return;
@@ -5769,20 +5771,24 @@ function compRenderMessages(rows) {
     const bd = note ? 'var(--amber)' : 'var(--border)';
     return `<div style="display:flex;justify-content:${rep?'flex-start':'flex-end'};margin-bottom:9px;"><div style="max-width:86%;background:${bg};border:1px solid ${bd};border-radius:8px;padding:8px 11px;">
       <div style="font-size:10.5px;color:var(--text-faint);margin-bottom:3px;"><b style="color:var(--text);">${esc(m.from_name||'Compliance')}</b> · ${esc(when(m.created_at))}${note?' · <span style="color:var(--amber);">🔒 Internal note — the rep cannot see this</span>':''}</div>
-      <div style="font-size:13px;white-space:pre-wrap;word-break:break-word;">${esc(m.message_text)}</div></div></div>`;
+      ${m.message_text==='(attachment)' ? '' : `<div style="font-size:13px;white-space:pre-wrap;word-break:break-word;">${esc(m.message_text)}</div>`}${attChips(m.attachments, a=>`/api/compliance-cases/${encodeURIComponent(a.case_id)}/messages/files/${a.file_id}`)}</div></div>`;
   }).join('') : `<div style="font-size:12px;color:var(--text-faint);padding:14px 0;text-align:center;">No messages yet.</div>`;
   box.scrollTop = box.scrollHeight;
+  attHydrate(box);
 }
 function compPickPreset(i) { const t=document.getElementById('compMsgText'); if(t){ t.value = COMP_PRESETS[i]; t.focus(); } }
 async function compSendMessage(caseId) {
   const t = document.getElementById('compMsgText'); const text = (t.value||'').trim();
-  if(!text) { showToast('Type a message first.'); return; }
+  const pend = ATT.pending.comp.length;
+  if(!text && !pend) { showToast('Type a message or attach a file first.'); return; }
   const internal = !!(document.getElementById('compMsgInternal') && document.getElementById('compMsgInternal').checked);
   const btn = document.getElementById('compMsgBtn'); const oldLbl = btn.textContent; btn.disabled = true; btn.textContent = 'Sending…';
   try {
-    const res = await apiFetch(`/api/compliance-cases/${encodeURIComponent(caseId)}/messages`, { method:'POST', body: JSON.stringify({ text, internal }) });
+    const attachments = pend ? await attPayload('comp') : [];
+    const res = await apiFetch(`/api/compliance-cases/${encodeURIComponent(caseId)}/messages`, { method:'POST', body: JSON.stringify({ text, internal, attachments }) });
     const j = await res.json().catch(()=>({}));
-    if(!res.ok) { showToast(j.error || 'Could not send.'); return; }
+    if(!res.ok) { if(pend) showAlert('The message was NOT sent', j.error || 'Could not send. Please try again.'); else showToast(j.error || 'Could not send.'); return; }
+    attClear('comp');
     window.__ticketMailWarn = false;
     if(j.mail) { try { await sendTicketMailFromMe(j.mail); } catch(e) {} }
     t.value=''; compRenderMessages(j.messages);
@@ -6050,6 +6056,86 @@ function openProspectFromAlert(id) {
 }
 setInterval(()=>{ try{ showProspectAlerts(false); }catch(e){} }, 30*60*1000);
 
+
+// ── ATTACHMENTS AND SCREENSHOTS IN CONVERSATIONS (C-118) ─────────────────────────────────────
+// Used in the Customer Compliance and Carrier Compliance conversations. Files are saved on the server (Azure file storage);
+// downloads and previews go through the CRM (the person's permission is checked every time). No limit on how many files per message
+// (each file up to 10 MB, up to 50 MB together in one message).
+const ATT = { pending:{ comp:[], cc:[] }, cache:{}, ok:['pdf','png','jpg','jpeg','gif','doc','docx','xls','xlsx','csv','txt','msg','eml','zip'], maxFile:10*1024*1024, maxTotal:50*1024*1024 };
+function attKb(n) { n = Number(n)||0; return n>=1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB'; }
+function attBar(k) {
+  return `<div style="margin-top:7px;"><div id="${k}AttList" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;"><button type="button" class="btn btn-ghost btn-sm" onclick="attPick('${k}')">📎 Attach files</button>
+    <span style="font-size:11px;color:var(--text-faint);">or paste a screenshot (Ctrl+V) or drop files here · up to 10 MB each</span></div>
+    <input type="file" id="${k}AttInput" multiple style="display:none;" onchange="attAdd('${k}',this.files);this.value='';"></div>`;
+}
+function attPick(k) { const i = document.getElementById(k+'AttInput'); if(i) i.click(); }
+function attStamp() { const d = new Date(), p = n=>String(n).padStart(2,'0'); return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds()); }
+function attAdd(k, files) {
+  const list = ATT.pending[k]; let total = list.reduce((s,f)=>s+f.size,0);
+  for(const f0 of [...files]) {
+    let f = f0;
+    // a pasted screenshot arrives called "image.png": give it a useful name
+    if(/^image\.(png|jpe?g|gif)$/i.test(f.name||'') ) { try { f = new File([f0], 'screenshot-'+attStamp()+'-'+(list.length+1)+'.'+(f0.name.split('.').pop()||'png'), { type:f0.type }); } catch(e) {} }
+    const ext = (f.name.split('.').pop()||'').toLowerCase();
+    if(!ATT.ok.includes(ext)) { showAlert('File not allowed', `"${f.name}" is not an allowed type. Use PDF, image, Word, Excel, CSV, text, email or zip files.`); continue; }
+    if(f.size > ATT.maxFile) { showAlert('File too big', `"${f.name}" is bigger than 10 MB.`); continue; }
+    if(total + f.size > ATT.maxTotal) { showAlert('Too much in one message', 'One message can carry up to 50 MB of files. Send the rest in another message.'); break; }
+    total += f.size; list.push(f);
+  }
+  attRender(k);
+}
+function attRender(k) {
+  const box = document.getElementById(k+'AttList'); if(!box) return;
+  box.innerHTML = ATT.pending[k].map((f,i)=>`<span style="display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:3px 6px 3px 10px;font-size:11.5px;">📎 ${esc(f.name)} · ${attKb(f.size)}<b style="cursor:pointer;color:var(--text-faint);padding:0 4px;" title="Remove" onclick="attRemove('${k}',${i})">×</b></span>`).join('');
+}
+function attRemove(k, i) { ATT.pending[k].splice(i,1); attRender(k); }
+function attClear(k) { ATT.pending[k] = []; attRender(k); }
+function attBind(k, taId) {
+  const ta = document.getElementById(taId);
+  if(ta && !ta.dataset.attBound) {
+    ta.dataset.attBound = '1';
+    ta.addEventListener('paste', e=>{ const fl = [...((e.clipboardData && e.clipboardData.files) || [])]; if(fl.length) { e.preventDefault(); attAdd(k, fl); } });
+    ta.addEventListener('dragover', e=>{ if(e.dataTransfer && [...(e.dataTransfer.types||[])].includes('Files')) e.preventDefault(); });
+    ta.addEventListener('drop', e=>{ if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) { e.preventDefault(); attAdd(k, e.dataTransfer.files); } });
+  }
+  attRender(k);
+}
+function attPayload(k) {
+  return Promise.all(ATT.pending[k].map(f=>new Promise((res,rej)=>{ const r = new FileReader(); r.onload = ()=>res({ name:f.name, contentType:f.type||'', dataBase64:String(r.result).split(',')[1]||'' }); r.onerror = rej; r.readAsDataURL(f); })));
+}
+// the files shown inside a message (images as small previews, other files as a button)
+function attChips(list, urlFn) {
+  if(!list || !list.length) return '';
+  return '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">' + list.map(a=>{
+    const ext = (String(a.file_name).split('.').pop()||'').toLowerCase(), url = urlFn(a);
+    if(['png','jpg','jpeg','gif'].includes(ext)) return `<div class="att-thumb" data-url="${esc(url)}" data-name="${esc(a.file_name)}" data-ext="${ext}" onclick="attOpen(this)" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:4px;max-width:190px;background:var(--surface);"><div class="att-ph" style="min-width:120px;min-height:50px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-faint);">Loading…</div><div style="font-size:11px;margin-top:3px;word-break:break-all;">${esc(a.file_name)} · ${attKb(a.size_bytes)}</div></div>`;
+    return `<button type="button" class="btn btn-ghost btn-sm" data-url="${esc(url)}" data-name="${esc(a.file_name)}" onclick="attDownload(this)">📎 ${esc(a.file_name)} · ${attKb(a.size_bytes)}</button>`;
+  }).join('') + '</div>';
+}
+async function attBlob(url) {
+  const res = await apiFetch(url);
+  if(!res.ok) { const j = await res.json().catch(()=>({})); throw new Error(j.error || 'Could not open the file.'); }
+  return res.blob();
+}
+async function attDownload(el) {
+  try { const b = await attBlob(el.dataset.url); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = el.dataset.name || 'file'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000); }
+  catch(e) { showToast(e.message || 'Could not open the file.'); }
+}
+function attOpen(el) { const u = ATT.cache[el.dataset.url]; if(u) window.open(u, '_blank'); else attDownload(el); }
+async function attHydrate(root) {
+  const els = [...(root || document).querySelectorAll('.att-thumb:not([data-done])')].slice(0, 24);
+  const mime = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif' };
+  for(const el of els) {
+    el.dataset.done = '1';
+    const ph = el.querySelector('.att-ph');
+    try {
+      let u = ATT.cache[el.dataset.url];
+      if(!u) { const b = await attBlob(el.dataset.url); u = URL.createObjectURL(new Blob([b], { type: mime[el.dataset.ext] || 'image/png' })); ATT.cache[el.dataset.url] = u; }
+      if(ph) ph.innerHTML = `<img src="${u}" alt="" style="max-width:170px;max-height:110px;border-radius:4px;display:block;">`;
+    } catch(e) { if(ph) ph.textContent = 'Could not load the picture'; }
+  }
+}
 
 // ── BULK ACTIONS (C-114) ──────────────────────────────────────
 // Tick-boxes + one "Actions" menu on: Prospect Companies, Customer Compliance cases, Carrier Compliance list.
@@ -13877,7 +13963,7 @@ function ccRenderMsgs() {
     const tag = note ? '🔒 Internal note — the broker cannot see this' : (e.event_type==='info_request' ? 'Information requested' : (e.event_type==='not_relevant' ? 'Asked again — last reply was not what was needed' : ''));
     return `<div style="display:flex;justify-content:${mine?'flex-start':'flex-end'};margin-bottom:9px;"><div style="max-width:86%;background:${bg};border:1px solid ${bd};border-radius:8px;padding:8px 11px;">
       <div style="font-size:10.5px;color:var(--text-faint);margin-bottom:3px;"><b style="color:var(--text);">${esc(e.by_name||'System')}</b> · ${esc(ccWhen(e.created_at))}${tag?` · <span style="color:var(--amber);">${tag}</span>`:''}</div>
-      <div style="font-size:13px;white-space:pre-wrap;word-break:break-word;">${esc(e.body||'')}</div></div></div>`;
+      ${e.body==='(attachment)' ? '' : `<div style="font-size:13px;white-space:pre-wrap;word-break:break-word;">${esc(e.body||'')}</div>`}${attChips(e.attachments, a=>`/api/carrier-checks/${encodeURIComponent(a.check_id)}/files/${a.file_id}`)}</div></div>`;
   };
   const thread = list.length ? list.map(bubble).join('') : '<div style="padding:24px 0;text-align:center;color:var(--text-faint);font-size:13px;">No messages yet.</div>';
   let composer = '';
@@ -13885,7 +13971,7 @@ function ccRenderMsgs() {
   const lastMsg = list.filter(e=>e.event_type!=='note').slice(-1)[0];
   if(worker) {
     composer = `<div style="border-top:1px solid var(--border);padding-top:10px;">
-      <textarea id="ccMsgTxt" placeholder="Write a message to the broker…" style="width:100%;min-height:62px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;box-sizing:border-box;"></textarea>
+      <textarea id="ccMsgTxt" placeholder="Write a message to the broker…" style="width:100%;min-height:62px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;box-sizing:border-box;"></textarea>${attBar('cc')}
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:7px;">
         <label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="ccMsgInternal" style="accent-color:var(--amber);"> 🔒 Internal note (broker cannot see)</label>
         <button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="ccSendMsg()">Send</button>
@@ -13897,22 +13983,26 @@ function ccRenderMsgs() {
   } else if(ccIsMyBroker(c) && !c.resolvedAt) {
     composer = `<div style="border-top:1px solid var(--border);padding-top:10px;">
       ${c.workStatus==='Waiting on Broker' ? '<div style="font-size:12px;color:var(--amber);margin-bottom:6px;">Carrier Compliance is waiting for your reply. Their timer starts again when you send it.</div>' : ''}
-      <textarea id="ccMsgTxt" placeholder="Write your reply…" style="width:100%;min-height:62px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;box-sizing:border-box;"></textarea>
+      <textarea id="ccMsgTxt" placeholder="Write your reply…" style="width:100%;min-height:62px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;box-sizing:border-box;"></textarea>${attBar('cc')}
       <div style="text-align:right;margin-top:7px;"><button class="btn btn-primary btn-sm" onclick="ccSendMsg()">Send reply</button></div></div>`;
   } else if(c.resolvedAt) {
     composer = '<div style="font-size:12px;color:var(--text-faint);border-top:1px solid var(--border);padding-top:10px;">This check is finished. To talk about it again it must be reopened.</div>';
   }
   pane.innerHTML = `<div class="d-sec" style="margin-top:0;"><div class="d-sec-label">Conversation${c.infoRounds?` · ${c.infoRounds} information request${c.infoRounds===1?'':'s'}`:''}</div><div style="margin-top:10px;">${thread}</div>${composer}</div>`;
+  attBind('cc','ccMsgTxt'); attHydrate(pane);
 }
 async function ccSendMsg() {
   const c = ccCur(); if(!c) return;
   const t = document.getElementById('ccMsgTxt'); const txt = t ? t.value.trim() : '';
-  if(!txt) { showToast('Type a message first.'); return; }
+  const pend = ATT.pending.cc.length;
+  if(!txt && !pend) { showToast('Type a message or attach a file first.'); return; }
   const internal = !!(document.getElementById('ccMsgInternal') && document.getElementById('ccMsgInternal').checked);
   try {
-    const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/messages', { method:'POST', body: JSON.stringify({ text: txt, internal }) });
+    const attachments = pend ? await attPayload('cc') : [];
+    const res = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/messages', { method:'POST', body: JSON.stringify({ text: txt, internal, attachments }) });
     const j = await res.json().catch(()=>({}));
-    if(!res.ok) { showToast(j.error || 'Could not send.'); return; }
+    if(!res.ok) { if(pend) showAlert('The message was NOT sent', j.error || 'Could not send. Please try again.'); else showToast(j.error || 'Could not send.'); return; }
+    attClear('cc');
     window.__ticketMailWarn = false;
     if(j.mail) { try { await sendTicketMailFromMe(j.mail); } catch(e) {} }
     CC_TK.events = null; await ccEnsureEvents(true); ccRenderMsgs(); ccRenderTimeline();
