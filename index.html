@@ -2650,6 +2650,14 @@ function nowStamp() {
   return new Date().toLocaleString('en-US',
     {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
 }
+// C-111: one way to show a moment in the timeline: the viewer's own computer clock and time zone, with the zone name.
+function fmtWhen(v) {
+  try {
+    let d = (v instanceof Date) ? v : new Date(typeof v==='string' && !/[zZ]|[+-]\d\d:?\d\d$/.test(v) ? v+'Z' : v);
+    if(isNaN(d)) return '';
+    return d.toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+  } catch(e) { return ''; }
+}
 function nowDateOnly() {
   return new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
 }
@@ -2665,7 +2673,7 @@ function logActivity(companyId, kind, text, reminder) {
   if(companyId==null) return;
   if(!activityDB[companyId]) activityDB[companyId] = [];
   activityDB[companyId].unshift({
-    kind, text, by: currentUserName(), time: nowStamp(), reminder: reminder||null
+    kind, text, by: currentUserName(), time: fmtWhen(new Date()), ts: Date.now(), reminder: reminder||null
   });
   if(realUser) {
     apiFetch(`/api/companies/${companyId}/activity`, {
@@ -2689,7 +2697,7 @@ async function loadRealActivity(companyId) {
     activityDB[companyId] = rows.map(r => ({
       kind: r.kind, text: r.text_html,
       by: r.created_by_name || resolveUserName(r.created_by_user_id),
-      time: r.created_at ? new Date(r.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '',
+      time: r.created_at ? fmtWhen(r.created_at) : '',
       ts: r.created_at || 0,
       reminder: r.reminder_at || null, staffOnly: !!r.staff_only,
     }));
@@ -4600,7 +4608,25 @@ function renderCustomerTimeline(id) {
       if(openCompanyId===id && drawerTab==='timeline') renderCustomerTimeline(id);
     });
   }
-  const allEntries = activityDB[id] || [];
+  // C-111: every email on this company (sent from the CRM, synced from the mailbox, or received) is part of the timeline.
+  if(realUser && !serverEmailsLoaded.has(id)) {
+    serverEmailsLoaded.add(id);
+    loadServerEmails(id).then(()=>{ if(openCompanyId===id && drawerTab==='timeline') renderCustomerTimeline(id); });
+  }
+  const srvMails = (serverEmailsDB[id]||[]);
+  const mailSubj = e => (e.subject||'').trim().toLowerCase();
+  const baseEntries = (activityDB[id] || []).filter(a => {
+    if(a.kind!=='EMAIL' || !srvMails.length) return true;
+    const t = (a.ts ? new Date(a.ts).getTime() : Date.now());
+    const txt = String(a.text||'').toLowerCase();
+    return !srvMails.some(m => m.direction==='sent' && Math.abs((m._ts||0)-t) < 10*60*1000 && txt.includes(mailSubj(m)));
+  });
+  const mailEntries = srvMails.map(m => ({
+    kind:'EMAIL', ts:m._ts||0, time:fmtWhen(new Date(m._ts||0)),
+    by: m.direction==='sent' ? (m.senderName || currentUserName()) : (m.from||'sender'),
+    text: (m.direction==='sent' ? 'Email sent to ' : 'Email received from ') + esc(m.direction==='sent' ? m.to : m.from) + ' — <strong>' + esc(m.subject||'(no subject)') + '</strong>',
+  }));
+  const allEntries = baseEntries.concat(mailEntries).sort((a,b)=> (new Date(b.ts||0).getTime()||0) - (new Date(a.ts||0).getTime()||0));
   const activeFilter = timelineFilter[id] || 'all';
   const entries = activeFilter==='all' ? allEntries : allEntries.filter(e=>e.kind===activeFilter);
   const kindColor = {NOTE:'var(--text-faint)',CALL:'var(--green)',EMAIL:'var(--blue)',STATUS:'var(--accent)',CREATE:'var(--text-faint)',REMINDER:'var(--accent)',CONTACT:'var(--blue)',DOC:'var(--text-faint)'};
@@ -4612,7 +4638,7 @@ function renderCustomerTimeline(id) {
     {key:'all', label:`All (${allEntries.length})`},
     {key:'NOTE', label:`Notes (${noteCount})`},
     {key:'CALL', label:'Calls'},
-    {key:'EMAIL', label:'Emails'},
+    {key:'EMAIL', label:`Emails (${allEntries.filter(e=>e.kind==='EMAIL').length})`},
     {key:'STATUS', label:'Status'},
     {key:'CONTACT', label:'Contacts'},
   ];
@@ -5616,7 +5642,7 @@ async function compLoadActivity(d){
   (activityDB[d.companyId]||[]).forEach(e=>items.push({ts:e.ts||0, kind:e.kind, html:e.text, by:e.by, time:e.time, priv:!!e.staffOnly}));
   try {
     const res = realUser ? await apiFetch('/api/compliance-cases/'+encodeURIComponent(d.caseId)+'/email-log') : null;
-    if(res && res.ok) (await res.json()).forEach(r=>items.push({ts:r.sent_at, kind:'EMAIL', by:r.full_name||'', time:new Date(r.sent_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}),
+    if(res && res.ok) (await res.json()).forEach(r=>items.push({ts:r.sent_at, kind:'EMAIL', by:r.full_name||'', time:fmtWhen(r.sent_at),
       html:'Emailed customer ('+esc(r.to_address||'')+') from '+esc(r.from_address||'')+' — <strong>'+esc(r.subject||'(no subject)')+'</strong> · '+(r.email_kind==='documents'?'documents, broker NOT copied':(r.broker_copied?'broker copied':'broker not copied'))}));
   } catch(e){}
   if(!compDrawer || compDrawer.caseId!==d.caseId || compDrawer.tab!=='activity') return;
@@ -6020,6 +6046,216 @@ function openProspectFromAlert(id) {
 }
 setInterval(()=>{ try{ showProspectAlerts(false); }catch(e){} }, 30*60*1000);
 
+
+// ── BULK ACTIONS (C-114) ──────────────────────────────────────
+// Tick-boxes + one "Actions" menu on: Prospect Companies, Customer Compliance cases, Carrier Compliance list.
+// The boxes are added to the rows after every redraw, so the existing lists are not changed. Ticks stay when you change page.
+// Nothing runs without an "Are you sure?" window showing how many are selected. Every action is still checked again by the server.
+const BA = {
+  sel: { pr:new Set(), comp:new Set(), cc:new Set() },
+  cfg: {
+    pr:   { tbody:'prospectTbody', thead:'prospectThead', re:/openCustomerDrawer\((\d+)\)/, num:true,  noun:'prospect',
+            gate:()=>!!realUser && canBulkAssign() },
+    comp: { tbody:'compTbody',     thead:'custCompThead', re:/^openCompCase\('([^']+)'\)$/, num:false, noun:'case',
+            gate:()=>!!realUser && isCompMgr() },
+    cc:   { tbody:'ccTbody',       thead:'ccThead',       re:/openCCCase\('([^']+)'\)/,      num:false, noun:'MC',
+            gate:()=>!!realUser && (currentRole==='Admin' || !!realUser.isCarrierManager || (realUser.carrierLeadLocations||[]).length>0) },
+  },
+  busy: false,
+};
+function baId(cfg, tr) {
+  const m = (tr.getAttribute('onclick')||'').match(cfg.re);
+  return m ? (cfg.num ? Number(m[1]) : m[1]) : null;
+}
+function baDecorate(k) {
+  const cfg = BA.cfg[k], tb = document.getElementById(cfg.tbody), th = document.getElementById(cfg.thead);
+  if(!tb || !th) return;
+  const on = cfg.gate();
+  const rows = on ? [...tb.querySelectorAll('tr')].map(tr=>({tr, id:baId(cfg,tr)})).filter(x=>x.id!==null) : [];
+  // header
+  const hr = th.querySelector('tr');
+  if(hr) {
+    const has = hr.querySelector('.ba-th');
+    if(rows.length && !has) { const c = document.createElement('th'); c.className='ba-th'; c.style.width='34px'; c.innerHTML = `<input type="checkbox" class="ba-all" title="Select everything shown on this page" onclick="event.stopPropagation()" onchange="baToggleAll('${k}',this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent);">`; hr.insertBefore(c, hr.firstChild); }
+    if(!rows.length && has) has.remove();
+  }
+  rows.forEach(({tr,id})=>{
+    if(tr.querySelector('.ba-cell')) return;
+    const td = document.createElement('td'); td.className='ba-cell'; td.style.width='34px';
+    td.setAttribute('onclick','event.stopPropagation()');
+    const cb = document.createElement('input'); cb.type='checkbox'; cb.className='ba-cb'; cb.dataset.k=k; cb.dataset.id=String(id);
+    cb.style.cssText='width:15px;height:15px;cursor:pointer;accent-color:var(--accent);';
+    cb.checked = BA.sel[k].has(id);
+    cb.addEventListener('change', ()=>{ if(cb.checked) BA.sel[k].add(id); else BA.sel[k].delete(id); baRefresh(); });
+    td.appendChild(cb); tr.insertBefore(td, tr.firstChild);
+  });
+  baSyncAll(k);
+}
+function baSyncAll(k) {
+  const cfg = BA.cfg[k], tb = document.getElementById(cfg.tbody), th = document.getElementById(cfg.thead);
+  if(!tb||!th) return; const a = th.querySelector('.ba-all'); if(!a) return;
+  const boxes = [...tb.querySelectorAll('.ba-cb')];
+  a.checked = boxes.length>0 && boxes.every(b=>b.checked);
+}
+function baToggleAll(k, v) {
+  const tb = document.getElementById(BA.cfg[k].tbody);
+  tb.querySelectorAll('.ba-cb').forEach(b=>{ b.checked = v; const id = BA.cfg[k].num ? Number(b.dataset.id) : b.dataset.id; if(v) BA.sel[k].add(id); else BA.sel[k].delete(id); });
+  baRefresh();
+}
+function baActive() { // which list is on screen right now
+  for(const k of Object.keys(BA.cfg)) { const tb = document.getElementById(BA.cfg[k].tbody); if(tb && tb.offsetParent!==null && BA.cfg[k].gate()) return k; }
+  return null;
+}
+function baMenuItems(k) {
+  const items = [];
+  if(k==='pr') {
+    if(canBulkAssign()) items.push(['assign','Assign to…']);
+    if(canBulkAssign()) items.push(['stage','Change stage…']);
+    if(canSeeWindow()) { items.push(['extend','Extend working window…']); items.push(['release','Release to Open']); }
+  } else items.push(['assign','Assign to…']);
+  if(canExport()) items.push(['export','Export selected']);
+  return items;
+}
+function baRefresh() {
+  let bar = document.getElementById('baBar');
+  if(!bar) {
+    bar = document.createElement('div'); bar.id='baBar';
+    bar.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:300;background:var(--surface);border:1px solid var(--border);box-shadow:0 8px 30px rgba(0,0,0,.25);border-radius:10px;padding:8px 12px;display:none;align-items:center;gap:10px;font-size:13px;max-width:94vw;';
+    document.body.appendChild(bar);
+  }
+  const k = baActive();
+  if(k) baSyncAll(k);
+  const n = k ? BA.sel[k].size : 0;
+  if(!k || !n) { bar.style.display='none'; baCloseMenu(); return; }
+  bar.style.display='flex';
+  bar.innerHTML = `<b>${n}</b> ${BA.cfg[k].noun}${n===1?'':'s'} selected
+    <span style="position:relative;"><button class="btn btn-primary btn-sm" onclick="baToggleMenu()">Actions ▾</button></span>
+    <button class="btn btn-ghost btn-sm" onclick="baClear()">Clear</button>`;
+}
+function baToggleMenu() {
+  const ex = document.getElementById('baMenu'); if(ex) { ex.remove(); return; }
+  const k = baActive(); if(!k) return;
+  const m = document.createElement('div'); m.id='baMenu';
+  m.style.cssText='position:fixed;z-index:310;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.28);padding:6px;min-width:210px;';
+  m.innerHTML = baMenuItems(k).map(([a,l])=>`<div class="ba-item" onclick="baDo('${a}')" style="padding:9px 12px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text);">${l}</div>`).join('');
+  document.body.appendChild(m);
+  const bar = document.getElementById('baBar').getBoundingClientRect();
+  m.style.left = Math.max(8, bar.left) + 'px'; m.style.bottom = (window.innerHeight - bar.top + 8) + 'px';
+  m.querySelectorAll('.ba-item').forEach(e=>{ e.onmouseenter=()=>e.style.background='var(--surface-2)'; e.onmouseleave=()=>e.style.background=''; });
+}
+function baCloseMenu() { const m = document.getElementById('baMenu'); if(m) m.remove(); }
+document.addEventListener('click', e=>{ if(!e.target.closest('#baMenu') && !e.target.closest('#baBar')) baCloseMenu(); });
+function baClear() { const k = baActive(); if(k) BA.sel[k].clear(); document.querySelectorAll('.ba-cb').forEach(b=>b.checked=false); baRefresh(); }
+
+// the "Are you sure?" window
+function baModal(title, bodyHtml, okLabel, onOk) {
+  baCloseMenu();
+  let ov = document.getElementById('baModal');
+  if(!ov) { ov = document.createElement('div'); ov.id='baModal'; ov.className='modal-overlay'; ov.style.zIndex='920'; ov.onclick = e=>{ if(e.target===ov) baModalClose(); }; document.body.appendChild(ov); }
+  ov.innerHTML = `<div class="modal" style="max-width:460px;text-align:left;"><h3 style="margin:0 0 8px;font-size:17px;">${title}</h3>
+    <div style="font-size:13.5px;color:var(--text-muted);line-height:1.5;">${bodyHtml}</div>
+    <div class="modal-actions" style="margin-top:16px;"><button class="btn btn-ghost" onclick="baModalClose()">Cancel</button>
+    <button class="btn btn-primary" id="baOk">${okLabel}</button></div></div>`;
+  ov.classList.add('open');
+  document.getElementById('baOk').onclick = async ()=>{ const b = document.getElementById('baOk'); if(BA.busy) return; BA.busy=true; b.disabled=true; b.textContent='Working…'; try { await onOk(); } finally { BA.busy=false; } };
+}
+function baModalClose() { const ov = document.getElementById('baModal'); if(ov) ov.classList.remove('open'); }
+const baSelStyle = 'width:100%;margin-top:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:var(--text);font-size:13px;font-family:var(--sans);';
+
+function baDo(action) {
+  const k = baActive(); if(!k) return; const ids = [...BA.sel[k]]; const n = ids.length; if(!n) return;
+  const what = `${n} ${BA.cfg[k].noun}${n===1?'':'s'}`;
+  if(action==='export') return baExport(k, ids);
+  if(k==='pr') {
+    if(action==='assign') { selectedIds = new Set(ids); baCloseMenu(); return openAssignModal(); }
+    if(action==='stage') return baModal('Change stage', `Set the stage of <b>${what}</b> to:<select id="baStage" style="${baSelStyle}">${PROSPECT_STATUSES.map(s=>`<option>${esc(s)}</option>`).join('')}</select><div style="margin-top:8px;font-size:12px;color:var(--text-faint);">Prospects that are already with Compliance, or Open with no owner, are skipped.</div>`, 'Change stage', ()=>baProspectCall(ids, {action:'stage', stage:document.getElementById('baStage').value}));
+    if(action==='extend') return baModal('Extend working window', `Add days to the working window of <b>${what}</b>:<input id="baDays" type="number" min="1" max="365" value="14" style="${baSelStyle}"><div style="margin-top:8px;font-size:12px;color:var(--text-faint);">The days are added to the current end date. Open prospects (no owner) are skipped.</div>`, 'Extend', ()=>baProspectCall(ids, {action:'extend', days:parseInt(document.getElementById('baDays').value,10)}));
+    if(action==='release') return baModal('Release to Open', `This takes <b>${what}</b> away from their Sales Reps and puts them in the Open Pool. Anyone allowed can then assign them again.<div style="margin-top:8px;font-size:12px;color:var(--text-faint);">Prospects that are already Open, Lost or Ready to Convert are skipped.</div>`, 'Release to Open', ()=>baProspectCall(ids, {action:'release'}));
+  }
+  if(k==='comp') return baAssignCases(ids);
+  if(k==='cc')   return baAssignMCs(ids);
+}
+async function baProspectCall(ids, payload) {
+  try {
+    const res = await apiFetch('/api/companies-bulk', { method:'POST', body: JSON.stringify(Object.assign({ companyIds: ids }, payload)) });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok) { baModalClose(); showAlert('Nothing was changed', j.error || 'The server could not do this. Please try again.'); return; }
+    baModalClose();
+    try { await refreshCompanies(ids); } catch(e) {}
+    BA.sel.pr.clear();
+    try { renderProspectsView(); renderCoTable(); } catch(e) {}
+    baRefresh();
+    if(j.skipped) showAlert('Done, with some skipped', `${j.done} prospect${j.done===1?'':'s'} changed. ${j.skipped} skipped (not allowed for you, already Open, or already with Compliance).`);
+    else showToast(`${j.done} prospect${j.done===1?'':'s'} updated.`);
+  } catch(e) { console.error(e); baModalClose(); showAlert('Nothing was changed', 'The connection failed. Please check and try again.'); }
+}
+async function baAssignCases(ids) {
+  await compLoadAssignees();
+  const list = compAssignees || [];
+  if(!list.length) { showAlert('Cannot assign', 'No Customer Compliance people were found to assign to.'); return; }
+  baModal('Assign cases', `Assign <b>${ids.length} case${ids.length===1?'':'s'}</b> to:<select id="baPerson" style="${baSelStyle}"><option value="">— Choose a person…</option>${list.map(a=>`<option value="${esc(a.user_id)}">${esc(ccAsgLabel(a))}</option>`).join('')}</select>`, 'Assign', async ()=>{
+    const v = document.getElementById('baPerson').value; if(!v) { showToast('Choose a person first.'); document.getElementById('baOk').disabled=false; document.getElementById('baOk').textContent='Assign'; return; }
+    let ok=0, fail=0, why='';
+    for(const id of ids) {
+      try { const r = await apiFetch('/api/compliance-cases/'+encodeURIComponent(id)+'/assign', { method:'PATCH', body: JSON.stringify({ userId: v }) });
+        if(r.ok) ok++; else { fail++; if(!why) why = (await r.json().catch(()=>({}))).error || ''; } } catch(e) { fail++; }
+    }
+    baModalClose(); BA.sel.comp.clear(); try { await loadRealComplianceCases(); renderCustCompView(); } catch(e) {} baRefresh();
+    if(fail) showAlert('Done, with some not assigned', `${ok} case${ok===1?'':'s'} assigned. ${fail} could not be assigned.${why?' Reason: '+esc(why):''}`); else showToast(`${ok} case${ok===1?'':'s'} assigned.`);
+  });
+}
+async function baAssignMCs(mcs) {
+  const list = await ccLoadAssignees();
+  if(!list.length) { showAlert('Cannot assign', 'No Carrier Compliance people were found to assign to.'); return; }
+  baModal('Reassign MCs', `Reassign <b>${mcs.length} MC${mcs.length===1?'':'s'}</b> to:<select id="baPerson" style="${baSelStyle}"><option value="">— Choose a person…</option>${list.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}${(u.locations||[]).length?' · '+esc(u.locations.map(locationName).join(', ')):''}</option>`).join('')}</select>
+    <input id="baWhy" type="text" placeholder="Reason (required, saved on every MC)" style="${baSelStyle}">`, 'Reassign', async ()=>{
+    const v = document.getElementById('baPerson').value, why = document.getElementById('baWhy').value.trim();
+    const reset = ()=>{ const b=document.getElementById('baOk'); b.disabled=false; b.textContent='Reassign'; };
+    if(!v) { showToast('Choose a person first.'); reset(); return; }
+    if(why.length<3) { showToast('Please type a reason.'); reset(); return; }
+    let ok=0, fail=0, skip=0, msg='';
+    for(const mc of mcs) {
+      const c = ccFind(mc); if(!c || !c.checkId || c.resolvedAt) { skip++; continue; }
+      if(!ccIsLeadFor(c.location)) { skip++; continue; }
+      try { const r = await apiFetch('/api/carrier-checks/'+encodeURIComponent(c.checkId)+'/assign', { method:'PATCH', body: JSON.stringify({ userId: v, reason: why }) });
+        if(r.ok) ok++; else { fail++; if(!msg) msg = (await r.json().catch(()=>({}))).error || ''; } } catch(e) { fail++; }
+    }
+    baModalClose(); BA.sel.cc.clear(); try { await loadRealCarrierChecks(); renderCCView(); } catch(e) {} baRefresh();
+    if(fail||skip) showAlert('Done, with some not reassigned', `${ok} MC${ok===1?'':'s'} reassigned.${skip?` ${skip} skipped (not in your office, or already resolved).`:''}${fail?` ${fail} could not be reassigned.`:''}${msg?' Reason: '+esc(msg):''}`); else showToast(`${ok} MC${ok===1?'':'s'} reassigned.`);
+  });
+}
+function baExport(k, ids) {
+  baCloseMenu();
+  if(!canExport()) { showToast('Export is only available to Admin and Compliance.'); secLog('export','Blocked: bulk export'); return; }
+  const st = typeof stamp==='function' ? stamp() : new Date().toISOString().slice(0,10);
+  if(k==='pr') {
+    const rows = ids.map(id=>customers.find(c=>c.id===id)).filter(Boolean).map(c=>[c.name,c.domain||'',c.status,ownerLabelFor(c),c.prospectStatus||'',c.lastUpdated||'']);
+    return downloadCsv(`prospects-selected-${st}.csv`, ['Company','Website','Status','Owner','Stage','Last updated'], rows);
+  }
+  if(k==='comp') {
+    const rows = ids.map(id=>realComplianceCases.find(c=>c.id===id)).filter(Boolean).map(c=>[c.id,c.type,c.co,c.status,c.assigned,c.sla,c.by]);
+    return downloadCsv(`customer-compliance-selected-${st}.csv`, ['Case ID','Type','Company','Status','Assigned','SLA','Raised by'], rows);
+  }
+  const rows = ids.map(mc=>ccFind(mc)).filter(Boolean).map(c=>[c.mc,c.carrier,c.stage,c.officeName||'',c.owner||'',c.broker||'',c.lane||'']);
+  return downloadCsv(`carrier-compliance-selected-${st}.csv`, ['MC #','Carrier','Stage','Office','Owner','Broker','Lane'], rows);
+}
+// after "Assign to…" from the Prospects list, forget the ticks too
+const _baApply = applyAssignment;
+applyAssignment = async function() { await _baApply(); if(selectedIds.size===0) { BA.sel.pr.clear(); setTimeout(()=>{ baDecorate('pr'); baRefresh(); },50); } };
+function baInit() {
+  let busy = false;
+  Object.keys(BA.cfg).forEach(k=>{
+    const cfg = BA.cfg[k];
+    ['tbody','thead'].forEach(part=>{
+      const el = document.getElementById(cfg[part]); if(!el) return;
+      new MutationObserver(()=>{ if(busy) return; busy = true; try { baDecorate(k); baRefresh(); } catch(e) { console.error('Bulk actions:', e); } finally { setTimeout(()=>{ busy=false; },0); } })
+        .observe(el, {childList:true});
+    });
+  });
+  window.addEventListener('resize', baCloseMenu);
+  setInterval(()=>{ try { baRefresh(); } catch(e){} }, 1500);
+}
+try { baInit(); } catch(e) { console.error('Bulk actions failed to start:', e); }
 
 // ── GLOBAL SEARCH (C-028) ─────────────────────────────────────
 let gsTimer=null, gsSeq=0, gsItems=[], gsSel=-1;
@@ -6442,7 +6678,7 @@ function addCoBack() {
 
 // Step 2a → 2a-2: validate the company form, hold it in a draft, then move to
 // the contact step. Nothing is written to `customers` until addCoFinish runs.
-function addCoContinueToContact() {
+async function addCoContinueToContact() {
   const name = document.getElementById('addCoName').value.trim();
   let domain = document.getElementById('addCoDomain').value.trim();
   if(addCoNoSite) {
@@ -6453,6 +6689,11 @@ function addCoContinueToContact() {
     if(!cd) { showToast('Enter a real website domain, like acme.com — no spaces, and it must end in .com, .net, etc.'); return; }
     domain = cd;
     document.getElementById('addCoDomain').value = cd;
+    // C-110: the website can be changed on this screen after the first check, so check it again if it is different
+    if(realUser && cd !== cleanDomain((document.getElementById('addCoInput')||{value:''}).value)) {
+      const out = await serverCompanyCheck(cd, '', '');
+      if(out && out.exists) { showAlert('This website is already in the CRM', 'A company with the website ' + cd + ' is already in the CRM, so it cannot be added again. Go back and start again with that website to see who can work it.'); return; }
+    }
   }
   const ownerSel = document.getElementById('addCoOwnerSel');
   const owner = ownerSel.value || (currentRole==='Sales Rep'?currentUserName():'—');
@@ -6493,7 +6734,7 @@ function addCoBackToDetails() {
 }
 
 // Finalizes the company (and, if provided, its primary contact) from the draft.
-function addCoFinish(withContact) {
+async function addCoFinish(withContact) {
   if(!addCoDraft) return;
   const d = addCoDraft;
   const asActive = (currentViewName==='companies' && isCompMgr());
@@ -6506,6 +6747,39 @@ function addCoFinish(withContact) {
   const contactEmail = document.getElementById('addCoContactEmail').value.trim();
   if(withContact && !contactFirst) { showToast('Enter the contact\'s first name, or use Skip.'); return; }
   if(withContact && contactName && !contactEmail) { showToast('Enter a contact email, or use Skip.'); return; }
+
+  // C-110: for a real sign-in the company is saved on the server FIRST. It only appears on screen if the server accepted it.
+  // (Before, it was shown straight away with a made-up number; when the server refused it, e.g. the website already existed,
+  // the fake copy stayed on the person's screen and could not be worked on.)
+  if(realUser) {
+    const btnBusy = document.activeElement; if(btnBusy && btnBusy.tagName==='BUTTON') btnBusy.disabled = true;
+    let res = null;
+    try {
+      res = await apiFetch('/api/companies', {
+        method:'POST',
+        body: JSON.stringify({
+          name:d.name, domain:d.domain, noWebsite: !!d.noWebsite, location:d.location, industry:d.industry,
+          bizType:d.bizType, hqAddress:d.hqAddress||'', hqCity:d.hqCity, hqState:d.hqState, hqZip:d.hqZip,
+          employeeRange:d.employeeRange, revenueRange:d.revenueRange, timezone:d.timezone,
+          commodity:d.commodity, lanes:d.lanesList, loadFreq:d.loadFreq, loadVolume:d.loadVolume,
+          equipment:d.equipmentList,
+          remarks:d.remarks, ownerUserId: d.ownerUserId || undefined, prospectDays: d.prospectDays, asActive,
+          contact: (withContact && contactName) ? {first:contactFirst, last:contactLast, name:contactName, title:contactTitle, phone:contactPhone==='—'?'':contactPhone, cell:contactCell==='—'?'':contactCell, email:contactEmail} : null,
+        }),
+      });
+    } catch(err) { console.error('Create company on server failed', err); }
+    if(btnBusy && btnBusy.tagName==='BUTTON') btnBusy.disabled = false;
+    if(!res || !res.ok) {
+      let m = ''; try { m = (await res.json()).error || ''; } catch(e) {}
+      showAlert('The company was NOT added', (m || 'The server could not save this company, or the connection failed.') + ' Nothing was saved. Please check and try again.');
+      return;
+    }
+    closeAddCo();
+    await loadRealCompanies();
+    showToast(asActive ? `"${d.name}" added as an Active customer.` : `"${d.name}" added${withContact && contactName ? ' with contact ' + contactName : ''}. Customer Compliance notified.`);
+    try { renderCoTable(); renderProspectsView(); renderCustCompView(); updateNavBadges(); } catch(e) {}
+    return;
+  }
 
   const newId = Math.max(0, ...customers.map(c=>c.id)) + 1;
   const updater = currentUserName();
@@ -6524,22 +6798,6 @@ function addCoFinish(withContact) {
   });
   logActivity(newId,'CREATE',`Company record created by ${esc(updater)}.`);
 
-  // If a real Azure AD user is signed in, save this company for real too.
-  if(realUser) {
-    apiFetch('/api/companies', {
-      method:'POST',
-      body: JSON.stringify({
-        name:d.name, domain:d.domain, noWebsite: !!d.noWebsite, location:d.location, industry:d.industry,
-        bizType:d.bizType, hqAddress:d.hqAddress||'', hqCity:d.hqCity, hqState:d.hqState, hqZip:d.hqZip,
-        employeeRange:d.employeeRange, revenueRange:d.revenueRange, timezone:d.timezone,
-        commodity:d.commodity, lanes:d.lanesList, loadFreq:d.loadFreq, loadVolume:d.loadVolume,
-        equipment:d.equipmentList,
-        remarks:d.remarks, ownerUserId: d.ownerUserId || undefined, prospectDays: d.prospectDays, asActive,
-        contact: (withContact && contactName) ? {first:contactFirst, last:contactLast, name:contactName, title:contactTitle, phone:contactPhone==='—'?'':contactPhone, cell:contactCell==='—'?'':contactCell, email:contactEmail} : null,
-      }),
-    }).then(async res => { if(!res.ok) { console.error('Create company on server failed', res.status); try{ const j=await res.json(); showToast(j.error || 'Could not add the company.'); }catch(e){} } else loadRealCompanies(); })
-      .catch(err => console.error('Create company on server failed', err));
-  }
 
   let contactMsg = '';
   if(withContact && contactName) {
